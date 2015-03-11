@@ -1,0 +1,116 @@
+Nengo/SpiNNaker Design
+======================
+
+There are four fundamental Nengo objects:
+
+ * Ensembles
+ * Nodes
+ * Probes
+ * Connections
+
+Each with different requirements of the SpiNNaker system.  Ensembles will
+typically end up mapped to several processing cores and connections map to
+streams of multicast packets.  However, Nodes may represent any of the
+following things:
+
+ * "Passthrough" Nodes - which aren't required at all on SpiNNaker and can be
+   removed by changing the Connections present in a network.
+ * Constant inputs - these may be combined into Ensemble bias currents.
+ * Functions of time - inputs whose value varies only with time.  The output of
+   these functions can be precomputed and played back on the SpiNNaker machine.
+    * Periodic functions can be simplified by only computing one period and
+      looping the playback.
+ * Functions of other values in the network - these may be simulated on the
+   host PC at the cost of reducing their sampling frequency; communication
+   between SpiNNaker and the PC may be managed by various means, and this will
+   change the on-SpiNNaker requirements of the node.
+ * External devices (either sensors or actuators) which map to devices
+   connected to the SpiNNaker network and may require additional compute
+   resources on chip to provide them with input/output data processing.
+
+Likewise Probes have different incarnations:
+
+ * Probes of "output values" (e.g., decoded values of populations, the outputs
+   of nodes) are implemented as cores which receive and store multicast
+   packets.
+ * Probes of spikes or neuron voltages are implemented as blocks of memory
+   managed by the appropriate ensemble processing cores.
+
+There are also two modes of operation, depending upon the experiment being run
+or the needs of the modeller.
+
+ * In "normal" mode any values which are being recorded (e.g., by Probes) or
+   played back (e.g., by Nodes whose output is purely a function of time) can
+   be read from or written to the SpiNNaker machine periodically during the
+   simulation.  Consequently simulating a model for a period of time is a
+   repetition of three steps:
+
+    1. Load data needed for the next _n_ steps.
+    2. Simulate _n_ steps.
+    3. Retrieve data generated during these steps.
+
+   In this case the simulation may be run for any finite period of time, paused
+   and restarted, or reset and restarted as required.
+
+ * In some cases it may not be desirable to stop the simulation to load and
+   retrieve data (e.g., when driving a robot or interacting with other
+   real-time devices).  In these cases, iff the duration of the simulation is
+   known in advance then enough memory may be reserved to store all the data that
+   will be required or generated in the simulation.  Once simulation is
+   complete the SpiNNaker machine may need reconfiguring before further
+   simulations.
+
+    * As an additional case: the duration of the simulation may not be known and
+      interruptions may not be made.  In this case probing must either be
+      disabled, or data streamed over the network or read back during the
+      simulation.
+
+Preparing Nengo models for simulation
+-------------------------------------
+
+Converting a model into a form suitable for execution on SpiNNaker generally
+requires two stages:
+
+ * The objects and connectivity of the network are modified to represent more
+   clearly the mix of objects which will be executed on the SpiNNaker machine.
+   For example:
+    * "Passthrough" nodes are removed by adding replacement connections.
+    * Nodes which will not be simulated on SpiNNaker but on the "host-PC" are
+      removed and additional objects are added to represent the connections
+      between SpiNNaker and the PC.
+    * Connections to/from external hardware are modified to include any
+      additional processing elements and to specify special requirements for
+      packets sent to/from the external hardware.
+ * The remaining objects and connections are converted into a form
+   representative of application instances and nets of multicast packets.  The
+   previously separate process of partitioning can be applied as part of this
+   process.
+
+This first set of transformations are "network" transforms in as much as they
+change structure of the network to be simulated.  The second set are "object"
+transforms as they convert the objects that are to be simulated into
+representations of applications and devices on a SpiNNaker system.  This second
+set of transforms modifies the topology of the instantiated network (i.e., the
+streams of multicast packets between application cores) but _not_ the model
+network (e.g., ensembles may be split over multiple application cores requiring
+transformation of their incoming/outgoing edges into hyperedges or nets but the
+intension [with an _s_] of the network is the same).
+
+Note: Any Nengo network can be split into two sub-networks - one of elements
+that will be executed on SpiNNaker and one of elements that can not.
+Connections between these networks may then be handled in a variety of ways
+(SDP, multicast-packets over USB, etc.).  This process of generating two
+networks is sufficiently general that it should be an integral part of the
+network building process that occurs after all topology transforms have
+occurred.
+
+The general build process is as follows:
+ 1. Remove passthrough nodes.
+ 2. Partition into the SpiNNaker network and the PC network
+     - Intermediate objects to handle IO for nodes are added.
+ 3. Build objects:
+     - Build ensembles
+     - Build Node IO objects
+ 4. Place and route.
+ 5. Generate and load data, load applications, load routing tables.
+     - TBD how data is best generated when local memory is at a premium...
