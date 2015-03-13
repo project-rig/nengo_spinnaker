@@ -68,49 +68,15 @@ or the needs of the modeller.
 Preparing Nengo models for simulation
 -------------------------------------
 
-Converting a model into a form suitable for execution on SpiNNaker generally
-requires two stages:
-
- * The objects and connectivity of the network are modified to represent more
-   clearly the mix of objects which will be executed on the SpiNNaker machine.
-   For example:
-    * "Passthrough" nodes are removed by adding replacement connections.
-    * Nodes which will not be simulated on SpiNNaker but on the "host-PC" are
-      removed and additional objects are added to represent the connections
-      between SpiNNaker and the PC.
-    * Connections to/from external hardware are modified to include any
-      additional processing elements and to specify special requirements for
-      packets sent to/from the external hardware.
- * The remaining objects and connections are converted into a form
-   representative of application instances and nets of multicast packets.  The
-   previously separate process of partitioning can be applied as part of this
-   process.
-
-This first set of transformations are "network" transforms in as much as they
-change structure of the network to be simulated.  The second set are "object"
-transforms as they convert the objects that are to be simulated into
-representations of applications and devices on a SpiNNaker system.  This second
-set of transforms modifies the topology of the instantiated network (i.e., the
-streams of multicast packets between application cores) but _not_ the model
-network (e.g., ensembles may be split over multiple application cores requiring
-transformation of their incoming/outgoing edges into hyperedges or nets but the
-intension [with an _s_] of the network is the same).
-
-Note: Any Nengo network can be split into two sub-networks - one of elements
-that will be executed on SpiNNaker and one of elements that can not.
-Connections between these networks may then be handled in a variety of ways
-(SDP, multicast-packets over USB, etc.).  This process of generating two
-networks is sufficiently general that it should be an integral part of the
-network building process that occurs after all topology transforms have
-occurred.
-
 The general build process is as follows:
  1. Remove passthrough nodes.
  2. Partition into the SpiNNaker network and the PC network
      - Intermediate objects to handle IO for nodes are added.
- 3. Build objects:
+ 3. Build objects and connections:
      - Build ensembles
      - Build Node IO objects
+       - This process is pluggable to allow building IO for robotics or for
+         optimising out constant Nodes.
  4. Place and route.
  5. Generate and load data, load applications, load routing tables.
      - TBD how data is best generated when local memory is at a premium...
