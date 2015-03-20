@@ -10,20 +10,24 @@ class MRODict(object):
     def __init__(self):
         self._dict = dict()
 
+    def __setitem__(self, key, value):
+        self._dict[key] = value
+
     def __getitem__(self, cls):
         """Get the first matching entry from the class MRO."""
         for t in cls.__mro__:
             if t in self._dict:
                 return self._dict[t]
         else:
-            raise IndexError(cls)
+            raise KeyError(cls)
 
     def register(self, key, allow_overrides=False):
         """Decorator which allows registering of functions as entries in the
         dictionary.
         """
         if key in self._dict and not allow_overrides:
-            raise TypeError("{} already in dictionary".format(key))
+            raise KeyError(
+                "class {} already in dictionary".format(key.__name__))
 
         def decorator(f):
             self._dict[key] = f
