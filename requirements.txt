@@ -1,2 +1,2 @@
 nengo>=2.0.0
-rig>=0.0.1-dev
+git+https://github.com/project-rig/rig#egg=rig
