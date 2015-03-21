@@ -58,10 +58,6 @@ class TestGetIntermediateEndPoint(object):
     """Test getting sinks and sources for intermediate representations of
     connections.
     """
-    def test_invalid_call(self):
-        with pytest.raises(ValueError):
-            ir._get_intermediate_endpoint(0, {}, None, None)
-
     def test_get_intermediate_end_point_source(self):
         # Construct a mock endpoint, a mock connection, a mock getter and a
         # mock IR.
@@ -165,12 +161,23 @@ class TestGetIntermediateNet(object):
         b = self.ObjTypeB()
         c = self.FauxConnection(a, b)
 
+        a_extra_objs = [mock.Mock()]
+        a_extra_conns = [mock.Mock()]
+        b_extra_objs = [mock.Mock()]
+        b_extra_conns = [mock.Mock()]
+
         irn = ir.IntermediateRepresentation({}, {}, [], [])
 
         source_getters = {
-            a.__class__: lambda x, y: (x.pre_obj, None, None, None)}
+            a.__class__:
+                lambda x, y: (x.pre_obj, {"extra_objects": a_extra_objs,
+                                          "extra_connections": a_extra_conns})
+        }
         sink_getters = {
-            b.__class__: lambda x, y: (x.post_obj, None, None, None)}
+            b.__class__:
+                lambda x, y: (x.post_obj, {"extra_objects": b_extra_objs,
+                                           "extra_connections": b_extra_conns})
+        }
 
         # Build the connection
         ic, extra_objs, extra_conns = ir._get_intermediate_net(
@@ -180,7 +187,9 @@ class TestGetIntermediateNet(object):
         assert ic.sink is b
         assert ic.seed is not None
         assert ic.keyspace is None
-        assert (extra_objs, extra_conns) == ([], [])
+        assert not ic.latching  # Receiving buffers should clear every timestep
+        assert extra_objs == a_extra_objs + b_extra_objs
+        assert extra_conns == a_extra_conns + b_extra_conns
 
     def test_standard_with_seed(self):
         """The simple case where all we have to do is get the seed, the source,
@@ -194,9 +203,9 @@ class TestGetIntermediateNet(object):
         irn = ir.IntermediateRepresentation({}, {}, [], [])
 
         source_getters = {
-            a.__class__: lambda x, y: (x.pre_obj, None, None, None)}
+            a.__class__: lambda x, y: (x.pre_obj, {})}
         sink_getters = {
-            b.__class__: lambda x, y: (x.post_obj, None, None, None)}
+            b.__class__: lambda x, y: (x.post_obj, {})}
 
         # Build the connection
         ic, extra_objs, extra_conns = ir._get_intermediate_net(
@@ -204,6 +213,37 @@ class TestGetIntermediateNet(object):
 
         # Assert the seed made it
         assert ic.seed == c.seed
+
+    def test_unknown_keyword(self):
+        """The simple case where all we have to do is get the seed, the source,
+        the sink and combine any extra objects and connections.
+        """
+        a = self.ObjTypeA()
+        b = self.ObjTypeB()
+        c = self.FauxConnection(a, b)
+        c.seed = 303.0
+
+        irn = ir.IntermediateRepresentation({}, {}, [], [])
+
+        source_getters = {
+            a.__class__: lambda x, y: (x.pre_obj, {"spam": "eggs"})}
+        sink_getters = {
+            b.__class__: lambda x, y: (x.post_obj, {})}
+
+        # Build the connection
+        with pytest.raises(NotImplementedError) as excinfo:
+            ir._get_intermediate_net(source_getters, sink_getters, c, irn)
+        assert "spam" in str(excinfo.value)
+
+        source_getters = {
+            a.__class__: lambda x, y: (x.pre_obj, {})}
+        sink_getters = {
+            b.__class__: lambda x, y: (x.post_obj, {"eggs": "spam"})}
+
+        # Build the connection
+        with pytest.raises(NotImplementedError) as excinfo:
+            ir._get_intermediate_net(source_getters, sink_getters, c, irn)
+        assert "eggs" in str(excinfo.value)
 
     def test_pre_supplied_keyspace(self):
         """Test that when only the source provides a keyspace it is applied to
@@ -218,9 +258,9 @@ class TestGetIntermediateNet(object):
         irn = ir.IntermediateRepresentation({}, {}, [], [])
 
         source_getters = {
-            a.__class__: lambda x, y: (x.pre_obj, a_ks, None, None)}
+            a.__class__: lambda x, y: (x.pre_obj, dict(keyspace=a_ks))}
         sink_getters = {
-            b.__class__: lambda x, y: (x.post_obj, None, None, None)}
+            b.__class__: lambda x, y: (x.post_obj, {})}
 
         # Build the connection
         ic, extra_objs, extra_conns = ir._get_intermediate_net(
@@ -242,9 +282,9 @@ class TestGetIntermediateNet(object):
         irn = ir.IntermediateRepresentation({}, {}, [], [])
 
         source_getters = {
-            a.__class__: lambda x, y: (x.pre_obj, None, None, None)}
+            a.__class__: lambda x, y: (x.pre_obj, {})}
         sink_getters = {
-            b.__class__: lambda x, y: (x.post_obj, b_ks, None, None)}
+            b.__class__: lambda x, y: (x.post_obj, dict(keyspace=b_ks))}
 
         # Build the connection
         ic, extra_objs, extra_conns = ir._get_intermediate_net(
@@ -267,9 +307,9 @@ class TestGetIntermediateNet(object):
         irn = ir.IntermediateRepresentation({}, {}, [], [])
 
         source_getters = {
-            a.__class__: lambda x, y: (x.pre_obj, a_ks, None, None)}
+            a.__class__: lambda x, y: (x.pre_obj, dict(keyspace=a_ks))}
         sink_getters = {
-            b.__class__: lambda x, y: (x.post_obj, b_ks, None, None)}
+            b.__class__: lambda x, y: (x.post_obj, dict(keyspace=b_ks))}
 
         # Build the connection
         with pytest.raises(NotImplementedError) as excinfo:
@@ -279,10 +319,10 @@ class TestGetIntermediateNet(object):
 
     @pytest.mark.parametrize(
         "source_getters, sink_getters",
-        [({ObjTypeA: lambda x, y: (None, ) * 4},
-          {ObjTypeB: lambda x, y: (x.post_obj, ) + (None, ) * 3}),
-         ({ObjTypeA: lambda x, y: (x.post_obj, ) + (None, ) * 3},
-          {ObjTypeB: lambda x, y: (None, ) * 4}),
+        [({ObjTypeA: lambda x, y: (None, {})},
+          {ObjTypeB: lambda x, y: (x.post_obj, {})}),
+         ({ObjTypeA: lambda x, y: (x.pre_obj, {})},
+          {ObjTypeB: lambda x, y: (None, {})}),
          ]
     )
     def test_connection_rejected(self, source_getters, sink_getters):
@@ -300,6 +340,99 @@ class TestGetIntermediateNet(object):
             source_getters, sink_getters, c, irn)
         assert ic is None
 
+    @pytest.mark.parametrize(
+        "source_getters, sink_getters",
+        [({ObjTypeA: lambda x, y: (x.pre_obj, {"latching": True})},
+          {ObjTypeB: lambda x, y: (x.post_obj, {})}),
+         ({ObjTypeA: lambda x, y: (x.pre_obj, {})},
+          {ObjTypeB: lambda x, y: (x.post_obj, {"latching": True})}),
+         ]
+    )
+    def test_requires_latching_net(self, source_getters, sink_getters):
+        """Test that the net is marked as latching if the source or sink
+        requires it.
+        """
+        a = self.ObjTypeA()
+        b = self.ObjTypeB()
+        c = self.FauxConnection(a, b)
+
+        irn = ir.IntermediateRepresentation({}, {}, [], [])
+
+        # Build the connection
+        ic, extra_objs, extra_conns = ir._get_intermediate_net(
+            source_getters, sink_getters, c, irn)
+        assert ic.latching
+
+
+class TestGetIntermediateProbe(object):
+    """Test that getting intermediate probes calls a method associated with the
+    target of the probe.
+    """
+    def test_get_intermediate_probe_no_seed(self):
+        class Obj(object):
+            pass
+
+        # Create the probe
+        probe = mock.Mock(spec_set=["target"], name="Probe")
+        probe.target = Obj()
+
+        # Create the probe getter
+        probe_getter = mock.Mock(spec_set=[], name="probe getter")
+        probe_getter.return_value = mock.Mock(spec_set=[], name="retval")
+        probe_getters = {Obj: probe_getter}
+
+        # Create a mock IRN
+        irn = mock.Mock(spec_set=[], name="irn")
+
+        # Check that call works as expected
+        assert (ir._get_intermediate_probe(probe_getters, probe, irn) is
+                probe_getter.return_value)
+        assert probe_getter.call_count == 1
+        assert probe_getter.call_args[0][0] is probe
+        assert probe_getter.call_args[0][1] is not None
+        assert probe_getter.call_args[0][2] is irn
+
+    def test_get_intermediate_probe_with_seed(self):
+        class Obj(object):
+            pass
+
+        # Create the probe
+        probe = mock.Mock(spec_set=["target", "seed"], name="Probe")
+        probe.target = Obj()
+        probe.seed = 303.0
+
+        # Create the probe getter
+        probe_getter = mock.Mock(spec_set=[], name="probe getter")
+        probe_getter.return_value = mock.Mock(spec_set=[], name="retval")
+        probe_getters = {Obj: probe_getter}
+
+        # Create a mock IRN
+        irn = mock.Mock(spec_set=[], name="irn")
+
+        # Check that call works as expected
+        assert (ir._get_intermediate_probe(probe_getters, probe, irn) is
+                probe_getter.return_value)
+        assert probe_getter.call_count == 1
+        assert probe_getter.call_args[0][0] is probe
+        assert probe_getter.call_args[0][1] == probe.seed
+        assert probe_getter.call_args[0][2] is irn
+
+    def test_get_intermediate_probe_fails(self):
+        class Obj(object):
+            pass
+
+        # Create the probe
+        probe = mock.Mock(spec_set=["target"], name="Probe")
+        probe.target = Obj()
+        probe_getters = {}
+
+        irn = mock.Mock(spec_set=[], name="irn")
+
+        # Check that call fails with a TypeError
+        with pytest.raises(TypeError) as excinfo:
+            ir._get_intermediate_probe(probe_getters, probe, irn)
+        assert "Obj" in str(excinfo.value)
+
 
 class TestIntermediateObject(object):
     def test_init(self):
@@ -308,8 +441,9 @@ class TestIntermediateObject(object):
         obj = mock.Mock(spec_set=[])
 
         # Create the intermediate object, ensure that it is sensible
-        o = ir.IntermediateObject(obj, seed)
+        o = ir.IntermediateObject(obj, seed, [1, 2, 3])
         assert o.seed == seed
+        assert o.constraints == [1, 2, 3]
 
 
 def test_get_source_standard():
@@ -329,7 +463,7 @@ def test_get_source_standard():
     irn = ir.IntermediateRepresentation(obj_map, {}, [], [])
     assert (
         ir.get_source_standard(c, irn) ==
-        (nl.NetAddress(obj_map[a], nl.OutputPort.standard), None, None, None)
+        (nl.NetAddress(obj_map[a], nl.OutputPort.standard), {})
     )
 
 
@@ -350,7 +484,7 @@ def test_get_sink_standard():
     irn = ir.IntermediateRepresentation(obj_map, {}, [], [])
     assert (
         ir.get_sink_standard(c, irn) ==
-        (nl.NetAddress(obj_map[b], nl.InputPort.standard), None, None, None)
+        (nl.NetAddress(obj_map[b], nl.InputPort.standard), {})
     )
 
 
@@ -370,6 +504,7 @@ class TestIntermediateEnsemble(object):
         # Create the intermediate representation
         o = ir.IntermediateEnsemble(a, seed)
         assert o.seed == seed
+        assert o.constraints == list()
         assert np.all(o.direct_input == np.zeros(size_in))
         assert o.local_probes == list()
 
@@ -392,8 +527,7 @@ class TestGetEnsembleSink(object):
         irn = ir.IntermediateRepresentation(obj_map, {}, [], [])
         assert (
             ir.get_ensemble_sink(c, irn) ==
-            (nl.NetAddress(obj_map[b], nl.InputPort.standard), None,
-             None, None)
+            (nl.NetAddress(obj_map[b], nl.InputPort.standard), {})
         )
 
     def test_get_sink_constant_node(self):
@@ -415,7 +549,7 @@ class TestGetEnsembleSink(object):
 
         # We don't return a sink (None means "no connection required")
         irn = ir.IntermediateRepresentation(obj_map, {}, [], [])
-        assert ir.get_ensemble_sink(c, irn) == (None, None, None, None)
+        assert ir.get_ensemble_sink(c, irn) == (None, {})
 
         # But the Node values are added into the intermediate representation
         # for the ensemble with the connection transform and function applied.
@@ -425,7 +559,7 @@ class TestGetEnsembleSink(object):
 
         # For the next connection assert that we again don't add a connection
         # and that the direct input is increased.
-        assert ir.get_ensemble_sink(d, irn) == (None, None, None, None)
+        assert ir.get_ensemble_sink(d, irn) == (None, {})
         assert np.all(obj_map[b].direct_input ==
                       np.dot(full_transform(c, slice_pre=False),
                              c.function(a.output[c.pre_slice])) +
@@ -450,8 +584,7 @@ class TestGetNeuronsSink(object):
         irn = ir.IntermediateRepresentation(obj_map, {}, [], [])
         assert (
             ir.get_neurons_sink(c, irn) ==
-            (nl.NetAddress(obj_map[b], nl.InputPort.neurons), None,
-             None, None)
+            (nl.NetAddress(obj_map[b], nl.InputPort.neurons), {})
         )
 
     @pytest.mark.parametrize(
@@ -477,8 +610,7 @@ class TestGetNeuronsSink(object):
         irn = ir.IntermediateRepresentation(obj_map, {}, [], [])
         assert (
             ir.get_neurons_sink(c, irn) ==
-            (nl.NetAddress(obj_map[b], nl.InputPort.global_inhibition), None,
-             None, None)
+            (nl.NetAddress(obj_map[b], nl.InputPort.global_inhibition), {})
         )
 
     def test_other(self):
@@ -497,8 +629,153 @@ class TestGetNeuronsSink(object):
             ir.get_neurons_sink(c, irn)
 
 
-@pytest.mark.skipif(True, reason="functional")
+def test_get_output_probe():
+    """Test building probes for Ensemble or Node-type objects."""
+    with nengo.Network():
+        a = nengo.Node(lambda t: t**2, size_out=1, size_in=0)
+        p = nengo.Probe(a)
+
+    # Get the IR for the Node
+    ir_a = ir.IntermediateObject(a, 1101)
+
+    # Building the probe should return an IntermediateObject for the probe and
+    # a new Net from the Node to the Probe.
+    new_obj, new_objs, new_conns = ir.get_output_probe(
+            p, 1159, ir.IntermediateRepresentation({a: ir_a}, {}, (), ()))
+
+    assert new_obj.seed == 1159
+    assert new_obj.constraints == list()
+
+    assert new_objs == list()
+
+    assert len(new_conns) == 1
+    new_conn = new_conns[0]
+    assert new_conn.source == nl.NetAddress(ir_a, nl.OutputPort.standard)
+    assert new_conn.sink == nl.NetAddress(new_obj, nl.InputPort.standard)
+    assert new_conn.keyspace is None
+    assert not new_conn.latching
+
+
+class TestGetEnsembleProbe(object):
+    def test_get_output_probe(self):
+        """Test building probes for Ensemble or Node-type objects."""
+        with nengo.Network():
+            a = nengo.Ensemble(300, 4)
+            p = nengo.Probe(a)
+
+        # Get the IR for the Node
+        ir_a = ir.IntermediateEnsemble(a, 1101)
+
+        # Building the probe should return an IntermediateObject for the probe
+        # and a new Net from the Ensemble to the Probe.
+        new_obj, new_objs, new_conns = ir.get_ensemble_probe(
+                p, 1159, ir.IntermediateRepresentation({a: ir_a}, {}, (), ()))
+
+        assert new_obj.seed == 1159
+        assert new_obj.constraints == list()
+
+        assert new_objs == list()
+
+        assert len(new_conns) == 1
+        new_conn = new_conns[0]
+        assert new_conn.source == nl.NetAddress(ir_a, nl.OutputPort.standard)
+        assert new_conn.sink == nl.NetAddress(new_obj, nl.InputPort.standard)
+        assert new_conn.keyspace is None
+        assert not new_conn.latching
+
+    def test_get_input_probe(self):
+        with nengo.Network():
+            a = nengo.Ensemble(300, 4)
+            p = nengo.Probe(a, attr="input")
+
+        # Get the IR for the Node
+        ir_a = ir.IntermediateEnsemble(a, 1101)
+
+        with pytest.raises(NotImplementedError):
+            ir.get_ensemble_probe(
+                p, 1159, ir.IntermediateRepresentation({a: ir_a}, {}, (), ()))
+
+
+def test_get_neurons_probe():
+    """Test building probes for Neuron-type objects."""
+    with nengo.Network():
+        a = nengo.Ensemble(300, 2)
+        p = nengo.Probe(a.neurons)
+
+    # Get the IR for the ensemble
+    ir_a = ir.IntermediateEnsemble(a, 1105)
+    assert ir_a.local_probes == list()
+
+    # Building the probe should just add it to the intermediate representation
+    # for `a`'s list of local probes.
+    assert (
+        ir.get_neurons_probe(
+            p, 3345, ir.IntermediateRepresentation({a: ir_a}, {}, (), ())) ==
+        (None, [], [])
+    )
+    assert ir_a.local_probes == [p]
+
+
 class TestIntermediateRepresentation(object):
+    def test_get_nets_starting_at_ending_at(self):
+        """Test retrieving nets which begin or end at a given intermediate
+        object.
+        """
+        class Obj(object):
+            pass
+
+        # Create objects and their intermediate representations
+        a = Obj()
+        b = Obj()
+        ir_a = ir.IntermediateObject(a, 1)
+        ir_b = ir.IntermediateObject(b, 2)
+
+        # Create some nets, some with and some without matching connections
+        conn_ab1 = mock.Mock(spec_set=[], name="A->B")
+        net_ab1 = ir.IntermediateNet(
+            3, nl.NetAddress(ir_a, nl.OutputPort.standard),
+            nl.NetAddress(ir_b, nl.InputPort.standard), None, False
+        )
+
+        net_ab2 = ir.IntermediateNet(
+            3, nl.NetAddress(ir_a, nl.OutputPort.neurons),
+            nl.NetAddress(ir_b, nl.InputPort.standard), None, False
+        )
+
+        conn_ba1 = mock.Mock(spec_set=[], name="B->A")
+        net_ba1 = ir.IntermediateNet(
+            3, nl.NetAddress(ir_b, nl.OutputPort.standard),
+            nl.NetAddress(ir_a, nl.InputPort.standard), None, False
+        )
+
+        # Construct the intermediate representation
+        irn = ir.IntermediateRepresentation(
+            {a: ir_a, b: ir_b}, {conn_ab1: net_ab1, conn_ba1: net_ba1},
+            [], [net_ab2]
+        )
+
+        # Retrieve the nets starting at a
+        net_ax = irn.get_nets_starting_at(ir_a)
+        assert net_ax[nl.OutputPort.standard] == {net_ab1: conn_ab1}
+        assert net_ax[nl.OutputPort.neurons] == {net_ab2: None}
+
+        # Retrieve the nets starting at b
+        net_bx = irn.get_nets_starting_at(ir_b)
+        assert net_bx[nl.OutputPort.standard] == {net_ba1: conn_ba1}
+        assert net_bx[nl.OutputPort.neurons] == {}
+
+        # Retrieve the nets ending at a
+        net_xa = irn.get_nets_ending_at(ir_a)
+        assert net_xa[nl.InputPort.standard] == {net_ba1: conn_ba1}
+
+        # Retrieve the nets ending at b
+        net_xb = irn.get_nets_ending_at(ir_b) 
+        assert net_xb[nl.InputPort.standard] == {net_ab1: conn_ab1,
+                                                 net_ab2: None}
+
+
+# @pytest.mark.skipif(True, reason="functional")
+class TestIntermediateRepresentationFunctional(object):
     """Test the generation of intermediate representations.
 
     **FUNCTIONAL TESTS**
@@ -572,9 +849,12 @@ class TestIntermediateRepresentation(object):
         intermediate = ir.IntermediateRepresentation.from_objs_conns_probes(
             objs, conns, net.probes)
 
-        # Only the ensemble should exist and it should have a probe
-        assert len(intermediate.object_map) == 1
+        # The Ensemble and each probe should exist in the object map (but the
+        # probes should map to None).
+        assert set(intermediate.object_map.keys()) == {a, p0, p1}
         assert set(intermediate.object_map[a].local_probes) == {p0, p1}
+        assert intermediate.object_map[p0] is None
+        assert intermediate.object_map[p1] is None
 
     def test_node_to_ensemble_connection(self):
         # Construct the network
