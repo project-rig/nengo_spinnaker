@@ -79,7 +79,7 @@ class IntermediateRepresentation(
     information about other objects in the network.  A callable must return a
     2-tuple of (:py:class:`nengo_spinnaker.netlist.NetAddr`, **kwargs) where
     accepted keys are currently "keyspace", "extra_objects",
-    "extra_connections".
+    "extra_connections" and "latching".
 
     For example, the standard source getter which just returns a source
     indicating the source object and the standard output port is implemented
@@ -119,14 +119,28 @@ class IntermediateRepresentation(
     return an intermediate object to represent the probe and a list of new
     objects and new connections.
 
-    For example, the probe builder for probes of Ensemble state is implemented
+    For example, the probe builder for probes of Node output is implemented
     as::
 
-        @IntermediateRepresentation.probe_builders.register(nengo.Ensemble)
-        def get_ensemble_probe(probe, seed, ir_network):
+        @IntermediateRepresentation.probe_builders.register(nengo.None)
+        def get_node_probe(probe, seed, ir_network):
             # Add a new object for the probe and a new connection from the
-            # ensemble to the probe.
+            # node to the probe.
+            ir_probe = IntermediateObject(probe, seed)
+
+            source = NetAddress(irn.object_map[probe.target], OutputPort.standard)
+            sink = NetAddress(ir_probe, InputPort.standard)
+            net = IntermediateNet(seed, source, sink, None, False)
+
+            # Return the probe object, no other objects and the new connection
+            return ir_probe, [], [net]
     """
+
+    def __new__(cls, obj_map, conn_map, extra_objs, extra_conns):
+        return super(IntermediateRepresentation, cls).__new__(
+            cls, dict(obj_map), dict(conn_map),
+            list(extra_objs), list(extra_conns)
+        )
 
     @classmethod
     def from_objs_conns_probes(cls, objs, conns, probes):
@@ -139,9 +153,14 @@ class IntermediateRepresentation(
             Intermediate representation of the objects and connections.
         """
         # For each of the objects generate the appropriate type of intermediate
-        # representation.
-        obj_map = {obj: _get_intermediate_object(cls.object_builders, obj)
-                   for obj in objs}
+        # representation, if None then we remove the object from the
+        # intermediate representation.
+        obj_map = dict()
+        for obj in objs:
+            replaced_obj = _get_intermediate_object(cls.object_builders, obj)
+
+            if replaced_obj is not None:
+                obj_map[obj] = replaced_obj
 
         conn_map = dict()  # Map from Connections to annotations
         extra_objs = list()  # Extra objects
@@ -157,6 +176,10 @@ class IntermediateRepresentation(
             # Get the net and any extras
             net, eobjs, econns = _get_intermediate_net(
                 cls.source_getters, cls.sink_getters, conn, irn)
+
+            # If the returned Net was None then skip to the next connection
+            if net is None:
+                continue
 
             # Add the objects
             conn_map[conn] = net
@@ -486,30 +509,6 @@ class _EndpointType(enum.Enum):
     sink = (lambda c: c.post_obj.__class__, "sink", "terminating")
 
 
-def _get_intermediate_endpoint(endpoint, getters, connection, irn):
-    """Get the endpoint for an intermediate representation for a connection.
-
-    Parameters
-    ----------
-    endpoint : :py:class:`._EndpointType`
-        Type of the endpoint to extract (pre or post).
-    getters : {type: callable, ...}
-    connection : :py:class:`nengo.Connection`
-    irn : :py:class:`~.IntermediateRepresentation`
-    """
-    (cls, name, verb) = endpoint.value
-    try:
-        builder = getters[cls(connection)]
-    except KeyError:
-        raise TypeError(
-            "Could not determine the {} for connections {} at object of type "
-            "{}".format(name, verb, cls(connection).__name__)
-        )
-
-    # Get the endpoint
-    return builder(connection, irn)
-
-
 def _get_intermediate_net(source_getters, sink_getters, connection, irn):
     """Create an intermediate representation for a net.
 
@@ -526,6 +525,19 @@ def _get_intermediate_net(source_getters, sink_getters, connection, irn):
         The intermediate net and any extra objects or connections that were
         deemed necessary.
     """
+    def _get_intermediate_endpoint(endpoint, getters, connection, irn):
+        (cls, name, verb) = endpoint.value
+        try:
+            builder = getters[cls(connection)]
+        except KeyError:
+            raise TypeError(
+                "Could not determine the {} for connections {} at object of  "
+                "type {}".format(name, verb, cls(connection).__name__)
+            )
+
+        # Get the endpoint
+        return builder(connection, irn)
+
     # Get or generate a seed for the connection
     seed = (np.random.randint(npext.maxint)
             if getattr(connection, "seed", None) is None else connection.seed)
