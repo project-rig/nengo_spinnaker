@@ -66,6 +66,25 @@ class TestGetIntermediateObject(object):
 
         assert obj.__class__.__name__ in str(excinfo.value)
 
+    def test_object_extra_builder(self):
+        # Construct an object, a builder and a mapping which indicates which
+        # builder should be used for the object class.
+        obj = mock.Mock(spec_set=[], name="object")
+
+        obj_builder = mock.Mock(spec_set=[], name="builder")
+        obj_builder.return_value = mock.Mock(spec_set=[], name="intermediate")
+
+        builders = {obj.__class__: obj_builder}
+
+        # Get the built object, assert that the builder is called appropriately
+        with mock.patch.object(ir.IntermediateRepresentation,
+                               "object_builders", {}):
+            ir.IntermediateRepresentation.from_objs_conns_probes(
+                [obj], [], [], extra_object_builders=builders
+            )
+
+        obj_builder.call_count == 1
+
     def test_object_is_removed(self):
         obj = mock.Mock(spec_set=[], name="object")
 
@@ -81,6 +100,7 @@ class TestGetIntermediateObject(object):
                 [obj], [], [])
 
         assert irn.object_map == {}
+
 
 class TestGetIntermediateNet(object):
     """Tests the construction of intermediate nets from connections.
@@ -108,8 +128,6 @@ class TestGetIntermediateNet(object):
         a_extra_conns = [mock.Mock()]
         b_extra_objs = [mock.Mock()]
         b_extra_conns = [mock.Mock()]
-
-        irn = ir.IntermediateRepresentation({}, {}, [], [])
 
         source_getters = {
             a.__class__:
@@ -173,17 +191,18 @@ class TestGetIntermediateNet(object):
         c = self.FauxConnection(a, b)
         c.seed = 303.0
 
-        irn = ir.IntermediateRepresentation({}, {}, [], [])
-
         source_getters = {
             a.__class__: lambda x, y: (x.pre_obj, {"spam": "eggs"})}
         sink_getters = {
             b.__class__: lambda x, y: (x.post_obj, {})}
 
         # Build the connection
-        with pytest.raises(NotImplementedError) as excinfo:
-            ir._get_intermediate_net(source_getters, sink_getters, c, irn)
-        assert "spam" in str(excinfo.value)
+        with mock.patch.object(ir.IntermediateRepresentation,
+                               "source_getters", source_getters), \
+                mock.patch.object(ir.IntermediateRepresentation,
+                                  "sink_getters", sink_getters), \
+                pytest.raises(NotImplementedError) as excinfo:
+            ir.IntermediateRepresentation.from_objs_conns_probes([], [c], [])
 
         source_getters = {
             a.__class__: lambda x, y: (x.pre_obj, {})}
@@ -210,8 +229,6 @@ class TestGetIntermediateNet(object):
 
         a_ks = mock.Mock(spec_set=[], name="ks_a")
 
-        irn = ir.IntermediateRepresentation({}, {}, [], [])
-
         source_getters = {
             a.__class__: lambda x, y: (x.pre_obj, dict(keyspace=a_ks))}
         sink_getters = {
@@ -237,8 +254,6 @@ class TestGetIntermediateNet(object):
         c = self.FauxConnection(a, b)
 
         b_ks = mock.Mock(spec_set=[], name="ks_b")
-
-        irn = ir.IntermediateRepresentation({}, {}, [], [])
 
         source_getters = {
             a.__class__: lambda x, y: (x.pre_obj, {})}
@@ -354,6 +369,38 @@ class TestGetIntermediateNet(object):
         assert reason in str(excinfo.value)
         assert fail_type.__name__ in str(excinfo.value)
 
+    def test_updated_builders(self):
+        a = self.ObjTypeA()
+        b = self.ObjTypeB()
+        c = self.FauxConnection(a, b)
+
+        a_extra_objs = [mock.Mock()]
+        a_extra_conns = [mock.Mock()]
+        b_extra_objs = [mock.Mock()]
+        b_extra_conns = [mock.Mock()]
+
+        source_getters = {
+            a.__class__:
+                lambda x, y: (x.pre_obj, {"extra_objects": a_extra_objs,
+                                          "extra_connections": a_extra_conns})
+        }
+        sink_getters = {
+            b.__class__:
+                lambda x, y: (x.post_obj, {"extra_objects": b_extra_objs,
+                                           "extra_connections": b_extra_conns})
+        }
+
+        # Build the connection
+        with mock.patch.object(ir.IntermediateRepresentation,
+                               "source_getters", {}), \
+                mock.patch.object(ir.IntermediateRepresentation,
+                                  "sink_getters", {}):
+            ir.IntermediateRepresentation.from_objs_conns_probes(
+                [], [c], [],
+                extra_source_getters=source_getters,
+                extra_sink_getters=sink_getters
+            )
+
 
 class TestGetIntermediateProbe(object):
     """Test that getting intermediate probes calls a method associated with the
@@ -415,6 +462,28 @@ class TestGetIntermediateProbe(object):
         assert probe_getter.call_count == 1
         assert probe_getter.call_args[0][0] is probe
         assert probe_getter.call_args[0][1] == probe.seed
+
+    def test_get_intermediate_probe_extra_builder(self):
+        # Create the probe
+        probe = mock.Mock(spec_set=["target"], name="Probe")
+        probe.target = self.Obj()
+
+        # Create the probe getter
+        probe_getter = mock.Mock(spec_set=[], name="probe getter")
+        probe_getter.return_value = (
+            mock.Mock(spec_set=[], name="probe"),
+            [mock.Mock(name="o")],
+            [mock.Mock(name="c")]
+        )
+        probe_getters = {self.Obj: probe_getter}
+
+        # Check that call works as expected
+        with mock.patch.object(ir.IntermediateRepresentation,
+                               "probe_builders", {}):
+            ir.IntermediateRepresentation.from_objs_conns_probes(
+                [], [], [probe], extra_probe_builders=probe_getters)
+
+        assert probe_getter.call_count == 1
 
     def test_get_intermediate_probe_fails(self):
         # Create the probe

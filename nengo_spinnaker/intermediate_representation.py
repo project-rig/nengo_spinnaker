@@ -128,7 +128,8 @@ class IntermediateRepresentation(
             # node to the probe.
             ir_probe = IntermediateObject(probe, seed)
 
-            source = NetAddress(irn.object_map[probe.target], OutputPort.standard)
+            source = NetAddress(irn.object_map[probe.target],
+                                OutputPort.standard)
             sink = NetAddress(ir_probe, InputPort.standard)
             net = IntermediateNet(seed, source, sink, None, False)
 
@@ -143,7 +144,11 @@ class IntermediateRepresentation(
         )
 
     @classmethod
-    def from_objs_conns_probes(cls, objs, conns, probes):
+    def from_objs_conns_probes(cls, objs, conns, probes,
+                               extra_object_builders={},
+                               extra_source_getters={},
+                               extra_sink_getters={},
+                               extra_probe_builders={}):
         """Create a new intermediate representation from a list of objects,
         connections and probes.
 
@@ -152,12 +157,25 @@ class IntermediateRepresentation(
         :py:class:`.IntermediateRepresentation`
             Intermediate representation of the objects and connections.
         """
+        # Update the builders with any extras we've been given
+        object_builders = MRODict(cls.object_builders)
+        object_builders.update(extra_object_builders)
+
+        source_getters = MRODict(cls.source_getters)
+        source_getters.update(extra_source_getters)
+
+        sink_getters = MRODict(cls.sink_getters)
+        sink_getters.update(extra_sink_getters)
+
+        probe_builders = MRODict(cls.probe_builders)
+        probe_builders.update(extra_probe_builders)
+
         # For each of the objects generate the appropriate type of intermediate
         # representation, if None then we remove the object from the
         # intermediate representation.
         obj_map = dict()
         for obj in objs:
-            replaced_obj = _get_intermediate_object(cls.object_builders, obj)
+            replaced_obj = _get_intermediate_object(object_builders, obj)
 
             if replaced_obj is not None:
                 obj_map[obj] = replaced_obj
@@ -175,7 +193,7 @@ class IntermediateRepresentation(
 
             # Get the net and any extras
             net, eobjs, econns = _get_intermediate_net(
-                cls.source_getters, cls.sink_getters, conn, irn)
+                source_getters, sink_getters, conn, irn)
 
             # If the returned Net was None then skip to the next connection
             if net is None:
@@ -195,7 +213,7 @@ class IntermediateRepresentation(
             # Call the appropriate builder and add any additional components it
             # requires.
             p_obj, eobjs, econns = _get_intermediate_probe(
-                cls.probe_builders, probe, irn)
+                probe_builders, probe, irn)
 
             obj_map[probe] = p_obj
             extra_objs += eobjs

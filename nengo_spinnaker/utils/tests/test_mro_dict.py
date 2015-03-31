@@ -46,13 +46,13 @@ class TestMRODict(object):
         mrodict = MRODict()
 
         @mrodict.register(A)
-        def f():
+        def f():  # pragma : no cover
             pass
 
         assert mrodict[A] is f
 
         @mrodict.register(A, allow_overrides=True)
-        def g():
+        def g():  # pragma : no cover
             pass
 
         assert mrodict[A] is g
@@ -64,13 +64,13 @@ class TestMRODict(object):
         mrodict = MRODict()
 
         @mrodict.register(A)
-        def f():
+        def f():  # pragma : no cover
             pass
 
         assert mrodict[A] is f
 
         with pytest.raises(KeyError) as excinfo:
             @mrodict.register(A)
-            def g():
+            def g():  # pragma : no cover
                 pass
         assert A.__name__ in str(excinfo.value)
