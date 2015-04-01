@@ -618,19 +618,19 @@ class TestIntermediateRepresentation(object):
 
         # Retrieve the nets starting at a
         net_ax = irn.get_nets_starting_at(ir_a)
-        assert net_ax[nl.OutputPort.standard] == {net_ab1: conn_ab1}
-        assert net_ax[nl.OutputPort.neurons] == {net_ab2: None}
+        assert net_ax[nl.OutputPort.standard] == {net_ab1: [conn_ab1]}
+        assert net_ax[nl.OutputPort.neurons] == {net_ab2: []}
 
         # Retrieve the nets starting at b
         net_bx = irn.get_nets_starting_at(ir_b)
-        assert net_bx[nl.OutputPort.standard] == {net_ba1: conn_ba1}
+        assert net_bx[nl.OutputPort.standard] == {net_ba1: [conn_ba1]}
         assert net_bx[nl.OutputPort.neurons] == {}
 
         # Retrieve the nets ending at a
         net_xa = irn.get_nets_ending_at(ir_a)
-        assert net_xa[nl.InputPort.standard] == {net_ba1: conn_ba1}
+        assert net_xa[nl.InputPort.standard] == {net_ba1: [conn_ba1]}
 
         # Retrieve the nets ending at b
         net_xb = irn.get_nets_ending_at(ir_b)
-        assert net_xb[nl.InputPort.standard] == {net_ab1: conn_ab1,
-                                                 net_ab2: None}
+        assert net_xb[nl.InputPort.standard] == {net_ab1: [conn_ab1],
+                                                 net_ab2: []}

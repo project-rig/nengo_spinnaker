@@ -233,7 +233,7 @@ class IntermediateRepresentation(
         Returns
         -------
         {:py:class:`nengo_spinnaker.netlist.OutputPort`:
-                {:py:class:`.IntermediateNet`: :py:class:`nengo.Connection`,
+                {:py:class:`.IntermediateNet`: [:py:class:`nengo.Connection`],
                  ...}, ...}
             Mapping of port to a dictionary mapping nets to the Nengo
             Connections (if available, otherwise None) which they represent.
@@ -252,7 +252,7 @@ class IntermediateRepresentation(
         Returns
         -------
         {:py:class:`nengo_spinnaker.netlist.InputPort`:
-                {:py:class:`.IntermediateNet`: :py:class:`nengo.Connection`,
+                {:py:class:`.IntermediateNet`: [:py:class:`nengo.Connection`],
                  ...}, ...}
             Mapping of port to a dictionary mapping nets to the Nengo
             Connections (if available, otherwise None) which they represent.
@@ -267,19 +267,24 @@ class IntermediateRepresentation(
         Returns
         -------
         {:py:class:`nengo_spinnaker.netlist.OutputPort`:
-                {:py:class:`.IntermediateNet`: :py:class:`nengo.Connection`,
+                {:py:class:`.IntermediateNet`: [:py:class:`nengo.Connection`],
                  ...}, ...}
             Mapping of port to a dictionary mapping nets to the Nengo
             Connections (if available, otherwise None) which they represent.
         """
-        nets = collections.defaultdict(dict)
+        nets = collections.defaultdict(lambda: collections.defaultdict(list))
 
         # Go through the two sets of nets and pick out the ones we care about
         for (conn, net) in itertools.chain(
                 six.iteritems(self.connection_map),
                 ((None, n) for n in self.extra_connections)):
             if f(net):
-                nets[key(net)][net] = conn
+                if conn is not None:
+                    nets[key(net)][net].append(conn)
+                else:
+                    # **YUCK** This forces defaultdict to instantiate the list
+                    # if it doesn't exist, otherwise it does nothing.
+                    nets[key(net)][net]
 
         return nets
 
