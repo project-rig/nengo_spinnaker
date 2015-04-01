@@ -15,7 +15,7 @@ import numpy as np
 import six
 
 from .netlist import NetAddress, InputPort, OutputPort
-from .utils.mro_dict import MRODict
+from .utils.dicts import mrolookupdict, registerabledict
 
 
 class IntermediateRepresentation(
@@ -45,7 +45,7 @@ class IntermediateRepresentation(
         such as the connection from an Ensemble to a Probe.
     """
 
-    object_builders = MRODict()
+    object_builders = registerabledict()
     """Callables which can construct appropriate intermediate representation
     annotations for different kinds of objects.
 
@@ -70,7 +70,7 @@ class IntermediateRepresentation(
             return None  # Returning `None` removes the object
     """
 
-    source_getters = MRODict()
+    source_getters = registerabledict()
     """Callables which are used to determine how to annotate the source of a
     connection.
 
@@ -93,7 +93,7 @@ class IntermediateRepresentation(
             return source, {}
     """
 
-    sink_getters = MRODict()
+    sink_getters = registerabledict()
     """Callables which are used to determine how to annotate the sink of a
     connection.
 
@@ -110,7 +110,7 @@ class IntermediateRepresentation(
             return sink, {}
     """
 
-    probe_builders = MRODict()
+    probe_builders = registerabledict()
     """Callables which are used to modify the intermediate representation to
     account for probes.
 
@@ -158,16 +158,16 @@ class IntermediateRepresentation(
             Intermediate representation of the objects and connections.
         """
         # Update the builders with any extras we've been given
-        object_builders = MRODict(cls.object_builders)
+        object_builders = mrolookupdict(cls.object_builders)
         object_builders.update(extra_object_builders)
 
-        source_getters = MRODict(cls.source_getters)
+        source_getters = mrolookupdict(cls.source_getters)
         source_getters.update(extra_source_getters)
 
-        sink_getters = MRODict(cls.sink_getters)
+        sink_getters = mrolookupdict(cls.sink_getters)
         sink_getters.update(extra_sink_getters)
 
-        probe_builders = MRODict(cls.probe_builders)
+        probe_builders = mrolookupdict(cls.probe_builders)
         probe_builders.update(extra_probe_builders)
 
         # For each of the objects generate the appropriate type of intermediate
