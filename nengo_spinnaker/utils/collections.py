@@ -1,3 +1,30 @@
+class noneignoringlist(list):
+    """List which will not append None.
+
+    For example::
+
+        >>> nil = noneignoringlist()
+        >>> nil.append(234)
+        >>> nil
+        [234]
+        >>> nil.append(None)
+        >>> nil
+        [234]
+
+    However, if you manually assign an element to `None` then it will be
+    assigned as usual.
+
+        >>> nil[0] = None
+        >>> nil
+        [None]
+    """
+
+    def append(self, x):
+        """Appends `x` to the end of the list unless it is `None`."""
+        if x is not None:
+            super(noneignoringlist, self).append(x)
+
+
 class registerabledict(dict):
     """A dictionary with a decorator that allows easy entry of functions into
     the dict.
@@ -77,7 +104,7 @@ class mrolookupdict(dict):
         >>>
         >>> mrodict[NotDerivedObject]
         Traceback (most recent call last):
-        KeyError: <class 'nengo_spinnaker.utils.dicts.NotDerivedObject'>
+        KeyError: <class 'nengo_spinnaker.utils.collections.NotDerivedObject'>
     """
     def __getitem__(self, cls):
         """Get the first matching entry from the class MRO."""

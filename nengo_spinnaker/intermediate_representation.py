@@ -14,7 +14,8 @@ import numpy as np
 import six
 
 from .netlist import NetAddress, InputPort, OutputPort
-from .utils.dicts import mrolookupdict, registerabledict
+from .utils.collections import (mrolookupdict, noneignoringlist,
+                                registerabledict)
 
 
 class IntermediateRepresentation(
@@ -272,19 +273,16 @@ class IntermediateRepresentation(
             Mapping of port to a dictionary mapping nets to the Nengo
             Connections (if available, otherwise None) which they represent.
         """
-        nets = collections.defaultdict(lambda: collections.defaultdict(list))
+        nets = collections.defaultdict(
+            lambda: collections.defaultdict(noneignoringlist)
+        )
 
         # Go through the two sets of nets and pick out the ones we care about
         for (conn, net) in itertools.chain(
                 six.iteritems(self.connection_map),
                 ((None, n) for n in self.extra_connections)):
             if f(net):
-                if conn is not None:
-                    nets[key(net)][net].append(conn)
-                else:
-                    # **YUCK** This forces defaultdict to instantiate the list
-                    # if it doesn't exist, otherwise it does nothing.
-                    nets[key(net)][net]
+                nets[key(net)][net].append(conn)
 
         return nets
 
