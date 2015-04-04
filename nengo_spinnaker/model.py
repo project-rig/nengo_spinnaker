@@ -6,9 +6,9 @@ from .utils.collections import noneignoringlist, registerabledict
 from .utils.itertools import flatten
 
 
-class Builder(object):
-    """Converts objects from an intermediate representation into a set of
-    vertices that can be placed and allocated.
+class Model(object):
+    """Represents a set of vertices and nets which may be placed and routed to
+    simulate a neural network on a SpiNNaker machine.
     """
 
     builders = registerabledict()
@@ -33,10 +33,38 @@ class Builder(object):
      - (4) a function (or `None`) to call immediately after a simulation
     """
 
+    def __init__(self, vertex_map=dict(), net_map=dict(),
+                 preload_callables=list(), presim_callables=list(),
+                 postsim_callables=list()):
+        """Create a new model.
+
+        Parameters
+        ----------
+        vertex_map : {object : Vertex, object : [Vertex], ...}
+            Mapping from intermediate objects to the vertex or vertices they
+            instantiate
+        net_map : {net : Net, net : [Net]}
+            Mapping for intermediate Net to the Net or Nets they instantiate.
+        preload_callables : list
+            List of functions to call prior to loading the machine (used, e.g.,
+            to load vertex data).
+        presim_callables : list
+            Functions called prior to the start of a simulation (used, e.g., to
+            load on data required for just the next simulation steps).
+        postsim_callables : list
+            Callables called after the end of a run of simulation steps (used,
+            e.g., to retrieve probe data).
+        """
+        self.vertex_map = dict(vertex_map)
+        self.net_map = dict(net_map)
+        self.preload_callables = list(preload_callables)
+        self.presim_callables = list(presim_callables)
+        self.postsim_callables = list(postsim_callables)
+
     @classmethod
-    def build(cls, intermediate_representation, extra_builders):
-        """Convert an intermediate representation into a set of vertices and
-        sets of callbacks.
+    def from_intermediate_representation(cls, intermediate_representation,
+                                         extra_builders=dict()):
+        """Convert an intermediate representation into a new model.
 
         Parameters
         ----------
@@ -44,13 +72,19 @@ class Builder(object):
             An intermediary representation of the model to build.
         extra_builders : {type: callable, ...}
             Any additional build methods that are required.
+
+        Returns
+        -------
+        :py:class:`.Model`
+            A model constructed from the intermediate representation.
         """
+        # Create a new empty model
+        model = cls()
+
         # Construct the set of builders
         builders = dict(cls.builders)
         builders.update(extra_builders)
 
-        # Build all of the objects in turn
-        vertices = dict()  # Built vertices (mapped to build nets later)
         pre_loads = noneignoringlist()  # Functions to call to load the machine
         pre_sims = noneignoringlist()  # ... to call before each simulation
         post_sims = noneignoringlist()  # ... to call after each simulation
@@ -71,31 +105,42 @@ class Builder(object):
             vertex, pre_load, pre_sim, post_sim = \
                 builders[obj.__class__](obj, orig, intermediate_representation)
 
-            vertices[obj] = vertex
+            model.vertex_map[obj] = vertex
             pre_loads.append(pre_load)  # `None` is not appended
             pre_sims.append(pre_sim)  # `None` is not appended
             post_sims.append(post_sim)  # `None` is not appended
 
+        # Store the callables
+        model.preload_callables = list(pre_loads)
+        model.presim_callables = list(pre_sims)
+        model.postsim_callables = list(post_sims)
+
         # Convert all of the intermediate nets into finalised nets
-        nets = list()
         all_nets = chain(
             itervalues(intermediate_representation.connection_map),
             intermediate_representation.extra_connections
         )
         for net in all_nets:
             # Get the source and sink(s)
-            sources = vertices[net.source.object]
-            sinks = vertices[net.sink.object]
+            sources = model.vertex_map[net.source.object]
+            sinks = model.vertex_map[net.sink.object]
 
             if not isinstance(sources, list):
                 sources = [sources]
 
             # Create the new nets
-            for source in sources:
-                nets.append(Net(source, sinks, 1, net.keyspace))
+            model.net_map[net] = [Net(source, sinks, 1, net.keyspace) for
+                                  source in sources]
 
-        # Finally, return all vertices and nets
-        return (
-            list(flatten(vertices.values())), nets, list(pre_loads),
-            list(pre_sims), list(post_sims)
-        )
+        # Return the built model
+        return model
+
+    @property
+    def nets(self):
+        """Return an iterable of the nets in the model."""
+        return flatten(itervalues(self.net_map))
+
+    @property
+    def vertices(self):
+        """Return an iterable of the vertices in the model."""
+        return flatten(itervalues(self.vertex_map))

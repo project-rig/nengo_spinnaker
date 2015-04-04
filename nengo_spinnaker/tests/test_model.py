@@ -2,12 +2,12 @@ import mock
 import pytest
 from rig.bitfield import BitField
 
-from nengo_spinnaker import builder
 from nengo_spinnaker import intermediate_representation as ir
+from nengo_spinnaker import model as nm
 from nengo_spinnaker import netlist as nl
 
 
-class TestBuilder(object):
+class TestModel(object):
     def test_build_standard(self):
         """Test that build methods are called, regardless of how they are
         specified and that an appropriate netlist is returned.
@@ -53,33 +53,33 @@ class TestBuilder(object):
             name="b builder", spec_set=[],
             return_value=(b_vertex, b_pre_load, b_pre_sim, b_post_sim))
 
-        # Run the builder, this should return a list of vertices, a list of
-        # Nets, a list of callbacks to load application data, a list of
-        # pre-simulation callbacks and a list of post-simulation callbacks.
-        with mock.patch.object(builder.Builder, "builders",
+        # Run the builder
+        with mock.patch.object(nm.Model, "builders",
                                {IntermediateObject: a_builder}):
-            (vertices, nets, prepare_callbacks, presim_callbacks,
-             postsim_callbacks) = builder.Builder.build(
+            model = nm.Model.from_intermediate_representation(
                 irn, {ExtraObject: b_builder})
 
         # Assert we built correctly
         # Vertices
         a_builder.assert_called_once_with(a_intermediate, a, irn)
         b_builder.assert_called_once_with(b, None, irn)
-        assert {a_vertex, b_vertex} == set(vertices)
+        assert {a_vertex, b_vertex} == set(model.vertices)
+        assert model.vertex_map[a_intermediate] is a_vertex
+        assert model.vertex_map[b] is b_vertex
 
         # Nets
+        nets = list(model.nets)
         assert len(nets) == 1
-        net = nets[0]
+        net = model.net_map[c][0]
         assert isinstance(net, nl.Net)
         assert net.source == a_vertex
         assert net.sinks == [b_vertex]
         assert net.keyspace is c.keyspace
 
         # Callbacks
-        assert set(prepare_callbacks) == {a_pre_load, b_pre_load}
-        assert set(presim_callbacks) == {a_pre_sim}
-        assert set(postsim_callbacks) == {a_post_sim, b_post_sim}
+        assert set(model.preload_callables) == {a_pre_load, b_pre_load}
+        assert set(model.presim_callables) == {a_pre_sim}
+        assert set(model.postsim_callables) == {a_post_sim, b_post_sim}
 
     def test_build_fails_for_missing_builder(self):
         """Test that an exception is raised if there is no build method for a
@@ -91,9 +91,9 @@ class TestBuilder(object):
 
         # Run the builder, this should fail because there is no builder for
         # `b`.
-        with mock.patch.object(builder.Builder, "builders", {}), \
+        with mock.patch.object(nm.Model, "builders", {}), \
                 pytest.raises(TypeError) as excinfo:
-            (vertices, nets) = builder.Builder.build(irn, {})
+            nm.Model.from_intermediate_representation(irn)
 
         assert b.__class__.__name__ in str(excinfo.value)
 
@@ -136,25 +136,22 @@ class TestBuilder(object):
             name="b builder", spec_set=[],
             return_value=(b_vertex, None, None, None))
 
-        # Run the builder, this should return a list of vertices, a list of
-        # Nets, a list of callbacks to load application data, a list of
-        # pre-simulation callbacks and a list of post-simulation callbacks.
-        with mock.patch.object(builder.Builder, "builders",
+        # Run the builder
+        with mock.patch.object(nm.Model, "builders",
                                {IntermediateObject: a_builder}):
-            (vertices, nets, prepare_callbacks, presim_callbacks,
-             postsim_callbacks) = builder.Builder.build(
+            model = nm.Model.from_intermediate_representation(
                 irn, {ExtraObject: b_builder})
 
         # Assert we built correctly
         # Vertices
         a_builder.assert_called_once_with(a_intermediate, a, irn)
         b_builder.assert_called_once_with(b, None, irn)
-        assert {a_vertices[0], a_vertices[1], b_vertex} == set(vertices)
+        assert {a_vertices[0], a_vertices[1], b_vertex} == set(model.vertices)
 
         # Nets
-        assert len(nets) == 2
+        assert len(list(model.nets)) == 2
 
-        for net in nets:
+        for net in model.nets:
             assert isinstance(net, nl.Net)
             assert net.source in a_vertices
             assert net.sinks == [b_vertex]
@@ -199,22 +196,20 @@ class TestBuilder(object):
             name="b builder", spec_set=[],
             return_value=(b_vertices, None, None, None))
 
-        # Run the builder, this should return a list of vertices, a list of
-        # Nets, a list of callbacks to load application data, a list of
-        # pre-simulation callbacks and a list of post-simulation callbacks.
-        with mock.patch.object(builder.Builder, "builders",
+        # Run the builder
+        with mock.patch.object(nm.Model, "builders",
                                {IntermediateObject: a_builder}):
-            (vertices, nets, prepare_callbacks, presim_callbacks,
-             postsim_callbacks) = builder.Builder.build(
+            model = nm.Model.from_intermediate_representation(
                 irn, {ExtraObject: b_builder})
 
         # Assert we built correctly
         # Vertices
         a_builder.assert_called_once_with(a_intermediate, a, irn)
         b_builder.assert_called_once_with(b, None, irn)
-        assert {a_vertex, b_vertices[0], b_vertices[1]} == set(vertices)
+        assert {a_vertex, b_vertices[0], b_vertices[1]} == set(model.vertices)
 
         # Nets
+        nets = list(model.nets)
         assert len(nets) == 1
         net = nets[0]
         assert isinstance(net, nl.Net)
