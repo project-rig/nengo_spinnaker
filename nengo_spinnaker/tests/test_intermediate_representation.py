@@ -110,9 +110,10 @@ class TestGetIntermediateNet(object):
         pass
 
     class FauxConnection(object):
-        def __init__(self, pre, post):
+        def __init__(self, pre, post, size_out=12):
             self.pre_obj = pre
             self.post_obj = post
+            self.size_out = size_out
 
     def test_standard_no_seed(self):
         """The simple case where all we have to do is get the seed, the source,
@@ -120,7 +121,7 @@ class TestGetIntermediateNet(object):
         """
         a = self.ObjTypeA()
         b = self.ObjTypeB()
-        c = self.FauxConnection(a, b)
+        c = self.FauxConnection(a, b, 33)
 
         a_extra_objs = [mock.Mock()]
         a_extra_conns = [mock.Mock()]
@@ -151,6 +152,7 @@ class TestGetIntermediateNet(object):
         assert ic.sink is b
         assert ic.seed is not None
         assert ic.keyspace is None
+        assert ic.weight == c.size_out
         assert not ic.latching  # Receiving buffers should clear every timestep
         assert irn.extra_objects == a_extra_objs + b_extra_objs
         assert irn.extra_connections == a_extra_conns + b_extra_conns

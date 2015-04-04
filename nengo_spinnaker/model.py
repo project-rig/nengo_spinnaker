@@ -129,8 +129,8 @@ class Model(object):
                 sources = [sources]
 
             # Create the new nets
-            model.net_map[net] = [Net(source, sinks, 1, net.keyspace) for
-                                  source in sources]
+            model.net_map[net] = [Net(source, sinks, net.weight, net.keyspace)
+                                  for source in sources]
 
         # Return the built model
         return model

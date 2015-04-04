@@ -289,7 +289,7 @@ class IntermediateRepresentation(
 
 class IntermediateNet(
         collections.namedtuple("IntermediateNet",
-                               "seed source sink keyspace latching")):
+                               "seed source sink keyspace latching weight")):
     """Intermediate representation of a Nengo Connection.
 
     Attributes
@@ -306,9 +306,17 @@ class IntermediateNet(
         Indicates that the receiving buffer must *not* be reset every
         simulation timestep but must hold its value until it next receives a
         packet.
+    weight : int
+        Indication of the number of packets expected to flow over the net every
+        time-step.
     """
     # TODO At some point (when neuron->neuron connections become possible) nets
     # will need to support multiple sinks.
+
+    def __new__(cls, seed, source, sink, keyspace=None, latching=False,
+                weight=0):
+        return super(IntermediateNet, cls).__new__(cls, seed, source, sink,
+                                                   keyspace, latching, weight)
 
 
 @IntermediateRepresentation.object_builders.register(nengo.base.NengoObject)
@@ -480,6 +488,11 @@ def _get_intermediate_net(source_getters, sink_getters, connection, irn):
     else:
         raise NotImplementedError("Cannot merge two keyspaces")
 
+    # The weight of the net is taken from the size_out of the Connection.  This
+    # is correct for value-transmission in the majority of cases and is
+    # over-cautious for spike-transmission.
+    weight = connection.size_out
+
     # Determine whether the net should be latching (not by default).  There
     # shouldn't be any case where there is a mismatch between the source and
     # sink in this regard, or where a mismatch would result in incorrect
@@ -502,7 +515,7 @@ def _get_intermediate_net(source_getters, sink_getters, connection, irn):
         )
 
     # Build the new net
-    return (IntermediateNet(seed, source, sink, ks, latching),
+    return (IntermediateNet(seed, source, sink, ks, latching, weight),
             extra_objs, extra_conns)
 
 

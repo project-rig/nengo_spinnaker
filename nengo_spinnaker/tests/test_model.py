@@ -29,7 +29,7 @@ class TestModel(object):
         sink_b = nl.NetAddress(b, nl.InputPort.standard)
         keyspace = mock.Mock(name="keyspace", spec=BitField)
         keyspace.length = 32
-        c = ir.IntermediateNet(1234, source_a, sink_b, keyspace, False)
+        c = ir.IntermediateNet(1234, source_a, sink_b, keyspace, False, 323)
 
         irn = ir.IntermediateRepresentation({a: a_intermediate}, {}, [b], [c])
 
@@ -71,10 +71,10 @@ class TestModel(object):
         nets = list(model.nets)
         assert len(nets) == 1
         net = model.net_map[c][0]
-        assert isinstance(net, nl.Net)
         assert net.source == a_vertex
         assert net.sinks == [b_vertex]
         assert net.keyspace is c.keyspace
+        assert net.weight == c.weight
 
         # Callbacks
         assert set(model.preload_callables) == {a_pre_load, b_pre_load}
