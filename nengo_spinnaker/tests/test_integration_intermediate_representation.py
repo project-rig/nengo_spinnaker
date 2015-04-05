@@ -46,11 +46,11 @@ def test_ensemble():
     assert conn_ab not in irn.connection_map
 
     # Check that conn b->c was identified as global inhibition
-    assert (irn.connection_map[conn_bc].sink.port is
+    assert (irn.connection_map[conn_bc].sinks[0].port is
             ir.InputPort.global_inhibition)
 
     # Check that conn c->d was left as normal
-    assert (irn.connection_map[conn_cd].sink.port is
+    assert (irn.connection_map[conn_cd].sinks[0].port is
             ir.InputPort.standard)
 
     # The probe on d should be in the object map
@@ -60,5 +60,35 @@ def test_ensemble():
     conn = irn.extra_connections[0]
     assert conn.source.object is irn.object_map[d]
     assert conn.source.port is ir.OutputPort.standard
-    assert conn.sink.object is irn.object_map[p_value]
-    assert conn.sink.port is ir.InputPort.standard
+    assert conn.sinks[0].object is irn.object_map[p_value]
+    assert conn.sinks[0].port is ir.InputPort.standard
+
+
+def test_spike_transmission():
+    """Test that neuron-neuron connections result in single nets with sane
+    parameters.
+    """
+    with nengo.Network() as net:
+        a = nengo.Ensemble(300, 1)
+        b = nengo.Ensemble(100, 1)
+        c = nengo.Ensemble(500, 1)
+
+        # Should become a single net!
+        conn_ab = nengo.Connection(a.neurons[:100], b.neurons)
+        conn_ac = nengo.Connection(a.neurons, c.neurons[100:400])
+
+    # Build the intermediate representation
+    irn = ir.IntermediateRepresentation.from_objs_conns_probes(
+        [a, b, c], [conn_ab, conn_ac], [])
+
+    # There should only be 1 Net with two sinks
+    assert irn.connection_map[conn_ab] is irn.connection_map[conn_ac]
+    net = irn.connection_map[conn_ab]
+    assert net.source.object is irn.object_map[a]
+    assert net.source.port is ir.OutputPort.neurons
+
+    for sink in net.sinks:
+        assert sink.object in [irn.object_map[b], irn.object_map[c]]
+        assert sink.port is ir.InputPort.neurons
+
+    assert net.weight == a.n_neurons

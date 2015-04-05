@@ -187,8 +187,8 @@ class TestNodeIOController(object):
             assert c.seed == 454
             assert c.source.object is source
             assert c.source.port is ir.OutputPort.standard
-            assert c.sink.object is ir_probe
-            assert c.sink.port is ir.InputPort.standard
+            assert c.sinks[0].object is ir_probe
+            assert c.sinks[0].port is ir.InputPort.standard
             assert c.keyspace is keyspace
             assert c.latching
             assert c.weight == p.size_in

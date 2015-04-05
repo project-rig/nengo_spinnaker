@@ -86,7 +86,7 @@ class TestVertexSlice(object):
     )
     def test_fails_if_slice_non_contiguous_or_relative(self, sl):
         v = NullVertex()
-        v.n_atoms=100
+        v.n_atoms = 100
 
         with pytest.raises(ValueError) as excinfo:
             netlist.VertexSlice(v, sl)

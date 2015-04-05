@@ -27,7 +27,7 @@ class TestSinkOrSourceSpecification(object):
 
         ss = ir.soss(sink, extra_objects=[extra_obj], extra_nets=[extra_net],
                      keyspace=keyspace, latching=latching, weight=weight)
-        
+
         assert ss.target is sink
         assert ss.extra_objects == [extra_obj]
         assert ss.extra_nets == [extra_net]
@@ -130,6 +130,36 @@ class TestGetIntermediateObject(object):
         assert irn.object_map == {}
 
 
+class TestIntermediateNet(object):
+    """Test the construction of intermediate nets."""
+    def test_single_sink(self):
+        source = mock.Mock(name="source")
+        sink = ir.NetAddress(mock.Mock(name="obj"), mock.Mock(name="port"))
+
+        net = ir.IntermediateNet(1105, source, sink)
+        assert net.source is source
+        assert net.sinks == [sink]
+
+    def test_multiple_sinks(self):
+        source = mock.Mock(name="source")
+        sinks = [mock.Mock(name="sink{}".format(n)) for n in range(5)]
+
+        net = ir.IntermediateNet(1105, source, sinks)
+        assert net.source is source
+        assert net.sinks == sinks
+        assert net.sinks is not sinks
+
+    def test_hash_by_id(self):
+        source = mock.Mock(name="source")
+        sink = ir.NetAddress(mock.Mock(name="obj"), mock.Mock(name="port"))
+
+        net = ir.IntermediateNet(1105, source, sink)
+        net2 = ir.IntermediateNet(1105, source, sink)
+
+        nets = {net, net2}
+        assert len(nets) == 2
+
+
 class TestGetIntermediateNet(object):
     """Tests the construction of intermediate nets from connections.
     """
@@ -179,7 +209,7 @@ class TestGetIntermediateNet(object):
 
         ic = irn.connection_map[c]
         assert ic.source is a
-        assert ic.sink is b
+        assert b in ic.sinks
         assert ic.seed is not None
         assert ic.keyspace is None
         assert ic.weight == c.size_out
@@ -346,6 +376,31 @@ class TestGetIntermediateNet(object):
         assert irn.connection_map[c].latching
 
     @pytest.mark.parametrize(
+        "source_getters, sink_getters, expected_weight",
+        [({ObjTypeA: lambda x, y: ir.soss(x.pre_obj, weight=5)},
+          {ObjTypeB: lambda x, y: ir.soss(x.post_obj)}, 5),
+         ({ObjTypeA: lambda x, y: ir.soss(x.pre_obj, weight=3)},
+          {ObjTypeB: lambda x, y: ir.soss(x.post_obj, weight=9)}, 9),
+         ]
+    )
+    def test_get_weight(self, source_getters, sink_getters, expected_weight):
+        """Test that the weight is correctly returned.
+        """
+        a = self.ObjTypeA()
+        b = self.ObjTypeB()
+        c = self.FauxConnection(a, b, 7)
+
+        with mock.patch.object(ir.IntermediateRepresentation,
+                               "source_getters", source_getters), \
+                mock.patch.object(ir.IntermediateRepresentation,
+                                  "sink_getters", sink_getters):
+                irn = ir.IntermediateRepresentation.from_objs_conns_probes(
+                    [], [c], [])
+
+        assert len(irn.connection_map) == 1
+        assert irn.connection_map[c].weight == expected_weight
+
+    @pytest.mark.parametrize(
         "source_getters, sink_getters, reason, fail_type",
         [({ObjTypeA: lambda x, y: ir.soss(x.pre_obj)}, {}, "sink", ObjTypeB),
          ({}, {ObjTypeB: lambda x, y: ir.soss(x.post_obj)},
@@ -398,6 +453,31 @@ class TestGetIntermediateNet(object):
                 extra_source_getters=source_getters,
                 extra_sink_getters=sink_getters
             )
+
+    def test_use_existing_net(self):
+        """Test that if the source getter returns a Net instead of a soss then
+        we use the existing net and don't ask for a new sink.
+        """
+        a = self.ObjTypeA()
+        b = self.ObjTypeB()
+        c = self.FauxConnection(a, b)
+
+        d = ir.IntermediateNet(123, None, [None])  # Existing net
+
+        source_getters = {a.__class__: lambda x, y: d}
+        sink_getters = {b.__class__: lambda x, y: ir.soss(x.post_obj)}
+
+        # Build the connection
+        with mock.patch.object(ir.IntermediateRepresentation,
+                               "source_getters", source_getters), \
+                mock.patch.object(ir.IntermediateRepresentation,
+                                  "sink_getters", sink_getters):
+            irn = ir.IntermediateRepresentation.from_objs_conns_probes(
+                [], [c], [])
+
+        # Assert the existing net was used and modified
+        assert irn.connection_map[c] is d
+        assert d.sinks == [None, b]
 
 
 class TestGetIntermediateProbe(object):
@@ -573,7 +653,7 @@ def test_get_output_probe():
     assert len(new_conns) == 1
     new_conn = new_conns[0]
     assert new_conn.source == ir.NetAddress(ir_a, ir.OutputPort.standard)
-    assert new_conn.sink == ir.NetAddress(new_obj, ir.InputPort.standard)
+    assert ir.NetAddress(new_obj, ir.InputPort.standard) in new_conn.sinks
     assert new_conn.keyspace is None
     assert not new_conn.latching
 

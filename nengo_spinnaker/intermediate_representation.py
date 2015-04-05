@@ -78,6 +78,10 @@ class IntermediateRepresentation(
     information about other objects in the network.  A callable must return a
     :py:class:`.SinkOrSourceSpecification` (see also :py:class:`.soss`).
 
+    In the specific case of `source_getter`s, returning an existing
+    `IntermediateNet` will cause that net to be modified by adding the
+    appropriate sink.
+
     For example, the standard source getter which just returns a source
     indicating the source object and the standard output port is implemented
     as::
@@ -255,8 +259,17 @@ class IntermediateRepresentation(
             Mapping of port to a dictionary mapping nets to the Nengo
             Connections (if available, otherwise None) which they represent.
         """
-        return self._filter_nets(lambda n: n.sink.object is obj,
-                                 lambda n: n.sink.port)
+        def get_port(net):
+            for s in net.sinks:
+                if s.object is obj:
+                    return s.port
+            else:  # pragma : no cover
+                assert False  # Should be unreachable
+
+        return self._filter_nets(
+            lambda n: any(s.object is obj for s in n.sinks),
+            get_port
+        )
 
     def _filter_nets(self, f, key):
         """Filter nets and construct a dictionary with a custom key the entries
@@ -332,9 +345,7 @@ port : :py:class:`.OutputPort` or :py:class:`.InputPort`
 """
 
 
-class IntermediateNet(
-        collections.namedtuple("IntermediateNet",
-                               "seed source sink keyspace latching weight")):
+class IntermediateNet(object):
     """Intermediate representation of a Nengo Connection.
 
     Attributes
@@ -343,8 +354,8 @@ class IntermediateNet(
         Seed used for random number generation for the net.
     source : :py:class:`.NetAddress`
         Source of packets to be transmitted across the net.
-    sink : :py:class:`.NetAddress`
-        Target of packets transmitted across the net.
+    sinks : [:py:class:`.NetAddress`]
+        Targets of packets transmitted across the net.
     keyspace : :py:class:`rig.bitfield.BitField` or None
         Keyspace used to route packets across the network.
     latching : bool
@@ -355,13 +366,22 @@ class IntermediateNet(
         Indication of the number of packets expected to flow over the net every
         time-step.
     """
-    # TODO At some point (when neuron->neuron connections become possible) nets
-    # will need to support multiple sinks.
+    __slots__ = ["seed", "source", "sinks", "keyspace", "latching", "weight"]
 
-    def __new__(cls, seed, source, sink, keyspace=None, latching=False,
-                weight=0):
-        return super(IntermediateNet, cls).__new__(cls, seed, source, sink,
-                                                   keyspace, latching, weight)
+    def __init__(self, seed, source, sinks, keyspace=None, latching=False,
+                 weight=0):
+        self.seed = seed
+        self.source = source
+        self.keyspace = keyspace
+        self.latching = latching
+        self.weight = weight
+
+        # Copy the sinks if they are a list, otherwise make a list containing
+        # the single sink
+        if isinstance(sinks, list):
+            self.sinks = list(sinks)
+        else:
+            self.sinks = [sinks]
 
 
 @IntermediateRepresentation.object_builders.register(nengo.base.NengoObject)
@@ -493,7 +513,7 @@ def _get_intermediate_net(source_getters, sink_getters, connection, irn):
             builder = getters[cls(connection)]
         except KeyError:
             raise TypeError(
-                "Could not determine the {} for connections {} at object of  "
+                "Could not determine the {} for connections {} at object of "
                 "type {}".format(name, verb, cls(connection).__name__)
             )
 
@@ -508,13 +528,20 @@ def _get_intermediate_net(source_getters, sink_getters, connection, irn):
     source_spec = _get_intermediate_endpoint(
         _EndpointType.source, source_getters, connection, irn)
 
-    # If no source is specified then we abort the connection
-    if source_spec is None or source_spec.target is None:
-        return None, [], []
-
     # Get the sink for the connection
     sink_spec = _get_intermediate_endpoint(
         _EndpointType.sink, sink_getters, connection, irn)
+
+    # If the source_spec is an existing net, then add the sink to that net and
+    # return
+    if isinstance(source_spec, IntermediateNet):
+        net = source_spec
+        net.sinks.append(sink_spec.target)
+        return net, sink_spec.extra_objects, sink_spec.extra_nets
+
+    # If no source is specified then we abort the connection
+    if source_spec is None or source_spec.target is None:
+        return None, [], []
 
     # If no sink is specified then we abort the connection
     if sink_spec is None or sink_spec.target is None:
@@ -533,10 +560,17 @@ def _get_intermediate_net(source_getters, sink_getters, connection, irn):
     else:
         raise NotImplementedError("Cannot merge two keyspaces")
 
-    # The weight of the net is taken from the size_out of the Connection.  This
-    # is correct for value-transmission in the majority of cases and is
-    # over-cautious for spike-transmission.
-    weight = connection.size_out
+    if source_spec.weight is not None or sink_spec.weight is not None:
+        # Take the largest specified weight
+        source_weight = 0 if source_spec.weight is None else source_spec.weight
+        sink_weight = 0 if sink_spec.weight is None else sink_spec.weight
+
+        weight = max(source_weight, sink_weight)
+    else:
+        # The weight of the net is taken from the size_out of the Connection.
+        # This is correct for value-transmission in the majority of cases and
+        # is over-cautious for spike-transmission.
+        weight = connection.size_out
 
     # Determine whether the net should be latching (not by default).  There
     # shouldn't be any case where there is a mismatch between the source and

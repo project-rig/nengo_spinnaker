@@ -21,17 +21,25 @@ class TestModel(object):
         class ExtraObject(object):
             pass
 
+        class ExtraObject2(object):
+            pass
+
         # Construct the intermediate representation
         a = OriginalObject()
         a_intermediate = IntermediateObject()
         b = ExtraObject()
+        d = ExtraObject2()
         source_a = ir.NetAddress(a_intermediate, ir.OutputPort.standard)
         sink_b = ir.NetAddress(b, ir.InputPort.standard)
+        sink_d = ir.NetAddress(d, ir.InputPort.standard)
         keyspace = mock.Mock(name="keyspace", spec=BitField)
         keyspace.length = 32
-        c = ir.IntermediateNet(1234, source_a, sink_b, keyspace, False, 323)
 
-        irn = ir.IntermediateRepresentation({a: a_intermediate}, {}, [b], [c])
+        c = ir.IntermediateNet(1234, source_a, [sink_b, sink_d],
+                               keyspace, False, 323)
+
+        irn = ir.IntermediateRepresentation(
+            {a: a_intermediate}, {}, [b, d], [c])
 
         # Construct the builders
         class Vertex(object):
@@ -53,26 +61,35 @@ class TestModel(object):
             name="b builder", spec_set=[],
             return_value=(b_vertex, b_pre_load, b_pre_sim, b_post_sim))
 
+        d_vertex = Vertex()
+        d_pre_load = None
+        d_pre_sim = None
+        d_post_sim = None
+        d_builder = mock.Mock(
+            name="d builder", spec_set=[],
+            return_value=(d_vertex, d_pre_load, d_pre_sim, d_post_sim))
+
         # Run the builder
         with mock.patch.object(nm.Model, "builders",
                                {IntermediateObject: a_builder}):
             model = nm.Model.from_intermediate_representation(
-                irn, {ExtraObject: b_builder})
+                irn, {ExtraObject: b_builder, ExtraObject2: d_builder})
 
         # Assert we built correctly
         # Vertices
         a_builder.assert_called_once_with(a_intermediate, a, irn)
         b_builder.assert_called_once_with(b, None, irn)
-        assert {a_vertex, b_vertex} == set(model.vertices)
+        assert {a_vertex, b_vertex, d_vertex} == set(model.vertices)
         assert model.vertex_map[a_intermediate] is a_vertex
         assert model.vertex_map[b] is b_vertex
+        assert model.vertex_map[d] is d_vertex
 
         # Nets
         nets = list(model.nets)
         assert len(nets) == 1
         net = model.net_map[c][0]
         assert net.source == a_vertex
-        assert net.sinks == [b_vertex]
+        assert net.sinks == [b_vertex, d_vertex]
         assert net.keyspace is c.keyspace
         assert net.weight == c.weight
 

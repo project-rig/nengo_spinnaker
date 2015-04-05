@@ -71,6 +71,32 @@ def get_ensemble_sink(conn, irn):
     return ir.get_sink_standard(conn, irn)
 
 
+@ir.IntermediateRepresentation.source_getters.register(nengo.ensemble.Neurons)
+def get_neurons_source(conn, irn):
+    """Get the source object (or an existing net to reuse) for a connection out
+    of an Ensemble's neurons.
+
+    Parameters
+    ----------
+    conn : :py:class:`nengo.Connection`
+    irn : `IntermediateRepresentation`
+    """
+    assert isinstance(conn.post_obj, nengo.ensemble.Neurons)
+    ensemble = conn.pre_obj.ensemble
+
+    # See if we already have a connection from this Ensemble's neurons
+    outgoing = irn.get_nets_starting_at(irn.object_map[ensemble])
+    if len(outgoing[ir.OutputPort.neurons]) == 1:
+        # We do, so we'll reuse this net
+        return list(outgoing[ir.OutputPort.neurons].keys())[0]
+    else:
+        # We don't, so we return a source
+        return ir.soss(
+            ir.NetAddress(irn.object_map[ensemble], ir.OutputPort.neurons),
+            weight=ensemble.n_neurons
+        )
+
+
 @ir.IntermediateRepresentation.sink_getters.register(nengo.ensemble.Neurons)
 def get_neurons_sink(conn, irn):
     """Get the sink object for a connection into an Ensemble's neurons.

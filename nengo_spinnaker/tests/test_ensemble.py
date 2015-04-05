@@ -149,6 +149,55 @@ class TestGetNeuronsSink(object):
             ns_ens.get_neurons_sink(c, irn)
 
 
+class TestGetNeuronsSource(object):
+    """Test getting the source for connections from neurons."""
+    def test_first_time(self):
+        with nengo.Network():
+            a = nengo.Ensemble(100, 2)
+            b = nengo.Ensemble(300, 3)
+            c = nengo.Connection(a.neurons, b.neurons[:100])
+
+        obj_map = {
+            a: mock.Mock(name="ir_a", spec_set=[]),
+            b: mock.Mock(name="ir_b", spec_set=[]),
+        }
+
+        irn = ir.IntermediateRepresentation(obj_map, {}, [], [])
+        assert (
+            ns_ens.get_neurons_source(c, irn) ==
+            ir.soss(ir.NetAddress(obj_map[a], ir.OutputPort.neurons),
+                    weight=a.n_neurons)
+        )
+
+    def test_second_time(self):
+        with nengo.Network():
+            a = nengo.Ensemble(100, 2)
+            b = nengo.Ensemble(300, 3)
+            c = nengo.Ensemble(100, 2)
+
+            d = nengo.Connection(a.neurons, b.neurons[:100])
+            e = nengo.Connection(a.neurons, c.neurons)
+
+        obj_map = {
+            a: mock.Mock(name="ir_a", spec_set=[]),
+            b: mock.Mock(name="ir_b", spec_set=[]),
+            c: mock.Mock(name="ir_c", spec_set=[]),
+        }
+        conn_map = {
+            d: ir.IntermediateNet(
+                111,
+                ir.NetAddress(obj_map[a], ir.OutputPort.neurons),
+                ir.NetAddress(obj_map[b], ir.InputPort.neurons)
+            )
+        }
+
+        # Building connection e (having built d) should result in modification
+        # of the connection and the use of the same connection (indicated by
+        # returning the existing connection).
+        irn = ir.IntermediateRepresentation(obj_map, conn_map, [], [])
+        assert ns_ens.get_neurons_source(e, irn) == conn_map[d]
+
+
 def test_get_neurons_probe():
     """Test building probes for Neuron-type objects."""
     with nengo.Network():
@@ -192,7 +241,7 @@ class TestGetEnsembleProbe(object):
         assert len(new_conns) == 1
         new_conn = new_conns[0]
         assert new_conn.source == ir.NetAddress(ir_a, ir.OutputPort.standard)
-        assert new_conn.sink == ir.NetAddress(new_obj, ir.InputPort.standard)
+        assert ir.NetAddress(new_obj, ir.InputPort.standard) in new_conn.sinks
         assert new_conn.keyspace is None
         assert not new_conn.latching
 

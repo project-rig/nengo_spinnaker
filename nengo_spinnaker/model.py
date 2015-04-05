@@ -123,7 +123,8 @@ class Model(object):
         for net in all_nets:
             # Get the source and sink(s)
             sources = model.vertex_map[net.source.object]
-            sinks = model.vertex_map[net.sink.object]
+            sinks = list(
+                flatten(model.vertex_map[s.object] for s in net.sinks))
 
             if not isinstance(sources, list):
                 sources = [sources]
