@@ -6,6 +6,37 @@ from nengo_spinnaker import netlist as nl
 from nengo_spinnaker import intermediate_representation as ir
 
 
+class TestSinkOrSourceSpecification(object):
+    def test_default_args(self):
+        sink = mock.Mock(name="sink", spec_set=[nl.NetAddress])
+        ss = ir.soss(sink)
+
+        assert ss.target is sink
+        assert ss.extra_objects == list()
+        assert ss.extra_nets == list()
+        assert ss.keyspace is None
+        assert ss.latching is False
+        assert ss.weight is None
+
+    def test_non_default_args(self):
+        sink = mock.Mock(name="sink")
+        extra_obj = mock.Mock(name="extra object")
+        extra_net = mock.Mock(name="extra net")
+        keyspace = mock.Mock(name="keyspace")
+        latching = True
+        weight = 5
+
+        ss = ir.soss(sink, extra_objects=[extra_obj], extra_nets=[extra_net],
+                     keyspace=keyspace, latching=latching, weight=weight)
+        
+        assert ss.target is sink
+        assert ss.extra_objects == [extra_obj]
+        assert ss.extra_nets == [extra_net]
+        assert ss.keyspace is keyspace
+        assert ss.latching is latching
+        assert ss.weight == weight
+
+
 class TestGetIntermediateObject(object):
     """Test building intermediate objects."""
     def test_object_has_no_seed(self):
@@ -130,13 +161,13 @@ class TestGetIntermediateNet(object):
 
         source_getters = {
             a.__class__:
-                lambda x, y: (x.pre_obj, {"extra_objects": a_extra_objs,
-                                          "extra_connections": a_extra_conns})
+                lambda x, y: ir.soss(x.pre_obj, extra_objects=a_extra_objs,
+                                     extra_nets=a_extra_conns)
         }
         sink_getters = {
             b.__class__:
-                lambda x, y: (x.post_obj, {"extra_objects": b_extra_objs,
-                                           "extra_connections": b_extra_conns})
+                lambda x, y: ir.soss(x.post_obj, extra_objects=b_extra_objs,
+                                     extra_nets=b_extra_conns)
         }
 
         # Build the connection
@@ -167,9 +198,9 @@ class TestGetIntermediateNet(object):
         c.seed = 303.0
 
         source_getters = {
-            a.__class__: lambda x, y: (x.pre_obj, {})}
+            a.__class__: lambda x, y: ir.soss(x.pre_obj)}
         sink_getters = {
-            b.__class__: lambda x, y: (x.post_obj, {})}
+            b.__class__: lambda x, y: ir.soss(x.post_obj)}
 
         # Build the connection
         with mock.patch.object(ir.IntermediateRepresentation,
@@ -182,43 +213,6 @@ class TestGetIntermediateNet(object):
         # Assert the seed made it
         assert irn.connection_map[c].seed == c.seed
 
-    def test_unknown_keyword(self):
-        """The simple case where all we have to do is get the seed, the source,
-        the sink and combine any extra objects and connections.
-        """
-        a = self.ObjTypeA()
-        b = self.ObjTypeB()
-        c = self.FauxConnection(a, b)
-        c.seed = 303.0
-
-        source_getters = {
-            a.__class__: lambda x, y: (x.pre_obj, {"spam": "eggs"})}
-        sink_getters = {
-            b.__class__: lambda x, y: (x.post_obj, {})}
-
-        # Build the connection
-        with mock.patch.object(ir.IntermediateRepresentation,
-                               "source_getters", source_getters), \
-                mock.patch.object(ir.IntermediateRepresentation,
-                                  "sink_getters", sink_getters), \
-                pytest.raises(NotImplementedError) as excinfo:
-            ir.IntermediateRepresentation.from_objs_conns_probes([], [c], [])
-
-        source_getters = {
-            a.__class__: lambda x, y: (x.pre_obj, {})}
-        sink_getters = {
-            b.__class__: lambda x, y: (x.post_obj, {"eggs": "spam"})}
-
-        # Build the connection
-        with mock.patch.object(ir.IntermediateRepresentation,
-                               "source_getters", source_getters), \
-                mock.patch.object(ir.IntermediateRepresentation,
-                                  "sink_getters", sink_getters), \
-                pytest.raises(NotImplementedError) as excinfo:
-            ir.IntermediateRepresentation.from_objs_conns_probes([], [c], [])
-
-        assert "eggs" in str(excinfo.value)
-
     def test_pre_supplied_keyspace(self):
         """Test that when only the source provides a keyspace it is applied to
         the net.
@@ -230,9 +224,9 @@ class TestGetIntermediateNet(object):
         a_ks = mock.Mock(spec_set=[], name="ks_a")
 
         source_getters = {
-            a.__class__: lambda x, y: (x.pre_obj, dict(keyspace=a_ks))}
+            a.__class__: lambda x, y: ir.soss(x.pre_obj, keyspace=a_ks)}
         sink_getters = {
-            b.__class__: lambda x, y: (x.post_obj, {})}
+            b.__class__: lambda x, y: ir.soss(x.post_obj)}
 
         # Build the connection
         with mock.patch.object(ir.IntermediateRepresentation,
@@ -256,9 +250,9 @@ class TestGetIntermediateNet(object):
         b_ks = mock.Mock(spec_set=[], name="ks_b")
 
         source_getters = {
-            a.__class__: lambda x, y: (x.pre_obj, {})}
+            a.__class__: lambda x, y: ir.soss(x.pre_obj)}
         sink_getters = {
-            b.__class__: lambda x, y: (x.post_obj, dict(keyspace=b_ks))}
+            b.__class__: lambda x, y: ir.soss(x.post_obj, keyspace=b_ks)}
 
         # Build the connection
         with mock.patch.object(ir.IntermediateRepresentation,
@@ -283,9 +277,9 @@ class TestGetIntermediateNet(object):
         b_ks = mock.Mock(spec_set=[], name="ks_b")
 
         source_getters = {
-            a.__class__: lambda x, y: (x.pre_obj, dict(keyspace=a_ks))}
+            a.__class__: lambda x, y: ir.soss(x.pre_obj, keyspace=a_ks)}
         sink_getters = {
-            b.__class__: lambda x, y: (x.post_obj, dict(keyspace=b_ks))}
+            b.__class__: lambda x, y: ir.soss(x.post_obj, keyspace=b_ks)}
 
         # Build the connection
         with mock.patch.object(ir.IntermediateRepresentation,
@@ -299,10 +293,14 @@ class TestGetIntermediateNet(object):
 
     @pytest.mark.parametrize(
         "source_getters, sink_getters",
-        [({ObjTypeA: lambda x, y: (None, {})},
-          {ObjTypeB: lambda x, y: (x.post_obj, {})}),
-         ({ObjTypeA: lambda x, y: (x.pre_obj, {})},
-          {ObjTypeB: lambda x, y: (None, {})}),
+        [({ObjTypeA: lambda x, y: ir.soss(None)},
+          {ObjTypeB: lambda x, y: ir.soss(x.post_obj)}),
+         ({ObjTypeA: lambda x, y: ir.soss(x.pre_obj)},
+          {ObjTypeB: lambda x, y: ir.soss(None)}),
+         ({ObjTypeA: lambda x, y: None},
+          {ObjTypeB: lambda x, y: ir.soss(x.post_obj)}),
+         ({ObjTypeA: lambda x, y: ir.soss(x.pre_obj)},
+          {ObjTypeB: lambda x, y: None}),
          ]
     )
     def test_connection_rejected(self, source_getters, sink_getters):
@@ -324,10 +322,10 @@ class TestGetIntermediateNet(object):
 
     @pytest.mark.parametrize(
         "source_getters, sink_getters",
-        [({ObjTypeA: lambda x, y: (x.pre_obj, {"latching": True})},
-          {ObjTypeB: lambda x, y: (x.post_obj, {})}),
-         ({ObjTypeA: lambda x, y: (x.pre_obj, {})},
-          {ObjTypeB: lambda x, y: (x.post_obj, {"latching": True})}),
+        [({ObjTypeA: lambda x, y: ir.soss(x.pre_obj, latching=True)},
+          {ObjTypeB: lambda x, y: ir.soss(x.post_obj)}),
+         ({ObjTypeA: lambda x, y: ir.soss(x.pre_obj)},
+          {ObjTypeB: lambda x, y: ir.soss(x.post_obj, latching=True)}),
          ]
     )
     def test_requires_latching_net(self, source_getters, sink_getters):
@@ -350,8 +348,9 @@ class TestGetIntermediateNet(object):
 
     @pytest.mark.parametrize(
         "source_getters, sink_getters, reason, fail_type",
-        [({ObjTypeA: lambda x, y: (x.pre_obj, {})}, {}, "sink", ObjTypeB),
-         ({}, {ObjTypeB: lambda x, y: (x.post_obj, {})}, "source", ObjTypeA)]
+        [({ObjTypeA: lambda x, y: ir.soss(x.pre_obj)}, {}, "sink", ObjTypeB),
+         ({}, {ObjTypeB: lambda x, y: ir.soss(x.post_obj)},
+          "source", ObjTypeA)]
     )
     def test_missing_builder(self, source_getters, sink_getters, reason,
                              fail_type):
@@ -381,13 +380,13 @@ class TestGetIntermediateNet(object):
 
         source_getters = {
             a.__class__:
-                lambda x, y: (x.pre_obj, {"extra_objects": a_extra_objs,
-                                          "extra_connections": a_extra_conns})
+                lambda x, y: ir.soss(x.pre_obj, extra_objects=a_extra_objs,
+                                     extra_nets=a_extra_conns)
         }
         sink_getters = {
             b.__class__:
-                lambda x, y: (x.post_obj, {"extra_objects": b_extra_objs,
-                                           "extra_connections": b_extra_conns})
+                lambda x, y: ir.soss(x.post_obj, extra_objects=b_extra_objs,
+                                     extra_nets=b_extra_conns)
         }
 
         # Build the connection
@@ -528,7 +527,7 @@ def test_get_source_standard():
     irn = ir.IntermediateRepresentation(obj_map, {}, [], [])
     assert (
         ir.get_source_standard(c, irn) ==
-        (nl.NetAddress(obj_map[a], nl.OutputPort.standard), {})
+        ir.soss(nl.NetAddress(obj_map[a], nl.OutputPort.standard))
     )
 
 
@@ -549,7 +548,7 @@ def test_get_sink_standard():
     irn = ir.IntermediateRepresentation(obj_map, {}, [], [])
     assert (
         ir.get_sink_standard(c, irn) ==
-        (nl.NetAddress(obj_map[b], nl.InputPort.standard), {})
+        ir.soss(nl.NetAddress(obj_map[b], nl.InputPort.standard))
     )
 
 

@@ -104,18 +104,19 @@ class NodeIOController(object):
         """Get a probe object for the Node."""
         # Get a source for the Node; then add a new probe object and a
         # connection from the source to the probe.
-        source, extras = self.get_source_for_node(probe.target)
+        source_spec = self.get_source_for_node(probe.target)
         probe_object = IntermediateObject(probe, seed)
         probe_conn = IntermediateNet(
             seed,
-            nl.NetAddress(source, nl.OutputPort.standard),
+            nl.NetAddress(source_spec.target, nl.OutputPort.standard),
             nl.NetAddress(probe_object, nl.InputPort.standard),
-            keyspace=extras.pop("keyspace", None),
-            latching=extras.pop("latching", False)
+            keyspace=source_spec.keyspace,
+            latching=source_spec.latching,
+            weight=probe.size_in
         )
 
-        objects = extras.pop("extra_objects", list()) + [source]
-        conns = extras.pop("extra_connections", list()) + [probe_conn]
+        objects = source_spec.extra_objects + [source_spec.target]
+        conns = source_spec.extra_nets + [probe_conn]
 
         return probe_object, objects, conns
 

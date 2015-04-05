@@ -80,7 +80,7 @@ class TestNodeIOController(object):
         # Construct a mock NodeIOController
         nioc = NodeIOController()
         with mock.patch.object(nioc, "get_spinnaker_source_for_node") as fn:
-            fn.return_value = None, {}
+            fn.return_value = None
 
             # Make the call to get the SpiNNaker source, assert that this call
             # is passed on
@@ -121,7 +121,7 @@ class TestNodeIOController(object):
         # Construct a mock NodeIOController
         nioc = NodeIOController()
         with mock.patch.object(nioc, "get_spinnaker_sink_for_node") as fn:
-            fn.return_value = None, {}
+            fn.return_value = None
 
             # Make the call to get the SpiNNaker sink, assert that this call
             # is passed on
@@ -168,11 +168,11 @@ class TestNodeIOController(object):
         # Construct a mock NodeIOController
         nioc = NodeIOController()
         with mock.patch.object(nioc, "get_source_for_node") as fn:
-            fn.return_value = (source,
-                               {"extra_objects": extra_objects,
-                                "extra_connections": extra_connections,
-                                "latching": True,
-                                "keyspace": keyspace})
+            fn.return_value = ir.soss(
+                source, extra_objects=extra_objects, 
+                extra_nets=extra_connections, latching=True,
+                keyspace=keyspace
+            )
 
             ir_probe, extra_objs, extra_conns = nioc.get_probe_for_node(
                 p, 454, irn)
@@ -192,3 +192,4 @@ class TestNodeIOController(object):
             assert c.sink.port is nl.InputPort.standard
             assert c.keyspace is keyspace
             assert c.latching
+            assert c.weight == p.size_in

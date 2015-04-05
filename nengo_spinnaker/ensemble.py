@@ -65,7 +65,7 @@ def get_ensemble_sink(conn, irn):
 
         irn.object_map[conn.post_obj].direct_input += np.dot(
             full_transform(conn, slice_pre=False), val)
-        return None, {}  # No connection should be made
+        return None  # No connection should be made
 
     # Otherwise connecting to an Ensemble is just like connecting to anything
     # else.
@@ -83,13 +83,13 @@ def get_neurons_sink(conn, irn):
     """
     if isinstance(conn.pre_obj, nengo.ensemble.Neurons):
         # Neurons -> Neurons connection
-        return (NetAddress(irn.object_map[conn.post_obj.ensemble],
-                           InputPort.neurons), {})
+        return ir.soss(NetAddress(irn.object_map[conn.post_obj.ensemble],
+                                  InputPort.neurons))
     elif (conn.transform.ndim > 0 and
             np.all(conn.transform == conn.transform[0])):
         # This is a global inhibition connection and can be optimised
-        return (NetAddress(irn.object_map[conn.post_obj.ensemble],
-                           InputPort.global_inhibition), {})
+        return ir.soss(NetAddress(irn.object_map[conn.post_obj.ensemble],
+                                  InputPort.global_inhibition), {})
     raise NotImplementedError
 
 

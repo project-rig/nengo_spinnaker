@@ -48,7 +48,7 @@ class TestGetEnsembleSink(object):
         irn = ir.IntermediateRepresentation(obj_map, {}, [], [])
         assert (
             ns_ens.get_ensemble_sink(c, irn) ==
-            (nl.NetAddress(obj_map[b], nl.InputPort.standard), {})
+            ir.soss(nl.NetAddress(obj_map[b], nl.InputPort.standard))
         )
 
     def test_get_sink_constant_node(self):
@@ -70,7 +70,7 @@ class TestGetEnsembleSink(object):
 
         # We don't return a sink (None means "no connection required")
         irn = ir.IntermediateRepresentation(obj_map, {}, [], [])
-        assert ns_ens.get_ensemble_sink(c, irn) == (None, {})
+        assert ns_ens.get_ensemble_sink(c, irn) is None
 
         # But the Node values are added into the intermediate representation
         # for the ensemble with the connection transform and function applied.
@@ -80,7 +80,7 @@ class TestGetEnsembleSink(object):
 
         # For the next connection assert that we again don't add a connection
         # and that the direct input is increased.
-        assert ns_ens.get_ensemble_sink(d, irn) == (None, {})
+        assert ns_ens.get_ensemble_sink(d, irn) is None
         assert np.all(obj_map[b].direct_input ==
                       np.dot(full_transform(c, slice_pre=False),
                              c.function(a.output[c.pre_slice])) +
@@ -105,7 +105,7 @@ class TestGetNeuronsSink(object):
         irn = ir.IntermediateRepresentation(obj_map, {}, [], [])
         assert (
             ns_ens.get_neurons_sink(c, irn) ==
-            (nl.NetAddress(obj_map[b], nl.InputPort.neurons), {})
+            ir.soss(nl.NetAddress(obj_map[b], nl.InputPort.neurons))
         )
 
     @pytest.mark.parametrize(
@@ -131,7 +131,7 @@ class TestGetNeuronsSink(object):
         irn = ir.IntermediateRepresentation(obj_map, {}, [], [])
         assert (
             ns_ens.get_neurons_sink(c, irn) ==
-            (nl.NetAddress(obj_map[b], nl.InputPort.global_inhibition), {})
+            ir.soss(nl.NetAddress(obj_map[b], nl.InputPort.global_inhibition))
         )
 
     def test_other(self):

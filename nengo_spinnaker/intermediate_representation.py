@@ -77,9 +77,7 @@ class IntermediateRepresentation(
     Each callable must accept as arguments the connection that the source is
     for and a :py:class:`.IntermediateRepresentation` which it can use to get
     information about other objects in the network.  A callable must return a
-    2-tuple of (:py:class:`nengo_spinnaker.netlist.NetAddr`, **kwargs) where
-    accepted keys are currently "keyspace", "extra_objects",
-    "extra_connections" and "latching".
+    :py:class:`.SinkOrSourceSpecification` (see also :py:class:`.soss`).
 
     For example, the standard source getter which just returns a source
     indicating the source object and the standard output port is implemented
@@ -90,7 +88,7 @@ class IntermediateRepresentation(
         def get_source_standard(conn, ir_network):
             source_obj = ir_network.object_map[conn.pre_obj]
             source = NetAddr(source_obj, OutputPort.standard)
-            return source, {}
+            return soss(source)
     """
 
     sink_getters = registerabledict()
@@ -107,7 +105,7 @@ class IntermediateRepresentation(
         def get_sink_standard(conn, ir_network):
             sink_obj = ir_network.object_map[conn.post_obj]
             sink = NetAddr(sink_obj, InputPort.standard)
-            return sink, {}
+            return soss(sink)
     """
 
     probe_builders = registerabledict()
@@ -287,6 +285,25 @@ class IntermediateRepresentation(
         return nets
 
 
+class SinkOrSourceSpecification(collections.namedtuple(
+        "SOSS",
+        "target extra_objects extra_nets keyspace latching weight"
+        )):
+    """Specification for a source or sink as returned by a source or sink
+    getter.
+    """
+    def __new__(cls, source_or_sink, extra_objects=list(),
+                extra_nets=list(), keyspace=None, latching=False, weight=None):
+        return super(SinkOrSourceSpecification, cls).__new__(
+            cls, source_or_sink, list(extra_objects), list(extra_nets),
+            keyspace, latching, weight
+        )
+
+
+soss = SinkOrSourceSpecification
+"""Quick reference to :py:class:`.SinkOrSourceSpecification`"""
+
+
 class IntermediateNet(
         collections.namedtuple("IntermediateNet",
                                "seed source sink keyspace latching weight")):
@@ -350,7 +367,7 @@ def get_source_standard(conn, irn):
     conn : :py:class:`nengo.Connection`
     irn : :py:class:`.IntermediateRepresentation`
     """
-    return (NetAddress(irn.object_map[conn.pre_obj], OutputPort.standard), {})
+    return soss(NetAddress(irn.object_map[conn.pre_obj], OutputPort.standard))
 
 
 @IntermediateRepresentation.sink_getters.register(nengo.base.NengoObject)
@@ -362,7 +379,7 @@ def get_sink_standard(conn, irn):
     conn : :py:class:`nengo.Connection`
     irn : :py:class:`.IntermediateRepresentation`
     """
-    return (NetAddress(irn.object_map[conn.post_obj], InputPort.standard), {})
+    return soss(NetAddress(irn.object_map[conn.post_obj], InputPort.standard))
 
 
 @IntermediateRepresentation.probe_builders.register(nengo.Node)
@@ -460,25 +477,25 @@ def _get_intermediate_net(source_getters, sink_getters, connection, irn):
             if getattr(connection, "seed", None) is None else connection.seed)
 
     # Get the source for the connection
-    source, source_extras = _get_intermediate_endpoint(
+    source_spec = _get_intermediate_endpoint(
         _EndpointType.source, source_getters, connection, irn)
 
     # If no source is specified then we abort the connection
-    if source is None:
+    if source_spec is None or source_spec.target is None:
         return None, [], []
 
     # Get the sink for the connection
-    sink, sink_extras = _get_intermediate_endpoint(
+    sink_spec = _get_intermediate_endpoint(
         _EndpointType.sink, sink_getters, connection, irn)
 
     # If no sink is specified then we abort the connection
-    if sink is None:
+    if sink_spec is None or sink_spec.target is None:
         return None, [], []
 
     # Resolve the keyspaces, allow either end to require a keyspace: if both
     # ends require keyspaces then we fail.
-    source_ks = source_extras.pop("keyspace", None)
-    sink_ks = sink_extras.pop("keyspace", None)
+    source_ks = source_spec.keyspace
+    sink_ks = sink_spec.keyspace
     if source_ks is None and sink_ks is None:
         ks = None
     elif source_ks is not None and sink_ks is None:
@@ -497,26 +514,16 @@ def _get_intermediate_net(source_getters, sink_getters, connection, irn):
     # shouldn't be any case where there is a mismatch between the source and
     # sink in this regard, or where a mismatch would result in incorrect
     # behaviour.
-    latching = (source_extras.pop("latching", False) or
-                sink_extras.pop("latching", False))
+    latching = source_spec.latching or sink_spec.latching
 
     # Combine the sets of extra objects and connections requested by the sink
     # and sources.
-    extra_objs = (source_extras.pop("extra_objects", list()) +
-                  sink_extras.pop("extra_objects", list()))
-    extra_conns = (source_extras.pop("extra_connections", list()) +
-                   sink_extras.pop("extra_connections", list()))
-
-    # Complain if there were any keywords that we didn't understand.
-    for key in itertools.chain(*[six.iterkeys(s) for s in
-                                 [source_extras, sink_extras]]):
-        raise NotImplementedError(
-            "Unrecognised source/sink parameter {}".format(key)
-        )
+    extra_objs = source_spec.extra_objects + sink_spec.extra_objects
+    extra_conns = source_spec.extra_nets + sink_spec.extra_nets
 
     # Build the new net
-    return (IntermediateNet(seed, source, sink, ks, latching, weight),
-            extra_objs, extra_conns)
+    return (IntermediateNet(seed, source_spec.target, sink_spec.target, ks,
+                            latching, weight), extra_objs, extra_conns)
 
 
 def _get_intermediate_probe(builders, probe, irn):
