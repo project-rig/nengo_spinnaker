@@ -6,7 +6,6 @@ import pytest
 
 from nengo_spinnaker import ensemble as ns_ens
 from nengo_spinnaker import intermediate_representation as ir
-from nengo_spinnaker import netlist as nl
 
 
 class TestIntermediateEnsemble(object):
@@ -48,7 +47,7 @@ class TestGetEnsembleSink(object):
         irn = ir.IntermediateRepresentation(obj_map, {}, [], [])
         assert (
             ns_ens.get_ensemble_sink(c, irn) ==
-            ir.soss(nl.NetAddress(obj_map[b], nl.InputPort.standard))
+            ir.soss(ir.NetAddress(obj_map[b], ir.InputPort.standard))
         )
 
     def test_get_sink_constant_node(self):
@@ -105,7 +104,7 @@ class TestGetNeuronsSink(object):
         irn = ir.IntermediateRepresentation(obj_map, {}, [], [])
         assert (
             ns_ens.get_neurons_sink(c, irn) ==
-            ir.soss(nl.NetAddress(obj_map[b], nl.InputPort.neurons))
+            ir.soss(ir.NetAddress(obj_map[b], ir.InputPort.neurons))
         )
 
     @pytest.mark.parametrize(
@@ -131,7 +130,7 @@ class TestGetNeuronsSink(object):
         irn = ir.IntermediateRepresentation(obj_map, {}, [], [])
         assert (
             ns_ens.get_neurons_sink(c, irn) ==
-            ir.soss(nl.NetAddress(obj_map[b], nl.InputPort.global_inhibition))
+            ir.soss(ir.NetAddress(obj_map[b], ir.InputPort.global_inhibition))
         )
 
     def test_other(self):
@@ -192,8 +191,8 @@ class TestGetEnsembleProbe(object):
 
         assert len(new_conns) == 1
         new_conn = new_conns[0]
-        assert new_conn.source == nl.NetAddress(ir_a, nl.OutputPort.standard)
-        assert new_conn.sink == nl.NetAddress(new_obj, nl.InputPort.standard)
+        assert new_conn.source == ir.NetAddress(ir_a, ir.OutputPort.standard)
+        assert new_conn.sink == ir.NetAddress(new_obj, ir.InputPort.standard)
         assert new_conn.keyspace is None
         assert not new_conn.latching
 

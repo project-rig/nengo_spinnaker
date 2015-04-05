@@ -25,8 +25,8 @@ class TestModel(object):
         a = OriginalObject()
         a_intermediate = IntermediateObject()
         b = ExtraObject()
-        source_a = nl.NetAddress(a_intermediate, nl.OutputPort.standard)
-        sink_b = nl.NetAddress(b, nl.InputPort.standard)
+        source_a = ir.NetAddress(a_intermediate, ir.OutputPort.standard)
+        sink_b = ir.NetAddress(b, ir.InputPort.standard)
         keyspace = mock.Mock(name="keyspace", spec=BitField)
         keyspace.length = 32
         c = ir.IntermediateNet(1234, source_a, sink_b, keyspace, False, 323)
@@ -114,8 +114,8 @@ class TestModel(object):
         a = OriginalObject()
         a_intermediate = IntermediateObject()
         b = ExtraObject()
-        source_a = nl.NetAddress(a_intermediate, nl.OutputPort.standard)
-        sink_b = nl.NetAddress(b, nl.InputPort.standard)
+        source_a = ir.NetAddress(a_intermediate, ir.OutputPort.standard)
+        sink_b = ir.NetAddress(b, ir.InputPort.standard)
         keyspace = mock.Mock(name="keyspace", spec=BitField)
         keyspace.length = 32
         c = ir.IntermediateNet(1234, source_a, sink_b, keyspace, False)
@@ -174,8 +174,8 @@ class TestModel(object):
         a = OriginalObject()
         a_intermediate = IntermediateObject()
         b = ExtraObject()
-        source_a = nl.NetAddress(a_intermediate, nl.OutputPort.standard)
-        sink_b = nl.NetAddress(b, nl.InputPort.standard)
+        source_a = ir.NetAddress(a_intermediate, ir.OutputPort.standard)
+        sink_b = ir.NetAddress(b, ir.InputPort.standard)
         keyspace = mock.Mock(name="keyspace", spec=BitField)
         keyspace.length = 32
         c = ir.IntermediateNet(1234, source_a, sink_b, keyspace, False)

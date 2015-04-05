@@ -13,7 +13,6 @@ from nengo.utils import numpy as npext
 import numpy as np
 import six
 
-from .netlist import NetAddress, InputPort, OutputPort
 from .utils.collections import (mrolookupdict, noneignoringlist,
                                 registerabledict)
 
@@ -304,6 +303,35 @@ soss = SinkOrSourceSpecification
 """Quick reference to :py:class:`.SinkOrSourceSpecification`"""
 
 
+class OutputPort(enum.Enum):
+    """Indicate the intended transmitting part of an executable."""
+    standard = 0  # Standard, value based transmission
+
+    # Ensembles only
+    neurons = 1  # Transmits spike data
+
+
+class InputPort(enum.Enum):
+    """Indicate the intended receiving part of an executable."""
+    standard = 0  # Standard, value based transmission
+
+    # Ensembles only
+    neurons = 1  # Receives spike data
+    global_inhibition = 2  # Receives value-encoded inhibition data
+
+
+NetAddress = collections.namedtuple("NetAddress", "object port")
+"""Source or sink of a stream of packets.
+
+Predominantly used in intermediate representations.
+
+Parameters
+----------
+object : :py:class:`.IntermediateObject`
+port : :py:class:`.OutputPort` or :py:class:`.InputPort`
+"""
+
+
 class IntermediateNet(
         collections.namedtuple("IntermediateNet",
                                "seed source sink keyspace latching weight")):
@@ -313,9 +341,9 @@ class IntermediateNet(
     ----------
     seed : int
         Seed used for random number generation for the net.
-    source : :py:class:`~nengo_spinnaker.netlist.NetAddress`
+    source : :py:class:`.NetAddress`
         Source of packets to be transmitted across the net.
-    sink : :py:class:`~nengo_spinnaker.netlist.NetAddress`
+    sink : :py:class:`.NetAddress`
         Target of packets transmitted across the net.
     keyspace : :py:class:`rig.bitfield.BitField` or None
         Keyspace used to route packets across the network.

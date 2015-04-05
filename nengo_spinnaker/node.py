@@ -1,7 +1,7 @@
 import nengo
 
 from .intermediate_representation import IntermediateObject, IntermediateNet
-from . import netlist as nl
+from . import intermediate_representation as ir
 
 
 class IntermediateHostNode(IntermediateObject):
@@ -108,8 +108,8 @@ class NodeIOController(object):
         probe_object = IntermediateObject(probe, seed)
         probe_conn = IntermediateNet(
             seed,
-            nl.NetAddress(source_spec.target, nl.OutputPort.standard),
-            nl.NetAddress(probe_object, nl.InputPort.standard),
+            ir.NetAddress(source_spec.target, ir.OutputPort.standard),
+            ir.NetAddress(probe_object, ir.InputPort.standard),
             keyspace=source_spec.keyspace,
             latching=source_spec.latching,
             weight=probe.size_in

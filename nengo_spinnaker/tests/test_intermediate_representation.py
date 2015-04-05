@@ -2,13 +2,12 @@ import mock
 import nengo
 import pytest
 
-from nengo_spinnaker import netlist as nl
 from nengo_spinnaker import intermediate_representation as ir
 
 
 class TestSinkOrSourceSpecification(object):
     def test_default_args(self):
-        sink = mock.Mock(name="sink", spec_set=[nl.NetAddress])
+        sink = mock.Mock(name="sink", spec_set=[ir.NetAddress])
         ss = ir.soss(sink)
 
         assert ss.target is sink
@@ -527,7 +526,7 @@ def test_get_source_standard():
     irn = ir.IntermediateRepresentation(obj_map, {}, [], [])
     assert (
         ir.get_source_standard(c, irn) ==
-        ir.soss(nl.NetAddress(obj_map[a], nl.OutputPort.standard))
+        ir.soss(ir.NetAddress(obj_map[a], ir.OutputPort.standard))
     )
 
 
@@ -548,7 +547,7 @@ def test_get_sink_standard():
     irn = ir.IntermediateRepresentation(obj_map, {}, [], [])
     assert (
         ir.get_sink_standard(c, irn) ==
-        ir.soss(nl.NetAddress(obj_map[b], nl.InputPort.standard))
+        ir.soss(ir.NetAddress(obj_map[b], ir.InputPort.standard))
     )
 
 
@@ -573,8 +572,8 @@ def test_get_output_probe():
 
     assert len(new_conns) == 1
     new_conn = new_conns[0]
-    assert new_conn.source == nl.NetAddress(ir_a, nl.OutputPort.standard)
-    assert new_conn.sink == nl.NetAddress(new_obj, nl.InputPort.standard)
+    assert new_conn.source == ir.NetAddress(ir_a, ir.OutputPort.standard)
+    assert new_conn.sink == ir.NetAddress(new_obj, ir.InputPort.standard)
     assert new_conn.keyspace is None
     assert not new_conn.latching
 
@@ -596,19 +595,19 @@ class TestIntermediateRepresentation(object):
         # Create some nets, some with and some without matching connections
         conn_ab1 = mock.Mock(spec_set=[], name="A->B")
         net_ab1 = ir.IntermediateNet(
-            3, nl.NetAddress(ir_a, nl.OutputPort.standard),
-            nl.NetAddress(ir_b, nl.InputPort.standard), None, False
+            3, ir.NetAddress(ir_a, ir.OutputPort.standard),
+            ir.NetAddress(ir_b, ir.InputPort.standard), None, False
         )
 
         net_ab2 = ir.IntermediateNet(
-            3, nl.NetAddress(ir_a, nl.OutputPort.neurons),
-            nl.NetAddress(ir_b, nl.InputPort.standard), None, False
+            3, ir.NetAddress(ir_a, ir.OutputPort.neurons),
+            ir.NetAddress(ir_b, ir.InputPort.standard), None, False
         )
 
         conn_ba1 = mock.Mock(spec_set=[], name="B->A")
         net_ba1 = ir.IntermediateNet(
-            3, nl.NetAddress(ir_b, nl.OutputPort.standard),
-            nl.NetAddress(ir_a, nl.InputPort.standard), None, False
+            3, ir.NetAddress(ir_b, ir.OutputPort.standard),
+            ir.NetAddress(ir_a, ir.InputPort.standard), None, False
         )
 
         # Construct the intermediate representation
@@ -619,19 +618,19 @@ class TestIntermediateRepresentation(object):
 
         # Retrieve the nets starting at a
         net_ax = irn.get_nets_starting_at(ir_a)
-        assert net_ax[nl.OutputPort.standard] == {net_ab1: [conn_ab1]}
-        assert net_ax[nl.OutputPort.neurons] == {net_ab2: []}
+        assert net_ax[ir.OutputPort.standard] == {net_ab1: [conn_ab1]}
+        assert net_ax[ir.OutputPort.neurons] == {net_ab2: []}
 
         # Retrieve the nets starting at b
         net_bx = irn.get_nets_starting_at(ir_b)
-        assert net_bx[nl.OutputPort.standard] == {net_ba1: [conn_ba1]}
-        assert net_bx[nl.OutputPort.neurons] == {}
+        assert net_bx[ir.OutputPort.standard] == {net_ba1: [conn_ba1]}
+        assert net_bx[ir.OutputPort.neurons] == {}
 
         # Retrieve the nets ending at a
         net_xa = irn.get_nets_ending_at(ir_a)
-        assert net_xa[nl.InputPort.standard] == {net_ba1: [conn_ba1]}
+        assert net_xa[ir.InputPort.standard] == {net_ba1: [conn_ba1]}
 
         # Retrieve the nets ending at b
         net_xb = irn.get_nets_ending_at(ir_b)
-        assert net_xb[nl.InputPort.standard] == {net_ab1: [conn_ab1],
+        assert net_xb[ir.InputPort.standard] == {net_ab1: [conn_ab1],
                                                  net_ab2: []}

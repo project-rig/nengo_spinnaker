@@ -3,7 +3,6 @@ import nengo
 import pytest
 
 from nengo_spinnaker import intermediate_representation as ir
-from nengo_spinnaker import netlist as nl
 from nengo_spinnaker.node import (NodeIOController, IntermediateHostNode,
                                   OutputNode, InputNode)
 
@@ -169,7 +168,7 @@ class TestNodeIOController(object):
         nioc = NodeIOController()
         with mock.patch.object(nioc, "get_source_for_node") as fn:
             fn.return_value = ir.soss(
-                source, extra_objects=extra_objects, 
+                source, extra_objects=extra_objects,
                 extra_nets=extra_connections, latching=True,
                 keyspace=keyspace
             )
@@ -187,9 +186,9 @@ class TestNodeIOController(object):
             assert isinstance(c, ir.IntermediateNet)
             assert c.seed == 454
             assert c.source.object is source
-            assert c.source.port is nl.OutputPort.standard
+            assert c.source.port is ir.OutputPort.standard
             assert c.sink.object is ir_probe
-            assert c.sink.port is nl.InputPort.standard
+            assert c.sink.port is ir.InputPort.standard
             assert c.keyspace is keyspace
             assert c.latching
             assert c.weight == p.size_in

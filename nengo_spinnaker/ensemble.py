@@ -3,7 +3,6 @@ import nengo
 from nengo.utils.builder import full_transform
 import numpy as np
 
-from .netlist import NetAddress, InputPort
 from . import intermediate_representation as ir
 
 
@@ -83,13 +82,13 @@ def get_neurons_sink(conn, irn):
     """
     if isinstance(conn.pre_obj, nengo.ensemble.Neurons):
         # Neurons -> Neurons connection
-        return ir.soss(NetAddress(irn.object_map[conn.post_obj.ensemble],
-                                  InputPort.neurons))
+        return ir.soss(ir.NetAddress(irn.object_map[conn.post_obj.ensemble],
+                                     ir.InputPort.neurons))
     elif (conn.transform.ndim > 0 and
             np.all(conn.transform == conn.transform[0])):
         # This is a global inhibition connection and can be optimised
-        return ir.soss(NetAddress(irn.object_map[conn.post_obj.ensemble],
-                                  InputPort.global_inhibition), {})
+        return ir.soss(ir.NetAddress(irn.object_map[conn.post_obj.ensemble],
+                                     ir.InputPort.global_inhibition), {})
     raise NotImplementedError
 
 

@@ -3,7 +3,6 @@ import numpy as np
 
 from nengo_spinnaker import ensemble as ns_ens
 from nengo_spinnaker import intermediate_representation as ir
-from nengo_spinnaker import netlist as nl
 
 
 def test_ensemble():
@@ -48,11 +47,11 @@ def test_ensemble():
 
     # Check that conn b->c was identified as global inhibition
     assert (irn.connection_map[conn_bc].sink.port is
-            nl.InputPort.global_inhibition)
+            ir.InputPort.global_inhibition)
 
     # Check that conn c->d was left as normal
     assert (irn.connection_map[conn_cd].sink.port is
-            nl.InputPort.standard)
+            ir.InputPort.standard)
 
     # The probe on d should be in the object map
     assert p_value in irn.object_map
@@ -60,6 +59,6 @@ def test_ensemble():
     # There should be a connection d->p_value
     conn = irn.extra_connections[0]
     assert conn.source.object is irn.object_map[d]
-    assert conn.source.port is nl.OutputPort.standard
+    assert conn.source.port is ir.OutputPort.standard
     assert conn.sink.object is irn.object_map[p_value]
-    assert conn.sink.port is nl.InputPort.standard
+    assert conn.sink.port is ir.InputPort.standard

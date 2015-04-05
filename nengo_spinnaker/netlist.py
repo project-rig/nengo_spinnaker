@@ -1,39 +1,9 @@
 """Higher and lower level netlist items.
 """
 import collections
-import enum
 import rig.netlist
 
 from . import params
-
-
-class OutputPort(enum.Enum):
-    """Indicate the intended transmitting part of an executable."""
-    standard = 0  # Standard, value based transmission
-
-    # Ensembles only
-    neurons = 1  # Transmits spike data
-
-
-class InputPort(enum.Enum):
-    """Indicate the intended receiving part of an executable."""
-    standard = 0  # Standard, value based transmission
-
-    # Ensembles only
-    neurons = 1  # Receives spike data
-    global_inhibition = 2  # Receives value-encoded inhibition data
-
-
-NetAddress = collections.namedtuple("NetAddress", "object port")
-"""Source or sink of a stream of packets.
-
-Predominantly used in intermediate representations.
-
-Parameters
-----------
-object : :py:class:`.IntermediateObject`
-port : :py:class:`.OutputPort` or :py:class:`.InputPort`
-"""
 
 
 class Net(rig.netlist.Net):
