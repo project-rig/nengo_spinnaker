@@ -1,8 +1,10 @@
 import mock
 import nengo
 import pytest
+from rig.bitfield import BitField
 
 from nengo_spinnaker import intermediate_representation as ir
+from nengo_spinnaker.utils.keyspace_container import KeyspaceContainer
 
 
 class TestSinkOrSourceSpecification(object):
@@ -714,3 +716,76 @@ class TestIntermediateRepresentation(object):
         net_xb = irn.get_nets_ending_at(ir_b)
         assert net_xb[ir.InputPort.standard] == {net_ab1: [conn_ab1],
                                                  net_ab2: []}
+
+    def test_apply_default_keyspace(self):
+        """Test applying the default keyspace to nets without a defined
+        keyspace.
+        """
+        # Get the default keyspace we want to use
+        ksc = KeyspaceContainer()
+        default_keyspace = ksc["nengo"]
+
+        # Now create an intermediate Net with a mixture of objects with and
+        # without keyspaces.
+        mock_ks1 = mock.Mock(name="keyspace")
+
+        class Obj(object):
+            pass
+
+        # Create objects and their intermediate representations
+        a = Obj()
+        b = Obj()
+        c = Obj()
+        ir_a = ir.IntermediateObject(a, 1)
+        ir_b = ir.IntermediateObject(b, 2)
+        ir_c = ir.IntermediateObject(c, 3)
+
+        # Create some nets, some with and some without matching connections
+        conn_ab1 = mock.Mock(spec_set=[], name="A->B")
+        net_ab1 = ir.IntermediateNet(
+            3, ir.NetAddress(ir_a, ir.OutputPort.standard),
+            ir.NetAddress(ir_b, ir.InputPort.standard), mock_ks1, False
+        )
+
+        net_ab2 = ir.IntermediateNet(
+            3, ir.NetAddress(ir_a, ir.OutputPort.neurons),
+            ir.NetAddress(ir_b, ir.InputPort.standard), None, False
+        )
+
+        net_ab3 = ir.IntermediateNet(
+            3, ir.NetAddress(ir_a, ir.OutputPort.standard),
+            ir.NetAddress(ir_b, ir.InputPort.standard), None, False
+        )
+
+        conn_ba1 = mock.Mock(spec_set=[], name="B->A")
+        net_ba1 = ir.IntermediateNet(
+            3, ir.NetAddress(ir_b, ir.OutputPort.standard),
+            ir.NetAddress(ir_a, ir.InputPort.standard), None, False
+        )
+
+        net_cb1 = ir.IntermediateNet(
+            4, ir.NetAddress(ir_c, ir.OutputPort.standard),
+            ir.NetAddress(ir_b, ir.InputPort.standard), mock_ks1, False
+        )
+
+        # Construct the intermediate representation
+        irn = ir.IntermediateRepresentation(
+            {a: ir_a, b: ir_b}, {conn_ab1: net_ab1, conn_ba1: net_ba1},
+            [ir_c], [net_ab2, net_ab3, net_cb1]
+        )
+
+        # Apply the default keyspace
+        irn._apply_default_keyspace(default_keyspace)
+
+        # Check that keyspaces have been applied
+        assert net_ab1.keyspace is mock_ks1
+        assert net_cb1.keyspace is mock_ks1
+        assert isinstance(net_ab2.keyspace, BitField)
+        assert isinstance(net_ab3.keyspace, BitField)
+        assert isinstance(net_ba1.keyspace, BitField)
+        assert net_ab2.keyspace.nengo_object == net_ab3.keyspace.nengo_object
+        assert (net_ab2.keyspace.nengo_connection !=
+                net_ab3.keyspace.nengo_connection)
+
+        assert net_ba1.keyspace.nengo_object != net_ab2.keyspace.nengo_object
+        assert net_ba1.keyspace.nengo_connection == 0

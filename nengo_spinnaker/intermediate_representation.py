@@ -296,6 +296,28 @@ class IntermediateRepresentation(
 
         return nets
 
+    def _apply_default_keyspace(self, keyspace):
+        """Apply a default keyspace to all Nets with `None` as their current
+        keyspace.
+
+        The default keyspace should have the fields `nengo_object` and
+        `nengo_connection`.
+
+        Parameters
+        ----------
+        keyspace : :py:class:`rig.bitfield.BitField`
+        """
+        # For each object look up the nets which originate from it and add
+        # keyspaces where they do not currently exist.
+        nets_req_keyspaces = self._filter_nets(
+            lambda x: x.keyspace is None,
+            key=lambda x: x.source.object
+        )
+        for obj_id, nets in enumerate(six.itervalues(nets_req_keyspaces)):
+            for net_id, net in enumerate(nets):
+                net.keyspace = keyspace(nengo_object=obj_id,
+                                        nengo_connection=net_id)
+
 
 class SinkOrSourceSpecification(collections.namedtuple(
         "SOSS",
