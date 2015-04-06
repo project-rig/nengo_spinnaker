@@ -1,6 +1,5 @@
 """Higher and lower level netlist items.
 """
-import collections
 import rig.netlist
 
 from . import params
@@ -57,7 +56,7 @@ class Vertex(object):
     n_atoms = params.IntParam(allow_none=True, min=0, default=None)
 
 
-class VertexSlice(collections.namedtuple("VertexSlice", "vertex slice")):
+class VertexSlice(object):
     """Partition of a Vertex such that it will fit within the constraints of a
     single SpiNNaker application core.
 
@@ -74,8 +73,12 @@ class VertexSlice(collections.namedtuple("VertexSlice", "vertex slice")):
         Object this is a slice of.
     slice : :py:class:`slice`
         Contiguous slice of this object.
+    cluster : int or None
+        Cluster the slice is a part of.
     """
-    def __new__(cls, vertex, vertex_slice):
+    __slots__ = ["vertex", "slice", "cluster"]
+
+    def __init__(self, vertex, vertex_slice):
         """Create a new slice representation of a vertex.
 
         Parameters
@@ -84,10 +87,6 @@ class VertexSlice(collections.namedtuple("VertexSlice", "vertex slice")):
             Vertex to create the slice of.
         vertex_slice : :py:class:`slice`
             A contiguous (non-strided) and absolute (non-relative) slice.
-
-        Returns
-        -------
-        :py:class:`.VertexSlice`
         """
         # Check the validity of the slice
         if vertex.n_atoms is None:
@@ -108,7 +107,11 @@ class VertexSlice(collections.namedtuple("VertexSlice", "vertex slice")):
                 "slice {} beyond range of vertex {}".format(
                     vertex_slice, vertex)
             )
-        return super(cls, VertexSlice).__new__(cls, vertex, vertex_slice)
+
+        # Save the values
+        self.vertex = vertex
+        self.slice = vertex_slice
+        self.cluster = None
 
     def __repr__(self):
         return "<VertexSlice {!s}[{}:{}]>".format(self.vertex,
