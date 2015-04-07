@@ -1,7 +1,8 @@
 import nengo
 import numpy as np
 
-from nengo_spinnaker import ensemble as ns_ens
+from nengo_spinnaker.ensemble.intermediate_representation import \
+    IntermediateEnsemble
 from nengo_spinnaker import intermediate_representation as ir
 
 
@@ -30,15 +31,15 @@ def test_ensemble():
         net.all_objects, net.connections, net.probes)
 
     # Check that b, c, and d are intermediate ensembles
-    assert isinstance(irn.object_map[b], ns_ens.IntermediateEnsemble)
+    assert isinstance(irn.object_map[b], IntermediateEnsemble)
     assert irn.object_map[b].local_probes == [p_spikes]
     assert irn.object_map[b].direct_input == 0.5
 
-    assert isinstance(irn.object_map[c], ns_ens.IntermediateEnsemble)
+    assert isinstance(irn.object_map[c], IntermediateEnsemble)
     assert irn.object_map[c].local_probes == list()
     assert np.all(irn.object_map[c].direct_input == np.zeros(5))
 
-    assert isinstance(irn.object_map[d], ns_ens.IntermediateEnsemble)
+    assert isinstance(irn.object_map[d], IntermediateEnsemble)
     assert irn.object_map[d].local_probes == list()
     assert np.all(irn.object_map[d].direct_input == np.zeros(4))
 

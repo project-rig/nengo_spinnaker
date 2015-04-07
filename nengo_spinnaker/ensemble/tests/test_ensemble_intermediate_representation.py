@@ -4,7 +4,7 @@ from nengo.utils.builder import full_transform
 import numpy as np
 import pytest
 
-from nengo_spinnaker import ensemble as ns_ens
+from nengo_spinnaker.ensemble import intermediate_representation as ns_ens
 from nengo_spinnaker import intermediate_representation as ir
 
 

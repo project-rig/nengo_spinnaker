@@ -3,7 +3,7 @@ import nengo
 from nengo.utils.builder import full_transform
 import numpy as np
 
-from . import intermediate_representation as ir
+from .. import intermediate_representation as ir
 
 
 """

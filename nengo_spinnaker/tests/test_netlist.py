@@ -132,3 +132,6 @@ class TestVertexSlice(object):
         assert vs.cluster is None
         assert vs.resources == resources
         assert vs.resources is not resources
+
+        assert repr(vs) == "<VertexSlice {!s}[{}:{}]>".format(
+            v, sl.start, sl.stop)
