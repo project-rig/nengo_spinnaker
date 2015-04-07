@@ -52,8 +52,23 @@ class Net(rig.netlist.Net):
 class Vertex(object):
     """Represents a nominal unit of computation (a single instance or many
     instances of an application running on a SpiNNaker machine).
+
+    Attributes
+    ----------
+    resources : {resource: amount, ...}
+        Resources required by this vertex.
     """
     n_atoms = params.IntParam(allow_none=True, min=0, default=None)
+
+    def __init__(self, resources=dict()):
+        """Create a new vertex.
+
+        Parameters
+        ----------
+        resources : {resource: amount, ...}
+            Resources required by this vertex.
+        """
+        self.resources = dict(resources)
 
 
 class VertexSlice(object):
@@ -75,10 +90,12 @@ class VertexSlice(object):
         Contiguous slice of this object.
     cluster : int or None
         Cluster the slice is a part of.
+    resources : {resource: amount, ...}
+        Resources required by this slice of the vertex.
     """
-    __slots__ = ["vertex", "slice", "cluster"]
+    __slots__ = ["vertex", "slice", "cluster", "resources"]
 
-    def __init__(self, vertex, vertex_slice):
+    def __init__(self, vertex, vertex_slice, resources=dict()):
         """Create a new slice representation of a vertex.
 
         Parameters
@@ -87,6 +104,8 @@ class VertexSlice(object):
             Vertex to create the slice of.
         vertex_slice : :py:class:`slice`
             A contiguous (non-strided) and absolute (non-relative) slice.
+        resources : {resource: amount, ...}
+            Resources required by this slice of the vertex.
         """
         # Check the validity of the slice
         if vertex.n_atoms is None:
@@ -112,6 +131,7 @@ class VertexSlice(object):
         self.vertex = vertex
         self.slice = vertex_slice
         self.cluster = None
+        self.resources = dict(resources)
 
     def __repr__(self):
         return "<VertexSlice {!s}[{}:{}]>".format(self.vertex,

@@ -1,5 +1,6 @@
 import pytest
 from rig.bitfield import BitField
+from rig import machine
 
 from nengo_spinnaker import netlist, params
 
@@ -76,6 +77,17 @@ class TestNet(object):
         assert "{}".format(length) in err_string
 
 
+class TestVertex(object):
+    def test_init(self):
+        v = netlist.Vertex()
+        assert v.n_atoms is None
+
+        resources = {machine.Cores: 2, machine.SDRAM: 8*1024*1024}
+        v = netlist.Vertex(resources)
+        assert v.resources == resources
+        assert v.resources is not resources
+
+
 class TestVertexSlice(object):
     @pytest.mark.parametrize(
         "sl", [slice(0, 5, 2),  # Has stride != None or 1
@@ -112,6 +124,11 @@ class TestVertexSlice(object):
     def test_valid(self, sl):
         v = NullVertex()
         v.n_atoms = 100
-        vs = netlist.VertexSlice(v, sl)
+        resources = {machine.Cores: 1, machine.SDRAM: 2*1024*1014}
+
+        vs = netlist.VertexSlice(v, sl, resources)
         assert vs.vertex is v
         assert vs.slice == sl
+        assert vs.cluster is None
+        assert vs.resources == resources
+        assert vs.resources is not resources
