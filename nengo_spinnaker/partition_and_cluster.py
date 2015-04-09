@@ -4,6 +4,7 @@ resulting subvertices.
 import collections
 from six import iteritems, itervalues
 
+from .keyspaces import is_nengo_keyspace
 from .netlist import VertexSlice
 
 
@@ -59,7 +60,7 @@ def identify_clusters(placed_vertices, nets):
 
     for net in nets:
         # If the net uses the default keyspace
-        if net.keyspace.user == 0:
+        if is_nengo_keyspace(net.keyspace):
             if isinstance(net.source, VertexSlice):
                 # Then include it in the cluster if its originating vertex is a
                 # vertex slice

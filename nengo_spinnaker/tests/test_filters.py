@@ -6,11 +6,11 @@ from rig.type_casts import float_to_fix
 import struct
 
 from nengo_spinnaker import intermediate_representation as ir
+from nengo_spinnaker.keyspaces import keyspaces
 from nengo_spinnaker import filters
-from nengo_spinnaker.utils.keyspace_container import KeyspaceContainer
 
 
-default_ks = KeyspaceContainer()["nengo"]
+default_ks = keyspaces["nengo"]
 bitsk = float_to_fix(True, 32, 15)  # S16.15
 
 
@@ -119,7 +119,7 @@ class TestFilterRegion(object):
         # Construct the intermediate representation
         irn = ir.IntermediateRepresentation.from_objs_conns_probes(
             [a, b, c], [a_c, b_c], [])
-        irn._apply_default_keyspace(default_ks)
+        irn.apply_default_keyspace(default_ks)
 
         # Build the filter region for c
         region, net_map = \
@@ -153,7 +153,7 @@ class TestFilterRegion(object):
         # Construct the intermediate representation
         irn = ir.IntermediateRepresentation.from_objs_conns_probes(
             [a, b, c], [a_c, b_c], [])
-        irn._apply_default_keyspace(default_ks)
+        irn.apply_default_keyspace(default_ks)
 
         # Build the filter region for c
         widths = {irn.connection_map[a_c]: 4, irn.connection_map[b_c]: 5}

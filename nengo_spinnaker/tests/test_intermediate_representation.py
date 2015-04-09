@@ -4,7 +4,7 @@ import pytest
 from rig.bitfield import BitField
 
 from nengo_spinnaker import intermediate_representation as ir
-from nengo_spinnaker.utils.keyspace_container import KeyspaceContainer
+from nengo_spinnaker.keyspaces import KeyspaceContainer
 
 
 class TestSinkOrSourceSpecification(object):
@@ -775,7 +775,7 @@ class TestIntermediateRepresentation(object):
         )
 
         # Apply the default keyspace
-        irn._apply_default_keyspace(default_keyspace)
+        irn.apply_default_keyspace(default_keyspace)
 
         # Check that keyspaces have been applied
         assert net_ab1.keyspace is mock_ks1

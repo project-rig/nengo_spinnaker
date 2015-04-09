@@ -13,6 +13,7 @@ from nengo.utils import numpy as npext
 import numpy as np
 import six
 
+from .keyspaces import keyspaces
 from .utils.collections import (mrolookupdict, noneignoringlist,
                                 registerabledict)
 
@@ -296,7 +297,7 @@ class IntermediateRepresentation(
 
         return nets
 
-    def _apply_default_keyspace(self, keyspace):
+    def apply_default_keyspace(self, keyspace=keyspaces["nengo"]):
         """Apply a default keyspace to all Nets with `None` as their current
         keyspace.
 

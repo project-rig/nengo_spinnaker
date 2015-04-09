@@ -2,7 +2,7 @@ import pytest
 
 from nengo_spinnaker import netlist as nl
 from nengo_spinnaker import partition_and_cluster as pac
-from nengo_spinnaker.utils.keyspace_container import KeyspaceContainer
+from nengo_spinnaker.keyspaces import KeyspaceContainer
 
 
 def test_identify_clusters():
