@@ -1,4 +1,5 @@
 import pytest
+from rig.bitfield import UnavailableFieldError
 
 from nengo_spinnaker import netlist as nl
 from nengo_spinnaker import partition_and_cluster as pac
@@ -69,10 +70,10 @@ def test_identify_clusters():
     # Assert that the cluster ID was applied to nets originating from v1 (with
     # the default keyspace) but not the other net.
     for (source, net) in zip(v1s, v12_nets):
-        assert source.cluster == net.keyspace.nengo_cluster
+        assert source.cluster == net.keyspace.cluster
 
     for net in v21_nets:
-        with pytest.raises(AttributeError):
-            net.keyspace.nengo_cluster
+        with pytest.raises(UnavailableFieldError):
+            net.keyspace.cluster
 
-    assert v31_net.keyspace.nengo_cluster == 0
+    assert v31_net.keyspace.cluster == 0

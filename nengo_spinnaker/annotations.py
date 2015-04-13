@@ -304,8 +304,8 @@ class Annotations(collections.namedtuple(
         )
         for obj_id, nets in enumerate(six.itervalues(nets_req_keyspaces)):
             for net_id, net in enumerate(nets):
-                net.keyspace = keyspace(nengo_object=obj_id,
-                                        nengo_connection=net_id)
+                net.keyspace = keyspace(object=obj_id,
+                                        connection=net_id)
 
 
 class SinkOrSourceSpecification(collections.namedtuple(

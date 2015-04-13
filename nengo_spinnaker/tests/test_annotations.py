@@ -663,9 +663,9 @@ class TestIntermediateRepresentation(object):
         assert isinstance(net_ab2.keyspace, BitField)
         assert isinstance(net_ab3.keyspace, BitField)
         assert isinstance(net_ba1.keyspace, BitField)
-        assert net_ab2.keyspace.nengo_object == net_ab3.keyspace.nengo_object
-        assert (net_ab2.keyspace.nengo_connection !=
-                net_ab3.keyspace.nengo_connection)
+        assert net_ab2.keyspace.object == net_ab3.keyspace.object
+        assert (net_ab2.keyspace.connection !=
+                net_ab3.keyspace.connection)
 
-        assert net_ba1.keyspace.nengo_object != net_ab2.keyspace.nengo_object
-        assert net_ba1.keyspace.nengo_connection == 0
+        assert net_ba1.keyspace.object != net_ab2.keyspace.object
+        assert net_ba1.keyspace.connection == 0

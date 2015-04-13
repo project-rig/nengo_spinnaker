@@ -3,6 +3,67 @@ import collections
 from rig.bitfield import BitField
 
 
+def get_derived_keyspaces(keyspace, values, max_v=None,
+                          field_identifier="index"):
+    """Get a generator of keyspaces with the index field filled in with the
+    given values.
+
+    For example::
+
+        >>> ks = BitField(length=32)
+        >>> ks.add_field("index")
+        >>> for x in get_derived_keyspaces(ks, (slice(0, 5), 5, 6, 7,
+        ...                                     slice(8, 10))):
+        ...     print(x)
+        <32-bit BitField 'index':0>
+        <32-bit BitField 'index':1>
+        <32-bit BitField 'index':2>
+        <32-bit BitField 'index':3>
+        <32-bit BitField 'index':4>
+        <32-bit BitField 'index':5>
+        <32-bit BitField 'index':6>
+        <32-bit BitField 'index':7>
+        <32-bit BitField 'index':8>
+        <32-bit BitField 'index':9>
+
+    The minimum value for a slice is taken to be zero, but the max value
+    can be specified:
+
+        >>> for x in get_derived_keyspaces(ks, slice(None), max_v=3):
+        ...     print(x)
+        <32-bit BitField 'index':0>
+        <32-bit BitField 'index':1>
+        <32-bit BitField 'index':2>
+
+    A `ValueError` is raised if these values are missing.
+
+        >>> list(get_derived_keyspaces(ks, slice(None)))
+        Traceback (most recent call last):
+        ValueError: no stop value specified
+    """
+    def _get_with_indices(v):
+        if isinstance(v, slice):
+            if max_v is None and v.stop is None:
+                raise ValueError("no stop value specified")
+
+            start = 0 if v.start is None else v.start
+            stop = max_v if v.stop is None else v.stop
+            step = 1 if v.step is None else v.step
+
+            for i in range(start, stop, step):
+                yield keyspace(**{field_identifier: i})
+        else:
+            yield keyspace(**{field_identifier: v})
+
+    if isinstance(values, collections.Iterable):
+        for v in values:
+            for x in _get_with_indices(v):
+                yield x
+    else:
+        for x in _get_with_indices(values):
+            yield x
+
+
 class KeyspaceContainer(collections.defaultdict):
     """A container which can recall or allocate specific keyspaces to modules
     and users on request.
@@ -15,19 +76,19 @@ class KeyspaceContainer(collections.defaultdict):
 
         >>> ksc = KeyspaceContainer()
         >>> default_ks = ksc["nengo"]
-        >>> default_ks.get_tags('nengo_object') == {ksc.routing_tag,
+        >>> isinstance(default_ks, BitField)
+        True
+        >>> default_ks.get_tags('object') == {ksc.routing_tag,
         ...                                         ksc.filter_routing_tag}
         True
-        >>> default_ks.get_tags('nengo_connection') == {ksc.routing_tag,
+        >>> default_ks.get_tags('connection') == {ksc.routing_tag,
         ...                                             ksc.filter_routing_tag}
         True
-        >>> default_ks.get_tags('nengo_cluster') == {ksc.routing_tag}
-        True
-        >>> default_ks.get_tags('nengo_dimension') == {ksc.dimension_tag}
+        >>> default_ks.get_tags('cluster') == {ksc.routing_tag}
         True
         >>> default_ks
-        <32-bit BitField 'user':0, 'nengo_object':?, 'nengo_cluster':?, \
-'nengo_connection':?, 'nengo_dimension':?>
+        <32-bit BitField 'user':0, 'object':?, 'cluster':?, 'connection':?, \
+'index':?>
 
     Additional keyspaces can be requested and are automagically created.
 
@@ -61,8 +122,6 @@ class KeyspaceContainer(collections.defaultdict):
         'routing'
         >>> ksc.filter_routing_tag
         'filter_routing'
-        >>> ksc.dimension_tag
-        'dimension'
 
     Finally, field sizes may be fixed.
 
@@ -75,21 +134,6 @@ class KeyspaceContainer(collections.defaultdict):
         >>> ksc.assign_fields()
         >>> hex(new_ks.get_mask(tag=ksc.routing_tag))
         '0x30'
-
-    The default fields and their tags:
-
-    ==================   =======================
-    Field                Tags
-    ==================   =======================
-    `nengo_object`       routing, filter routing
-    `nengo_cluster`      routing
-    `nengo_connection`   routing, filter routing
-    `nengo_dimension`
-    ==================   =======================
-
-    `nengo_cluster` is only used for objects which are split across multiple
-    chips to indicate which chip they are located on (all is needed is a simple
-    count).
     """
     class _KeyspaceGetter(object):
         def __init__(self, ks):
@@ -102,15 +146,13 @@ class KeyspaceContainer(collections.defaultdict):
             return new_ks
 
     def __init__(self, routing_tag="routing",
-                 filter_routing_tag="filter_routing",
-                 dimension_tag="dimension"):
+                 filter_routing_tag="filter_routing"):
         """Create a new keyspace container with the given tags for routing and
         filter routing.
         """
         # The tags
         self._routing_tag = routing_tag
         self._filter_routing_tag = filter_routing_tag
-        self._dimension_tag = dimension_tag
 
         # The keyspaces
         self._master_keyspace = _master_keyspace = BitField(length=32)
@@ -123,24 +165,18 @@ class KeyspaceContainer(collections.defaultdict):
 
         # Add the default keyspace
         nengo_ks = self["nengo"]
-        nengo_ks.add_field("nengo_object", tags=[self.routing_tag,
-                                                 self.filter_routing_tag])
-        nengo_ks.add_field("nengo_cluster", tags=[self.routing_tag])
-        nengo_ks.add_field("nengo_connection", tags=[self.routing_tag,
-                                                     self.filter_routing_tag])
-        nengo_ks.add_field("nengo_dimension", tags=self.dimension_tag,
-                           start_at=0)
+        nengo_ks.add_field("object", tags=[self.routing_tag,
+                                           self.filter_routing_tag])
+        nengo_ks.add_field("cluster", tags=[self.routing_tag])
+        nengo_ks.add_field("connection", tags=[self.routing_tag,
+                                               self.filter_routing_tag])
+        nengo_ks.add_field("index")
 
     def assign_fields(self):
         """Call `assign_fields` on the master keyspace, forcing field
         assignation for all keyspaces.
         """
         self._master_keyspace.assign_fields()
-
-    @property
-    def dimension_tag(self):
-        """The tag used in extracting dimension data from a key."""
-        return self._dimension_tag
 
     @property
     def routing_tag(self):

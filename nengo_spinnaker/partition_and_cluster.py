@@ -69,7 +69,7 @@ def identify_clusters(placed_vertices, nets):
                 vertices_clusters[vertex][coord].nets.append(net)
             else:
                 # Otherwise it can have the cluster ID set to 0
-                net.keyspace = net.keyspace(nengo_cluster=0)
+                net.keyspace = net.keyspace(cluster=0)
 
     # Iterate through the clusters of subvertices
     for clusters in itervalues(vertices_clusters):
@@ -80,4 +80,4 @@ def identify_clusters(placed_vertices, nets):
 
             # Assign the cluster ID to the nets
             for net in cluster.nets:
-                net.keyspace = net.keyspace(nengo_cluster=cluster_id)
+                net.keyspace = net.keyspace(cluster=cluster_id)
