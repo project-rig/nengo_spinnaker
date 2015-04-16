@@ -2,7 +2,8 @@ import mock
 import nengo
 import pytest
 
-from nengo_spinnaker import intermediate_representation as ir
+from nengo_spinnaker import annotations
+from nengo_spinnaker.annotations import Annotations, soss
 from nengo_spinnaker.node import (NodeIOController, IntermediateHostNode,
                                   OutputNode, InputNode)
 
@@ -60,7 +61,6 @@ class TestNodeIOController(object):
         ihn = nioc.get_object_for_node(node, 1234)
 
         assert isinstance(ihn, IntermediateHostNode)
-        assert ihn.seed == 1234
 
     def test_get_source_for_connection(self):
         """Test that getting the source for a Node calls the subclasses
@@ -74,7 +74,7 @@ class TestNodeIOController(object):
 
         # Construct a mock IRN
         ir_node = IntermediateHostNode(node, 323)
-        irn = ir.IntermediateRepresentation({node: ir_node}, {}, [], [])
+        irn = Annotations({node: ir_node}, {}, [], [])
 
         # Construct a mock NodeIOController
         nioc = NodeIOController()
@@ -115,7 +115,7 @@ class TestNodeIOController(object):
 
         # Construct a mock IRN
         ir_node = IntermediateHostNode(node, 323)
-        irn = ir.IntermediateRepresentation({node: ir_node}, {}, [], [])
+        irn = Annotations({node: ir_node}, {}, [], [])
 
         # Construct a mock NodeIOController
         nioc = NodeIOController()
@@ -156,7 +156,7 @@ class TestNodeIOController(object):
 
         # Construct a mock IRN
         ir_node = IntermediateHostNode(a, 323)
-        irn = ir.IntermediateRepresentation({a: ir_node}, {}, [], [])
+        irn = Annotations({a: ir_node}, {}, [], [])
 
         # Construct some extra objects and extra connections
         extra_objects = [mock.Mock(name="extra obj")]
@@ -167,7 +167,7 @@ class TestNodeIOController(object):
         # Construct a mock NodeIOController
         nioc = NodeIOController()
         with mock.patch.object(nioc, "get_source_for_node") as fn:
-            fn.return_value = ir.soss(
+            fn.return_value = soss(
                 source, extra_objects=extra_objects,
                 extra_nets=extra_connections, latching=True,
                 keyspace=keyspace
@@ -177,18 +177,17 @@ class TestNodeIOController(object):
                 p, 454, irn)
 
         # Check that all of the returned objects are sensible
-        assert isinstance(ir_probe, ir.IntermediateObject)
+        assert isinstance(ir_probe, annotations.ObjectAnnotation)
 
         assert extra_objs == extra_objects + [source]
         assert len(extra_conns) == len(extra_connections) + 1
 
         for c in (x for x in extra_conns if x not in extra_connections):
-            assert isinstance(c, ir.IntermediateNet)
-            assert c.seed == 454
+            assert isinstance(c, annotations.AnnotatedNet)
             assert c.source.object is source
-            assert c.source.port is ir.OutputPort.standard
+            assert c.source.port is annotations.OutputPort.standard
             assert c.sinks[0].object is ir_probe
-            assert c.sinks[0].port is ir.InputPort.standard
+            assert c.sinks[0].port is annotations.InputPort.standard
             assert c.keyspace is keyspace
             assert c.latching
             assert c.weight == p.size_in

@@ -74,7 +74,7 @@ class KeyspaceContainer(collections.defaultdict):
         >>> # After fixing it works fine
         >>> ksc.assign_fields()
         >>> hex(new_ks.get_mask(tag=ksc.routing_tag))
-        '0x3'
+        '0x30'
 
     The default fields and their tags:
 

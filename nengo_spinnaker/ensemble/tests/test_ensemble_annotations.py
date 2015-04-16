@@ -4,8 +4,8 @@ from nengo.utils.builder import full_transform
 import numpy as np
 import pytest
 
-from nengo_spinnaker.ensemble import intermediate_representation as ns_ens
-from nengo_spinnaker import intermediate_representation as ir
+from nengo_spinnaker.ensemble import annotations as ns_ens
+from nengo_spinnaker import annotations as anns
 
 
 class TestIntermediateEnsemble(object):
@@ -17,13 +17,11 @@ class TestIntermediateEnsemble(object):
         """Test that the init correctly initialise the direct input and the
         list of local probes.
         """
-        seed = 34567
         with nengo.Network():
             a = nengo.Ensemble(100, size_in)
 
         # Create the intermediate representation
-        o = ns_ens.IntermediateEnsemble(a, seed)
-        assert o.seed == seed
+        o = anns.Annotations.object_builders[nengo.Ensemble](a, None)
         assert o.constraints == list()
         assert np.all(o.direct_input == np.zeros(size_in))
         assert o.local_probes == list()
@@ -44,10 +42,10 @@ class TestGetEnsembleSink(object):
             b: mock.Mock(name="ir_b", spec_set=[]),
         }
 
-        irn = ir.IntermediateRepresentation(obj_map, {}, [], [])
+        irn = anns.Annotations(obj_map, {}, [], [])
         assert (
             ns_ens.get_ensemble_sink(c, irn) ==
-            ir.soss(ir.NetAddress(obj_map[b], ir.InputPort.standard))
+            anns.soss(anns.NetAddress(obj_map[b], anns.InputPort.standard))
         )
 
     def test_get_sink_constant_node(self):
@@ -64,11 +62,11 @@ class TestGetEnsembleSink(object):
 
         obj_map = {
             a: mock.Mock(name="ir_a", spec_set=[]),
-            b: ns_ens.IntermediateEnsemble(b, None)
+            b: ns_ens.AnnotatedEnsemble(b)
         }
 
         # We don't return a sink (None means "no connection required")
-        irn = ir.IntermediateRepresentation(obj_map, {}, [], [])
+        irn = anns.Annotations(obj_map, {}, [], [])
         assert ns_ens.get_ensemble_sink(c, irn) is None
 
         # But the Node values are added into the intermediate representation
@@ -101,10 +99,11 @@ class TestGetNeuronsSink(object):
             b: mock.Mock(name="ir_b", spec_set=[]),
         }
 
-        irn = ir.IntermediateRepresentation(obj_map, {}, [], [])
+        irn = anns.Annotations(obj_map, {}, [], [])
+        irn = anns.Annotations(obj_map, {}, [], [])
         assert (
             ns_ens.get_neurons_sink(c, irn) ==
-            ir.soss(ir.NetAddress(obj_map[b], ir.InputPort.neurons))
+            anns.soss(anns.NetAddress(obj_map[b], anns.InputPort.neurons))
         )
 
     @pytest.mark.parametrize(
@@ -127,10 +126,12 @@ class TestGetNeuronsSink(object):
             b: mock.Mock(name="ir_b", spec_set=[]),
         }
 
-        irn = ir.IntermediateRepresentation(obj_map, {}, [], [])
+        irn = anns.Annotations(obj_map, {}, [], [])
         assert (
             ns_ens.get_neurons_sink(c, irn) ==
-            ir.soss(ir.NetAddress(obj_map[b], ir.InputPort.global_inhibition))
+            anns.soss(
+                anns.NetAddress(obj_map[b], anns.InputPort.global_inhibition)
+            )
         )
 
     def test_other(self):
@@ -144,7 +145,7 @@ class TestGetNeuronsSink(object):
             b: mock.Mock(name="ir_b", spec_set=[]),
         }
 
-        irn = ir.IntermediateRepresentation(obj_map, {}, [], [])
+        irn = anns.Annotations(obj_map, {}, [], [])
         with pytest.raises(NotImplementedError):
             ns_ens.get_neurons_sink(c, irn)
 
@@ -162,11 +163,11 @@ class TestGetNeuronsSource(object):
             b: mock.Mock(name="ir_b", spec_set=[]),
         }
 
-        irn = ir.IntermediateRepresentation(obj_map, {}, [], [])
+        irn = anns.Annotations(obj_map, {}, [], [])
         assert (
             ns_ens.get_neurons_source(c, irn) ==
-            ir.soss(ir.NetAddress(obj_map[a], ir.OutputPort.neurons),
-                    weight=a.n_neurons)
+            anns.soss(anns.NetAddress(obj_map[a], anns.OutputPort.neurons),
+                      weight=a.n_neurons)
         )
 
     def test_second_time(self):
@@ -184,17 +185,16 @@ class TestGetNeuronsSource(object):
             c: mock.Mock(name="ir_c", spec_set=[]),
         }
         conn_map = {
-            d: ir.IntermediateNet(
-                111,
-                ir.NetAddress(obj_map[a], ir.OutputPort.neurons),
-                ir.NetAddress(obj_map[b], ir.InputPort.neurons)
+            d: anns.AnnotatedNet(
+                anns.NetAddress(obj_map[a], anns.OutputPort.neurons),
+                anns.NetAddress(obj_map[b], anns.InputPort.neurons)
             )
         }
 
         # Building connection e (having built d) should result in modification
         # of the connection and the use of the same connection (indicated by
         # returning the existing connection).
-        irn = ir.IntermediateRepresentation(obj_map, conn_map, [], [])
+        irn = anns.Annotations(obj_map, conn_map, [], [])
         assert ns_ens.get_neurons_source(e, irn) == conn_map[d]
 
 
@@ -205,54 +205,14 @@ def test_get_neurons_probe():
         p = nengo.Probe(a.neurons)
 
     # Get the IR for the ensemble
-    ir_a = ns_ens.IntermediateEnsemble(a, 1105)
+    ir_a = ns_ens.AnnotatedEnsemble(a)
     assert ir_a.local_probes == list()
 
     # Building the probe should just add it to the intermediate representation
     # for `a`'s list of local probes.
     assert (
         ns_ens.get_neurons_probe(
-            p, 3345, ir.IntermediateRepresentation({a: ir_a}, {}, (), ())) ==
+            p, 3345, anns.Annotations({a: ir_a}, {}, (), ())) ==
         (None, [], [])
     )
     assert ir_a.local_probes == [p]
-
-
-class TestGetEnsembleProbe(object):
-    def test_get_output_probe(self):
-        """Test building probes for Ensemble or Node-type objects."""
-        with nengo.Network():
-            a = nengo.Ensemble(300, 4)
-            p = nengo.Probe(a)
-
-        # Get the IR for the Node
-        ir_a = ns_ens.IntermediateEnsemble(a, 1101)
-
-        # Building the probe should return an IntermediateObject for the probe
-        # and a new Net from the Ensemble to the Probe.
-        new_obj, new_objs, new_conns = ns_ens.get_ensemble_probe(
-            p, 1159, ir.IntermediateRepresentation({a: ir_a}, {}, (), ()))
-
-        assert new_obj.seed == 1159
-        assert new_obj.constraints == list()
-
-        assert new_objs == list()
-
-        assert len(new_conns) == 1
-        new_conn = new_conns[0]
-        assert new_conn.source == ir.NetAddress(ir_a, ir.OutputPort.standard)
-        assert ir.NetAddress(new_obj, ir.InputPort.standard) in new_conn.sinks
-        assert new_conn.keyspace is None
-        assert not new_conn.latching
-
-    def test_get_input_probe(self):
-        with nengo.Network():
-            a = nengo.Ensemble(300, 4)
-            p = nengo.Probe(a, attr="input")
-
-        # Get the IR for the Node
-        ir_a = ns_ens.IntermediateEnsemble(a, 1101)
-
-        with pytest.raises(NotImplementedError):
-            ns_ens.get_ensemble_probe(
-                p, 1159, ir.IntermediateRepresentation({a: ir_a}, {}, (), ()))

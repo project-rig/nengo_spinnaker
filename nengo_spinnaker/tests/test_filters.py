@@ -5,7 +5,8 @@ import pytest
 from rig.type_casts import float_to_fix
 import struct
 
-from nengo_spinnaker import intermediate_representation as ir
+from nengo_spinnaker.annotations import Annotations
+from nengo_spinnaker import annotations as anns
 from nengo_spinnaker.keyspaces import keyspaces
 from nengo_spinnaker import filters
 
@@ -117,16 +118,17 @@ class TestFilterRegion(object):
             b_c = nengo.Connection(b, c)
 
         # Construct the intermediate representation
-        irn = ir.IntermediateRepresentation.from_objs_conns_probes(
-            [a, b, c], [a_c, b_c], [])
+        model = mock.Mock()
+        model.params = {a: None, b: None, c: None, a_c: None, b_c: None}
+        irn = Annotations.from_model(model)
         irn.apply_default_keyspace(default_ks)
 
         # Build the filter region for c
         region, net_map = \
             filters.FilterRegion.from_intermediate_representation(
                 0.001,
-                irn.get_nets_ending_at(irn.object_map[c])[
-                    ir.InputPort.standard], 3, minimize=True
+                irn.get_nets_ending_at(irn.objects[c])[
+                    anns.InputPort.standard], 3, minimize=True
             )
 
         # Should have 1 filter and 2 routes
@@ -134,7 +136,7 @@ class TestFilterRegion(object):
         assert region.filters[0] == filters.LowPassFilter(a_c.synapse.tau, 3)
 
         for val in region.keyspace_maps:
-            assert val in [(irn.connection_map[x].keyspace, 0) for x in
+            assert val in [(irn.connections[x].keyspace, 0) for x in
                            [a_c, b_c]]
 
     def test_from_intermediate_representation_with_specified_widths(self):
@@ -151,31 +153,32 @@ class TestFilterRegion(object):
             b_c = nengo.Connection(b, c)
 
         # Construct the intermediate representation
-        irn = ir.IntermediateRepresentation.from_objs_conns_probes(
-            [a, b, c], [a_c, b_c], [])
+        model = mock.Mock()
+        model.params = {a: None, b: None, c: None, a_c: None, b_c: None}
+        irn = Annotations.from_model(model)
         irn.apply_default_keyspace(default_ks)
 
         # Build the filter region for c
-        widths = {irn.connection_map[a_c]: 4, irn.connection_map[b_c]: 5}
+        widths = {irn.connections[a_c]: 4, irn.connections[b_c]: 5}
         region, net_map = \
             filters.FilterRegion.from_intermediate_representation(
                 0.001,
-                irn.get_nets_ending_at(irn.object_map[c])[
-                    ir.InputPort.standard],
+                irn.get_nets_ending_at(irn.objects[c])[
+                    anns.InputPort.standard],
                 widths, minimize=True
             )
 
         # Should have 2 filters and 2 routes
         assert len(region.filters) == 2
 
-        for net in (irn.connection_map[x] for x in [a_c, b_c]):
+        for net in (irn.connections[x] for x in [a_c, b_c]):
             for ks, x in region.keyspace_maps:
                 if ks is net.keyspace:
                     assert x == net_map[net]
             assert region.filters[net_map[net]].width == widths[net]
 
     def test_from_intermediate_representation_unknown_filter_type(self):
-        net = ir.IntermediateNet(123, None, None)
+        net = anns.AnnotatedNet(None, None)
         conn = mock.Mock(name="Connection", spec_set=["synapse"])
 
         with pytest.raises(TypeError) as excinfo:
@@ -239,7 +242,7 @@ class TestLowPassFilter(object):
             b = nengo.Ensemble(100, 2)
             c = nengo.Connection(a, b, synapse=tau)
 
-        n = ir.IntermediateNet(323, None, None, latching=latching)
+        n = anns.AnnotatedNet(None, None, latching=latching)
 
         # Create the low pass filter
         f = filters.LowPassFilter.from_intermediate_representation(

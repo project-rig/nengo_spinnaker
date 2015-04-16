@@ -1,10 +1,10 @@
 import nengo
 
-from .intermediate_representation import IntermediateObject, IntermediateNet
-from . import intermediate_representation as ir
+from .annotations import AnnotatedNet, ObjectAnnotation
+from . import annotations as anns
 
 
-class IntermediateHostNode(IntermediateObject):
+class IntermediateHostNode(AnnotatedNet):
     """Intermediate object representing a Node which will be simulated on the
     host and consequently will not directly result in a SpiNNaker executable.
     """
@@ -105,11 +105,10 @@ class NodeIOController(object):
         # Get a source for the Node; then add a new probe object and a
         # connection from the source to the probe.
         source_spec = self.get_source_for_node(probe.target)
-        probe_object = IntermediateObject(probe, seed)
-        probe_conn = IntermediateNet(
-            seed,
-            ir.NetAddress(source_spec.target, ir.OutputPort.standard),
-            ir.NetAddress(probe_object, ir.InputPort.standard),
+        probe_object = ObjectAnnotation(probe)
+        probe_conn = AnnotatedNet(
+            anns.NetAddress(source_spec.target, anns.OutputPort.standard),
+            anns.NetAddress(probe_object, anns.InputPort.standard),
             keyspace=source_spec.keyspace,
             latching=source_spec.latching,
             weight=probe.size_in
