@@ -4,7 +4,7 @@ from .annotations import AnnotatedNet, ObjectAnnotation
 from . import annotations as anns
 
 
-class IntermediateHostNode(AnnotatedNet):
+class IntermediateHostNode(ObjectAnnotation):
     """Intermediate object representing a Node which will be simulated on the
     host and consequently will not directly result in a SpiNNaker executable.
     """
@@ -35,11 +35,11 @@ class NodeIOController(object):
         # be simulated on the host.
         self.host_network = nengo.Network()
 
-    def get_object_for_node(self, node, seed):
+    def get_object_for_node(self, node):
         """Get an intermediate object for the Node."""
         # TODO Identify when a function of time Node is being passed and act
         # differently.
-        return IntermediateHostNode(node, seed)
+        return IntermediateHostNode(node)
 
     def get_source_for_connection(self, conn, irn):
         """Get a source for a connection from a Node."""
@@ -99,25 +99,6 @@ class NodeIOController(object):
         node : :py:class:`nengo.Node`
         """
         raise NotImplementedError
-
-    def get_probe_for_node(self, probe, seed, irn):
-        """Get a probe object for the Node."""
-        # Get a source for the Node; then add a new probe object and a
-        # connection from the source to the probe.
-        source_spec = self.get_source_for_node(probe.target)
-        probe_object = ObjectAnnotation(probe)
-        probe_conn = AnnotatedNet(
-            anns.NetAddress(source_spec.target, anns.OutputPort.standard),
-            anns.NetAddress(probe_object, anns.InputPort.standard),
-            keyspace=source_spec.keyspace,
-            latching=source_spec.latching,
-            weight=probe.size_in
-        )
-
-        objects = source_spec.extra_objects + [source_spec.target]
-        conns = source_spec.extra_nets + [probe_conn]
-
-        return probe_object, objects, conns
 
     def get_node_input(self, node):  # pragma : no cover
         """Return the current input value for a Node.

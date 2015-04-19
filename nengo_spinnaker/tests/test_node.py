@@ -58,7 +58,7 @@ class TestNodeIOController(object):
 
         # Should return an IntermediateHostNode
         nioc = NodeIOController()
-        ihn = nioc.get_object_for_node(node, 1234)
+        ihn = nioc.get_object_for_node(node)
 
         assert isinstance(ihn, IntermediateHostNode)
 
@@ -73,7 +73,7 @@ class TestNodeIOController(object):
         conn.pre_obj = node
 
         # Construct a mock IRN
-        ir_node = IntermediateHostNode(node, 323)
+        ir_node = IntermediateHostNode(node)
         irn = Annotations({node: ir_node}, {}, [], [])
 
         # Construct a mock NodeIOController
@@ -114,7 +114,7 @@ class TestNodeIOController(object):
         conn.post_obj = node
 
         # Construct a mock IRN
-        ir_node = IntermediateHostNode(node, 323)
+        ir_node = IntermediateHostNode(node)
         irn = Annotations({node: ir_node}, {}, [], [])
 
         # Construct a mock NodeIOController
@@ -143,51 +143,3 @@ class TestNodeIOController(object):
         c = nioc.host_network.all_connections[0]
         assert c.pre_obj.target is node
         assert c.post_obj is node
-
-    def test_get_probe_for_node(self):
-        """Test that getting the probe for a Node gets the source for the Node
-        and adds this and an extra connection to the intermediate
-        representation.
-        """
-        # Build the Node, the Probe and an empty irn
-        with nengo.Network():
-            a = nengo.Node(lambda t: t**2, size_out=1)
-            p = nengo.Probe(a)
-
-        # Construct a mock IRN
-        ir_node = IntermediateHostNode(a, 323)
-        irn = Annotations({a: ir_node}, {}, [], [])
-
-        # Construct some extra objects and extra connections
-        extra_objects = [mock.Mock(name="extra obj")]
-        extra_connections = [mock.Mock(name="extra connection")]
-        keyspace = mock.Mock(name="keyspace")
-        source = mock.Mock(name="source")
-
-        # Construct a mock NodeIOController
-        nioc = NodeIOController()
-        with mock.patch.object(nioc, "get_source_for_node") as fn:
-            fn.return_value = soss(
-                source, extra_objects=extra_objects,
-                extra_nets=extra_connections, latching=True,
-                keyspace=keyspace
-            )
-
-            ir_probe, extra_objs, extra_conns = nioc.get_probe_for_node(
-                p, 454, irn)
-
-        # Check that all of the returned objects are sensible
-        assert isinstance(ir_probe, annotations.ObjectAnnotation)
-
-        assert extra_objs == extra_objects + [source]
-        assert len(extra_conns) == len(extra_connections) + 1
-
-        for c in (x for x in extra_conns if x not in extra_connections):
-            assert isinstance(c, annotations.AnnotatedNet)
-            assert c.source.object is source
-            assert c.source.port is annotations.OutputPort.standard
-            assert c.sinks[0].object is ir_probe
-            assert c.sinks[0].port is annotations.InputPort.standard
-            assert c.keyspace is keyspace
-            assert c.latching
-            assert c.weight == p.size_in
