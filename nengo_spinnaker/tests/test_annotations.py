@@ -139,7 +139,7 @@ class TestAnnotationsFromModel(object):
 
             probe_builders = {type(obj): builder}
             with mock.patch.object(Annotations, "probe_builders", {}):
-                ann = Annotations.from_model(
+                Annotations.from_model(
                     model, extra_probe_builders=probe_builders
                 )
 

@@ -46,9 +46,6 @@ class TestNet(object):
     def test_single_sink(self):
         """Create a net with a single sink and source."""
         # Create source, sink and keyspace
-        v_source = netlist.Vertex()
-        v_sink = netlist.Vertex()
-
         source = netlist.VertexSlice(slice(0, 5))
         sink = netlist.VertexSlice(slice(1, 6))
         weight = 3
@@ -65,9 +62,6 @@ class TestNet(object):
     def test_multiple_sinks(self):
         """Create a net with a single sink and source."""
         # Create source, sink and keyspace
-        v_source = netlist.Vertex()
-        v_sink = netlist.Vertex()
-
         source = netlist.VertexSlice(slice(0, 5))
         sinks = [netlist.VertexSlice(slice(1, 6)),
                  netlist.VertexSlice(slice(5, 8))]
@@ -87,9 +81,6 @@ class TestNet(object):
         """Check that the keyspace is only accepted if it is of length 32
         bits.
         """
-        v_source = netlist.Vertex()
-        v_sink = netlist.Vertex()
-
         source = netlist.VertexSlice(slice(0, 5))
         sink = netlist.VertexSlice(slice(1, 6))
         weight = 3

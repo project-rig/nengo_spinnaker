@@ -5,7 +5,6 @@ import collections
 from six import iteritems, itervalues
 
 from .keyspaces import is_nengo_keyspace
-from .netlist import VertexSlice
 
 
 def identify_clusters(placed_vertices, nets, groups):

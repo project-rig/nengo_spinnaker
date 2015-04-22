@@ -5,7 +5,6 @@ import rig.bitfield
 
 from nengo_spinnaker.annotations import Annotations, AnnotatedNet, NetAddress
 from nengo_spinnaker.builder import SpiNNakerModel
-from nengo_spinnaker.netlist import Net
 
 
 class TestBuildObjectsAndNets(object):
@@ -62,7 +61,7 @@ class TestBuildObjectsAndNets(object):
         obj_builder.return_value = (obj_vertex, obj_load, obj_pre, obj_post)
 
         # Create a Net
-        net = AnnotatedNet(NetAddress(obj_annotation, None), 
+        net = AnnotatedNet(NetAddress(obj_annotation, None),
                            NetAddress(obj_annotation, None))
         net.keyspace = rig.bitfield.BitField(length=32)
         net.weight = 77
@@ -143,7 +142,7 @@ class TestBuildObjectsAndNets(object):
         obj_builder.return_value = (obj_vertex, obj_load, obj_pre, obj_post)
 
         # Create a Net
-        net = AnnotatedNet(NetAddress(obj_annotation, None), 
+        net = AnnotatedNet(NetAddress(obj_annotation, None),
                            NetAddress(obj_annotation, None))
         net.keyspace = rig.bitfield.BitField(length=32)
         net.weight = 7

@@ -1,7 +1,6 @@
 import nengo
 
-from .annotations import AnnotatedNet, ObjectAnnotation
-from . import annotations as anns
+from .annotations import ObjectAnnotation
 
 
 class IntermediateHostNode(ObjectAnnotation):

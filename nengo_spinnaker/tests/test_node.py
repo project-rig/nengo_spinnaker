@@ -2,8 +2,7 @@ import mock
 import nengo
 import pytest
 
-from nengo_spinnaker import annotations
-from nengo_spinnaker.annotations import Annotations, soss
+from nengo_spinnaker.annotations import Annotations
 from nengo_spinnaker.node import (NodeIOController, IntermediateHostNode,
                                   OutputNode, InputNode)
 

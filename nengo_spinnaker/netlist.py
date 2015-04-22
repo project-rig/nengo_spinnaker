@@ -1,6 +1,5 @@
 """Higher and lower level netlist items.
 """
-import collections
 import rig.netlist
 
 

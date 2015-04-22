@@ -9,8 +9,6 @@ import collections
 import enum
 import itertools
 import nengo
-from nengo.utils import numpy as npext
-import numpy as np
 import six
 
 from .keyspaces import keyspaces
