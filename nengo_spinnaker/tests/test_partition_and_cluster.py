@@ -17,13 +17,14 @@ def test_identify_clusters():
     # Begin by constructing a set of vertices and vertex slices, then some nets
     v1 = nl.Vertex()
     v2 = nl.Vertex()
-    v3 = nl.Vertex()  # Not sliced!
-    v1.n_atoms = 5
-    v2.n_atoms = 5
+    v3 = nl.Vertex()
 
     # Vertex slices
-    v1s = [nl.VertexSlice(v1, slice(n, n+1)) for n in range(v1.n_atoms)]
-    v2s = [nl.VertexSlice(v2, slice(n, n+1)) for n in range(v2.n_atoms)]
+    v1s = [nl.VertexSlice(v1, slice(n, n+1)) for n in range(5)]
+    v2s = [nl.VertexSlice(v2, slice(n, n+1)) for n in range(6)]
+    groups = {}
+    groups.update({v: 0 for v in v1s})
+    groups.update({v: 1 for v in v2s})
 
     # Nets: v1 -> v2 with default keyspace
     v12_nets = [nl.Net(a, v2s[:], 0, ks()) for a in v1s]
@@ -56,7 +57,7 @@ def test_identify_clusters():
 
     # Assign the clusters
     nets = v12_nets + v21_nets + [v31_net]
-    pac.identify_clusters(placements, nets)
+    pac.identify_clusters(placements, nets, groups)
 
     # Assert that the cluster IDs are appropriate
     assert v1s[0].cluster == v1s[1].cluster

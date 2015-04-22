@@ -8,7 +8,7 @@ from .keyspaces import is_nengo_keyspace
 from .netlist import VertexSlice
 
 
-def identify_clusters(placed_vertices, nets):
+def identify_clusters(placed_vertices, nets, groups):
     """Group vertex slices in clusters (based on chip assignation) and assign
     the cluster ID to nets which originate from these subvertices.
 
@@ -41,6 +41,9 @@ def identify_clusters(placed_vertices, nets):
         Vertex placements (as produced by
         :py:func:`rig.place_and_route.place`).
     nets : [:py:class:`nengo_spinnaker.netlist.Net`, ...]
+    groups : {Vertex: group_id, ...}
+        Map of vertices to indices of groups of which they are a part.  This is
+        used to identify objects which may be joined into a cluster.
     """
     class Cluster(object):
         """Internal representation of a cluster."""
@@ -48,31 +51,31 @@ def identify_clusters(placed_vertices, nets):
             self.vertices = list()
             self.nets = list()
 
-    # Build up the clusters of vertices and nets
-    # vertices -> co-ordinate -> Cluster
-    vertices_clusters = collections.defaultdict(
+    # Build up the clusters of groups and nets
+    # group -> co-ordinate -> Cluster
+    groups_clusters = collections.defaultdict(
         lambda: collections.defaultdict(Cluster))
 
     for (vertex, coord) in iteritems(placed_vertices):
-        # Add the vertex to the cluster dictionary iff it is a vertex slice
-        if isinstance(vertex, VertexSlice):
-            vertices_clusters[vertex.vertex][coord].vertices.append(vertex)
+        # Add the vertex to the cluster dictionary iff it is in a group
+        if vertex in groups:
+            groups_clusters[groups[vertex]][coord].vertices.append(vertex)
 
     for net in nets:
         # If the net uses the default keyspace
         if is_nengo_keyspace(net.keyspace):
-            if isinstance(net.source, VertexSlice):
+            if net.source in groups:
                 # Then include it in the cluster if its originating vertex is a
                 # vertex slice
-                vertex = net.source.vertex
+                group = groups[net.source]
                 coord = placed_vertices[net.source]
-                vertices_clusters[vertex][coord].nets.append(net)
+                groups_clusters[group][coord].nets.append(net)
             else:
                 # Otherwise it can have the cluster ID set to 0
                 net.keyspace = net.keyspace(cluster=0)
 
     # Iterate through the clusters of subvertices
-    for clusters in itervalues(vertices_clusters):
+    for clusters in itervalues(groups_clusters):
         for cluster_id, cluster in enumerate(itervalues(clusters)):
             # Assign the cluster ID to the vertex slices
             for vertex in cluster.vertices:

@@ -1,8 +1,7 @@
 """Higher and lower level netlist items.
 """
+import collections
 import rig.netlist
-
-from . import params
 
 
 class Net(rig.netlist.Net):
@@ -51,89 +50,55 @@ class Net(rig.netlist.Net):
 
 class Vertex(object):
     """Represents a nominal unit of computation (a single instance or many
-    instances of an application running on a SpiNNaker machine).
+    instances of an application running on a SpiNNaker machine) or an external
+    device that is connected to the SpiNNaker network.
 
     Attributes
     ----------
-    resources : {resource: amount, ...}
-        Resources required by this vertex.
-    """
-    n_atoms = params.IntParam(allow_none=True, min=0, default=None)
-
-    def __init__(self, resources=dict()):
-        """Create a new vertex.
-
-        Parameters
-        ----------
-        resources : {resource: amount, ...}
-            Resources required by this vertex.
-        """
-        self.resources = dict(resources)
-
-
-class VertexSlice(object):
-    """Partition of a Vertex such that it will fit within the constraints of a
-    single SpiNNaker application core.
-
-    The intent of a vertex slice is to present a view onto an existing
-    :py:class:`.Vertex` object that can be used to represent the partitioning
-    of that vertex across many SpiNNaker application cores.  A netlist as
-    presented to the Rig place and tools may contain a mix of
-    :py:class:`.Vertex` and :py:class:`.VertexSlice` instances as demanded by
-    the model.
-
-    Attributes
-    ----------
-    vertex : :py:class:`.Vertex`
-        Object this is a slice of.
-    slice : :py:class:`slice`
-        Contiguous slice of this object.
+    application : str or None
+        Path to application which should be loaded onto SpiNNaker to simulate
+        this vertex, or None if no application is required.
+    constraints : [constraint, ...]
+        The :py:mod:`~rig.place_and_route.constraints` which should be applied
+        to the placement and routing related to the vertex.
+    resource : {resource: usage, ...}
+        Mapping from resource type to the consumption of that resource, in
+        whatever is an appropriate unit.
     cluster : int or None
-        Cluster the slice is a part of.
-    resources : {resource: amount, ...}
-        Resources required by this slice of the vertex.
+        Index of the cluster the vertex is a part of.
     """
-    __slots__ = ["vertex", "slice", "cluster", "resources"]
+    __slots__ = ["application", "constraints", "resources", "cluster"]
 
-    def __init__(self, vertex, vertex_slice, resources=dict()):
-        """Create a new slice representation of a vertex.
-
-        Parameters
-        ----------
-        vertex : :py:class:`.Vertex`
-            Vertex to create the slice of.
-        vertex_slice : :py:class:`slice`
-            A contiguous (non-strided) and absolute (non-relative) slice.
-        resources : {resource: amount, ...}
-            Resources required by this slice of the vertex.
+    def __init__(self, application=None, resources=dict(), constraints=list()):
+        """Create a new Vertex.
         """
-        # Check the validity of the slice
-        if vertex.n_atoms is None:
-            # The vertex can't be sliced at all
-            raise ValueError(
-                "{}: cannot be represented by a slice".format(vertex)
-            )
-        if (not isinstance(vertex_slice, slice) or
-                vertex_slice.step not in (None, 1) or
-                vertex_slice.start < 0 or vertex_slice.stop < 0 or
-                vertex_slice.stop < vertex_slice.start):
-            raise ValueError(
-                "vertex_slice: must be contiguous and non-relative, "
-                "{!s} was not valid.".format(vertex_slice)
-            )
-        if vertex_slice.stop > vertex.n_atoms:
-            raise ValueError(
-                "slice {} beyond range of vertex {}".format(
-                    vertex_slice, vertex)
-            )
-
-        # Save the values
-        self.vertex = vertex
-        self.slice = vertex_slice
-        self.cluster = None
+        self.application = application
+        self.constraints = list(constraints)
         self.resources = dict(resources)
+        self.cluster = None
 
-    def __repr__(self):
-        return "<VertexSlice {!s}[{}:{}]>".format(self.vertex,
-                                                  self.slice.start,
-                                                  self.slice.stop)
+
+class VertexSlice(Vertex):
+    """Represents a portion of a nominal unit of computation.
+
+    Attributes
+    ----------
+    application : str or None
+        Path to application which should be loaded onto SpiNNaker to simulate
+        this vertex, or None if no application is required.
+    constraints : [constraint, ...]
+        The :py:mod:`~rig.place_and_route.constraints` which should be applied
+        to the placement and routing related to the vertex.
+    resource : {resource: usage, ...}
+        Mapping from resource type to the consumption of that resource, in
+        whatever is an appropriate unit.
+    slice : :py:class:`slice`
+        Slice of the unit of computation which is represented by this vertex
+        slice.
+    """
+    __slots__ = ["slice"]
+
+    def __init__(self, slice, application=None, resources=dict(),
+                 constraints=list()):
+        super(VertexSlice, self).__init__(application, resources, constraints)
+        self.slice = slice
