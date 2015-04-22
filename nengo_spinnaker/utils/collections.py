@@ -1,3 +1,7 @@
+from __future__ import absolute_import
+import collections
+
+
 class noneignoringlist(list):
     """List which will not append None.
 
@@ -12,7 +16,7 @@ class noneignoringlist(list):
         [234]
 
     However, if you manually assign an element to `None` then it will be
-    assigned as usual.
+    assigned as usual.::
 
         >>> nil[0] = None
         >>> nil
@@ -23,6 +27,38 @@ class noneignoringlist(list):
         """Appends `x` to the end of the list unless it is `None`."""
         if x is not None:
             super(noneignoringlist, self).append(x)
+
+
+class flatinsertionlist(list):
+    """List which will extend rather than append when appending lists,
+    resulting in a list which is flattened on insertion.
+
+    For example::
+
+        >>> fil = flatinsertionlist()
+        >>> fil.append(5)
+        >>> fil
+        [5]
+        >>> fil.append([1, 2, 3])
+        >>> fil
+        [5, 1, 2, 3]
+
+    However, if you manually assign a list to an item then it will be assigned
+    as usual.::
+
+        >>> fil[0] = [5, 4]
+        >>> fil
+        [[5, 4], 1, 2, 3]
+    """
+
+    def append(self, x):
+        """Appends `x` to the list, unless it is an iterable, in which case the
+        list will be extended.
+        """
+        if isinstance(x, collections.Iterable):
+            self.extend(x)
+        else:
+            super(flatinsertionlist, self).append(x)
 
 
 class registerabledict(dict):
