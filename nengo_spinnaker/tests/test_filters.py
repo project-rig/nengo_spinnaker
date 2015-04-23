@@ -20,8 +20,7 @@ class TestFilterRegion(object):
     filters and there associated routing information.
     """
     @pytest.mark.parametrize("n_filters, n_routes", [(5, 7), (1, 3), (9, 10)])
-    @pytest.mark.parametrize("vertex_slice", [slice(0, 2), slice(1, 5)])
-    def test_sizeof(self, n_filters, n_routes, vertex_slice):
+    def test_sizeof(self, n_filters, n_routes):
         dt = 0.001
 
         # Generate some filters and routes
@@ -33,7 +32,7 @@ class TestFilterRegion(object):
         region = filters.FilterRegion(dt, fs, routes)
 
         HEADER_LENGTH = 2  # WORDS
-        assert (region.sizeof(vertex_slice) ==
+        assert (region.sizeof() ==
                 (HEADER_LENGTH + 4*n_routes + 4*n_filters) * 4)
 
         # Check that it reports the number of filters correctly
@@ -48,14 +47,29 @@ class TestFilterRegion(object):
 
         mock_ks1 = mock.Mock(name="keyspace",
                              spec_set=["get_mask", "get_value"])
-        mock_ks1.get_mask.side_effect = lambda tag: (
-            0xffff0000 if tag == "filter_routing" else 0x000000ff)
+
+        def get_mask1(tag=None, field=None):
+            assert ((field == "index" and tag is None) or
+                    (tag == "filter_routing" and field is None))
+            if field == "index":
+                return 0x000000ff
+            if tag == "filter_routing":
+                return 0xffff0000
+
+        mock_ks1.get_mask.side_effect = get_mask1
         mock_ks1.get_value.return_value = 0xaaaa0000
+
+        def get_mask2(tag=None, field=None):
+            assert ((field == "index" and tag is None) or
+                    (tag == "filter_routing" and field is None))
+            if field == "index":
+                return 0x0000007f
+            if tag == "filter_routing":
+                return 0xfff00000
 
         mock_ks2 = mock.Mock(name="keyspace",
                              spec_set=["get_mask", "get_value"])
-        mock_ks2.get_mask.side_effect = lambda tag: (
-            0xfff00000 if tag == "filter_routing" else 0x0000007f)
+        mock_ks2.get_mask.side_effect = get_mask2
         mock_ks2.get_value.return_value = 0xbbb00000
 
         filter_routes = [(mock_ks1, 0), (mock_ks2, 1)]
@@ -66,20 +80,20 @@ class TestFilterRegion(object):
 
         # Write out to a mock file
         fp = mock.Mock(name="file", spec_set=["write"])
-        region.write_subregion_to_file(slice(None), fp)
+        region.write_subregion_to_file(fp)
 
         # Assert that the keyspaces were called correctly
         for ks in [mock_ks1, mock_ks2]:
             assert ks.get_mask.call_count == 2
             ks.get_mask.assert_any_call(tag="filter_routing")
-            ks.get_mask.assert_any_call(tag="dimension")
+            ks.get_mask.assert_any_call(field="index")
 
             ks.get_value.assert_called_once_with(tag="filter_routing")
 
         # Now check that we can unpack the bytestring that was written
         data = fp.write.call_args[0][0]
         assert isinstance(data, bytes)
-        assert len(data) == region.sizeof(slice(None))
+        assert len(data) == region.sizeof()
 
         # Unpack the header struct
         (routing_offset, filters_offset, n_routes, n_filters) = \
@@ -104,7 +118,7 @@ class TestFilterRegion(object):
         assert filter_entries[:16] == fs[0].pack(dt)
         assert filter_entries[16:] == fs[1].pack(dt)
 
-    def test_from_intermediate_representation_with_minimization(self):
+    def test_from_annotations_with_minimization(self):
         """Test construction of filter regions from Nengo connections and nets
         extracted from an intermediate representation.
         """
@@ -125,7 +139,7 @@ class TestFilterRegion(object):
 
         # Build the filter region for c
         region, net_map = \
-            filters.FilterRegion.from_intermediate_representation(
+            filters.FilterRegion.from_annotations(
                 0.001,
                 irn.get_nets_ending_at(irn.objects[c])[
                     anns.InputPort.standard], 3, minimize=True
@@ -139,7 +153,7 @@ class TestFilterRegion(object):
             assert val in [(irn.connections[x].keyspace, 0) for x in
                            [a_c, b_c]]
 
-    def test_from_intermediate_representation_with_specified_widths(self):
+    def test_from_annotations_with_specified_widths(self):
         """Test construction of filter regions from Nengo connections and nets
         extracted from an intermediate representation.
         """
@@ -161,7 +175,7 @@ class TestFilterRegion(object):
         # Build the filter region for c
         widths = {irn.connections[a_c]: 4, irn.connections[b_c]: 5}
         region, net_map = \
-            filters.FilterRegion.from_intermediate_representation(
+            filters.FilterRegion.from_annotations(
                 0.001,
                 irn.get_nets_ending_at(irn.objects[c])[
                     anns.InputPort.standard],
@@ -177,12 +191,12 @@ class TestFilterRegion(object):
                     assert x == net_map[net]
             assert region.filters[net_map[net]].width == widths[net]
 
-    def test_from_intermediate_representation_unknown_filter_type(self):
+    def test_from_annotations_unknown_filter_type(self):
         net = anns.AnnotatedNet(None, None)
         conn = mock.Mock(name="Connection", spec_set=["synapse"])
 
         with pytest.raises(TypeError) as excinfo:
-            filters.FilterRegion.from_intermediate_representation(
+            filters.FilterRegion.from_annotations(
                 0.001, {net: [conn]}, 5)
         assert conn.synapse.__class__.__name__ in str(excinfo.value)
 
@@ -236,7 +250,7 @@ class TestLowPassFilter(object):
     @pytest.mark.parametrize("tau", [0.04, 0.1])
     @pytest.mark.parametrize("width", [4, 1])
     @pytest.mark.parametrize("latching", [True, False])
-    def test_from_intermediate_representation(self, tau, width, latching):
+    def test_from_annotations(self, tau, width, latching):
         with nengo.Network():
             a = nengo.Ensemble(100, 2)
             b = nengo.Ensemble(100, 2)
@@ -245,8 +259,7 @@ class TestLowPassFilter(object):
         n = anns.AnnotatedNet(None, None, latching=latching)
 
         # Create the low pass filter
-        f = filters.LowPassFilter.from_intermediate_representation(
-            n, [c], width)
+        f = filters.LowPassFilter.from_annotations(n, [c], width)
         assert f.time_constant == tau
         assert f.latching == latching
         assert f.width == width

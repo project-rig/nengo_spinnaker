@@ -90,15 +90,14 @@ class FilterRegion(object):
         self.keyspace_maps = list(keyspace_maps)
 
     @classmethod
-    def from_intermediate_representation(cls, dt, nets_connections, width,
-                                         minimize=False):
+    def from_annotations(cls, dt, nets_connections, width, minimize=False):
         """Create a new filter region by extracting filters from intermediate
         representations of Nengo Connections.
 
         Parameters
         ----------
-        nets_connections : {`IntermediateNet`: [`nengo.Connection`, ...], ...}
-            Map of intermediate nets to the connections they represent.  This
+        nets_connections : {`AnnotatedNet`: [`nengo.Connection`, ...], ...}
+            Map of annotation nets to the connections they represent.  This
             mapping can be retrieved by calling `get_nets_ending_at` on an
             `IntermediateRepresentation` and indexing with the port the filters
             should be specified for.
@@ -141,15 +140,11 @@ class FilterRegion(object):
             new_filter = cls.filter_builders[synapse.__class__](
                 net, connections, w)
 
-            add_filter = True
-            if minimize:
-                if new_filter in filters:
-                    filter_key = filters.index(new_filter)
-                    add_filter = False
-
-            if add_filter:
+            if not minimize or new_filter not in filters:
                 filter_key = len(filters)
                 filters.append(new_filter)
+            else:
+                filter_key = filters.index(new_filter)
 
             # Add the routing entry
             net_maps[net] = filter_key
@@ -159,13 +154,8 @@ class FilterRegion(object):
 
         return cls(dt, filters, keyspace_map), net_maps
 
-    def sizeof(self, vertex_slice):
+    def sizeof(self):
         """Get the amount of memory in bytes required to represent this region.
-
-        Parameters
-        ----------
-        vertex_slice : :py:class:`slice`
-            The slice of this region to return the memory requirements for.
 
         ..note::
             This region is not partitioned - the memory requirements are
@@ -186,18 +176,11 @@ class FilterRegion(object):
         """
         return len(self.filters)
 
-    def write_subregion_to_file(self, vertex_slice, fp, **formatter_args):
+    def write_subregion_to_file(self, fp, **formatter_args):
         """Write a portion of the region to a file.
-
-        ..note::
-            This region is not partitioned - the entire region will be written
-            out regardless of the slice.
 
         Parameters
         ----------
-        vertex_slice : :py:func:`slice`
-            A slice object which indicates which rows, columns or other
-            elements of the region should be included.
         fp : file-like object
             The file-like object to which data from the region will be written.
             This must support a `write` method.
@@ -206,7 +189,7 @@ class FilterRegion(object):
             with each value that is being written.
         """
         # Cache the data because writes are expensive.
-        data = bytearray(self.sizeof(slice(None)))
+        data = bytearray(self.sizeof())
 
         # Write the header data
         routing_offset = 8  # May change later
@@ -222,7 +205,7 @@ class FilterRegion(object):
                              keyspace.get_value(tag="filter_routing"),
                              keyspace.get_mask(tag="filter_routing"),
                              f_id,
-                             keyspace.get_mask(tag="dimension"))
+                             keyspace.get_mask(field="index"))
 
         # Write the filter data
         offset = filters_offset
@@ -314,7 +297,7 @@ class LowPassFilter(Filter):
         self.time_constant = time_constant
 
     @classmethod
-    def from_intermediate_representation(cls, net, connections, width):
+    def from_annotations(cls, net, connections, width):
         """Create a new filter from inspection of a net and connections."""
         # Get the filter time-constant from the connection(s) and the latching
         # specification from the net.
@@ -336,4 +319,4 @@ class LowPassFilter(Filter):
                 self.time_constant == other.time_constant)
 
 FilterRegion.filter_builders[nengo.synapses.Lowpass] = \
-    LowPassFilter.from_intermediate_representation
+    LowPassFilter.from_annotations
