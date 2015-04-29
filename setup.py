@@ -3,7 +3,7 @@ import sys
 
 setup(
     name="nengo_spinnaker",
-    version="0.0.1-dev",
+    version="0.1.0",
     packages=find_packages(),
 
     # Metadata for PyPi
@@ -13,6 +13,5 @@ setup(
     license="GPLv2",
 
     # Requirements
-    install_requires=["nengo", "rig"],
-    tests_require=["pytest>=2.6", "pytest-cov", "mock"],
+    install_requires=["nengo>=2.0.0", "rig>=0.1.3, <1.0.0"],
 )

@@ -2,13 +2,24 @@ sudo: false
 language: python
 python:
         - 2.7
-        - 3.3
         - 3.4
 install:
-        - pip install coveralls
-        - pip install -r requirements.txt
+        - python setup.py install
         - pip install -r requirements-test.txt
-script : py.test nengo_spinnaker
+        - pip install python-coveralls
+script :
+        # Run the main test suite against real hardware and against the
+        # installed codebase. Note: since we're testing an installed version,
+        # the code coverage must be checked against this version, not the one in
+        # './nengo_spinnaker/'.
+        - >
+            py.test tests/ \
+                    --cov "$(./utils/nengo_spinnaker_path.py)" \
+                    --cov tests \
+        # Run doctests in code
+        - py.test nengo_spinnaker/
+        # Code quality check
+        - flake8 nengo_spinnaker
 after_success : coveralls
 notifications:
         email: false
