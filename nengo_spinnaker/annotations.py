@@ -18,7 +18,8 @@ from .utils.collections import (mrolookupdict, noneignoringlist,
 
 class Annotations(collections.namedtuple(
     "Annotations", ["objects", "connections",
-                    "extra_objects", "extra_connections"])):
+                    "extra_objects", "extra_connections",
+                    "machine_timestep"])):
     """An annotation of a Nengo model which is more easily mapped to the mix of
     applications and connections present on the SpiNNaker system.
 
@@ -39,6 +40,8 @@ class Annotations(collections.namedtuple(
     extra_connections : list
         List of extra connections that have been inserted into the network,
         such as the connection from an Ensemble to a Probe.
+    machine_timestep : int
+        Number of microseconds to use in each step of the simulation.
     """
 
     object_builders = registerabledict()
@@ -119,16 +122,17 @@ class Annotations(collections.namedtuple(
             return annotation, [], []
     """
 
-    def __new__(cls, objects, connections, extra_objects, extra_connections):
+    def __new__(cls, objects, connections, extra_objects, extra_connections,
+                machine_timestep=1000):
         return super(Annotations, cls).__new__(
             cls, dict(objects), dict(connections),
-            list(extra_objects), list(extra_connections)
+            list(extra_objects), list(extra_connections), machine_timestep
         )
 
     @classmethod
     def from_model(cls, model, extra_object_builders={},
                    extra_source_getters={}, extra_sink_getters={},
-                   extra_probe_builders={}):
+                   extra_probe_builders={}, machine_timestep=1000):
         """Create a new annotation from a built Nengo model.
 
         Parameters
@@ -139,7 +143,7 @@ class Annotations(collections.namedtuple(
 
         Returns
         -------
-        :py:class:`.IntermediateRepresentation`
+        :py:class:`.Annotations`
             Intermediate representation of the objects and connections.
         """
         # Update the builders with any extras we've been given
@@ -211,7 +215,8 @@ class Annotations(collections.namedtuple(
 
         # Return a new instance of the namedtuple with the built intermediate
         # representation.
-        return cls(obj_map, conn_map, extra_objs, extra_conns)
+        return cls(obj_map, conn_map, extra_objs, extra_conns,
+                   machine_timestep)
 
     def get_nets_starting_at(self, obj):
         """Return all nets which begin at a given annotation.

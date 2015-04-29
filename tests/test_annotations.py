@@ -12,7 +12,8 @@ class TestAnnotationsFromModel(object):
     """Test construction of annotations from a Nengo Model.
     """
     class TestBuildObject(object):
-        def test_build_object_from_registered_builder(self):
+        @pytest.mark.parametrize("machine_timestep", [100, 1000])
+        def test_build_object_from_registered_builder(self, machine_timestep):
             """Test that objects are correctly identified and built from the
             dictionary which can be registered against.
             """
@@ -31,12 +32,17 @@ class TestAnnotationsFromModel(object):
             obj_builders = {nengo.base.NengoObject: obj_builder}
             with mock.patch.object(Annotations, "object_builders",
                                    obj_builders):
-                o = Annotations.from_model(model)
+                o = Annotations.from_model(
+                    model, machine_timestep=machine_timestep
+                )
 
             # The builder should have been called once with the object and its
             # built equivalent.
             obj_builder.assert_called_once_with(obj, built_obj)
             assert o.objects[obj] is annotation
+
+            # The timestep should have been saved
+            assert o.machine_timestep == machine_timestep
 
         def test_build_object_from_extra_builder(self):
             """Test that objects are correctly identified and built from a
