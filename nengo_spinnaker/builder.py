@@ -50,9 +50,9 @@ class SpiNNakerModel(object):
     builders = registerabledict()
     """Builder methods for the model.
 
-    Each builder should expect the original Nengo object, the parameters
-    constructed by the Nengo builder (or None) and the annotations created by
-    the previous build step.
+    Each builder should expect the original Nengo object, the annotation for
+    the object, the model constructed by the Nengo builder and the annotations
+    created by the previous build step.
     """
 
     def __init__(self, nets, vertices, groups, load_functions,
@@ -97,9 +97,6 @@ class SpiNNakerModel(object):
         for obj, annotation in chain(
                 iteritems(annotations.objects),
                 [(None, x) for x in annotations.extra_objects]):
-            # Get the parameters for the builder
-            params = None if obj is None else model.params[obj]
-
             # Perform the build
             try:
                 builder = builders[type(annotation)]
@@ -110,7 +107,7 @@ class SpiNNakerModel(object):
                 )
 
             vertex, load_function, pre_function, post_function = \
-                builder(obj, params, annotation)
+                builder(obj, annotation, model, annotations)
 
             # Add these objects
             built_vertices[annotation] = vertex

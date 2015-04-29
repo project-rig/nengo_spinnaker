@@ -6,25 +6,27 @@ SpiNNaker.  The build method also manages the partitioning of the ensemble into
 appropriate sized slices.
 """
 
-from ..netlist import Vertex, VertexSlice
+from ..netlist import VertexSlice
 
 
-class LIFVertex(Vertex):
+class LIF(object):
     """Vertex representing an ensemble constructed of LIF neurons.
     """
     @classmethod
-    def from_intermediate_representation(ens_intermediate, ens, irn):
-        """Create a new LIF vertex from an intermediate representation.
+    def from_annotations(cls, ens, ens_annotation, model, annotations):
+        """Create a new LIF vertex from an annotated Nengo model.
 
         Parameters
         ----------
-        ens_intermediate : IntermediateEnsemble
-            Annotations for the ensemble.
         ens : :py:class:`nengo.Ensemble`
             Original ensemble object
-        irn : IntermediateRepresentation
-            The intermediate representation of the network this ensemble is a
-            part of.
+        ens_annotation : \
+                :py:class:`~nengo_spinnaker.ensemble.AnnotatedEnsemble`
+            Annotations for the ensemble.
+        model : :py:class:`~nengo.builder.Model`
+            Nengo constructed model.
+        annotations : :py:class:`~nengo_spinnaker.annotations.Annotations`
+            Nengo/SpiNNaker model annotations.
 
         Returns
         -------

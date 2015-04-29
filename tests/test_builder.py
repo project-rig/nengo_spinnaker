@@ -23,17 +23,14 @@ class TestBuildObjectsAndNets(object):
         assert ann.__class__.__name__ in str(excinfo.value)
 
     @pytest.mark.parametrize(
-        "make_annotation, exp_params",
+        "make_annotation",
         [(lambda obj, obj_annotation, connection, net:
-            Annotations({obj: obj_annotation},
-                        {connection: net}, [], []), True),
+            Annotations({obj: obj_annotation}, {connection: net}, [], [])),
          (lambda obj, obj_annotation, connection, net:
-            Annotations({obj: obj_annotation}, {}, [], [net]), True),
-         (lambda obj, obj_annotation, connection, net:
-            Annotations({}, {}, [obj_annotation], [net]), False),
+             Annotations({obj: obj_annotation}, {}, [], [net])),
          ]
     )
-    def test_standard(self, make_annotation, exp_params):
+    def test_standard(self, make_annotation):
         """Test the standard building from annotations.
         """
         # Create the initial object, its parameters and its annotation
@@ -44,12 +41,10 @@ class TestBuildObjectsAndNets(object):
             pass
 
         obj = Obj()
-        obj_params = mock.Mock(name="obj_params")
         obj_annotation = ObjAnn()
 
         # Create a model to hold the parameters
         model = nengo.builder.Model()
-        model.params[obj] = obj_params
 
         # Create the builder and the return values for the builder
         obj_vertex = mock.Mock(name="object_vertex")
@@ -73,47 +68,38 @@ class TestBuildObjectsAndNets(object):
         # and that the builder was called correctly.
         with mock.patch.object(SpiNNakerModel, "builders",
                                {ObjAnn: obj_builder}):
-            model = SpiNNakerModel.from_annotations(model, annotation)
+            smodel = SpiNNakerModel.from_annotations(model, annotation)
 
         # Check the builder was called correctly
-        if exp_params:
-            obj_builder.assert_called_once_with(
-                obj, obj_params, obj_annotation
-            )
-        else:
-            obj_builder.assert_called_once_with(
-                None, None, obj_annotation
-            )
+        obj_builder.assert_called_once_with(obj, obj_annotation,
+                                            model, annotation)
 
         # Check the return values were correctly used
-        assert len(model.nets) == 1
-        assert model.nets[0].source is obj_vertex
-        assert model.nets[0].sinks == [obj_vertex]
-        assert model.nets[0].weight == 77
-        assert model.nets[0].keyspace is net.keyspace
+        assert len(smodel.nets) == 1
+        assert smodel.nets[0].source is obj_vertex
+        assert smodel.nets[0].sinks == [obj_vertex]
+        assert smodel.nets[0].weight == 77
+        assert smodel.nets[0].keyspace is net.keyspace
 
-        assert model.vertices == [obj_vertex]
-        assert model.groups == dict()
-        assert model.load_functions == [obj_load]
-        assert model.before_simulation_functions == [obj_pre]
-        assert model.after_simulation_functions == [obj_post]
-        assert model.placements == dict()
-        assert model.allocations == dict()
-        assert model.application_memory == dict()
-        assert model.routes == dict()
+        assert smodel.vertices == [obj_vertex]
+        assert smodel.groups == dict()
+        assert smodel.load_functions == [obj_load]
+        assert smodel.before_simulation_functions == [obj_pre]
+        assert smodel.after_simulation_functions == [obj_post]
+        assert smodel.placements == dict()
+        assert smodel.allocations == dict()
+        assert smodel.application_memory == dict()
+        assert smodel.routes == dict()
 
     @pytest.mark.parametrize(
-        "make_annotation, exp_params",
+        "make_annotation",
         [(lambda obj, obj_annotation, connection, net:
-            Annotations({obj: obj_annotation},
-                        {connection: net}, [], []), True),
+            Annotations({obj: obj_annotation}, {connection: net}, [], [])),
          (lambda obj, obj_annotation, connection, net:
-            Annotations({obj: obj_annotation}, {}, [], [net]), True),
-         (lambda obj, obj_annotation, connection, net:
-            Annotations({}, {}, [obj_annotation], [net]), False),
+            Annotations({obj: obj_annotation}, {}, [], [net])),
          ]
     )
-    def test_multiple_vertices(self, make_annotation, exp_params):
+    def test_multiple_vertices(self, make_annotation):
         """Test the standard building from annotations when multiple vertices
         are produced.
         """
@@ -154,25 +140,19 @@ class TestBuildObjectsAndNets(object):
         # and that the builder was called correctly.
         with mock.patch.object(SpiNNakerModel, "builders",
                                {ObjAnn: obj_builder}):
-            model = SpiNNakerModel.from_annotations(model, annotation)
+            smodel = SpiNNakerModel.from_annotations(model, annotation)
 
         # Check the builder was called correctly
-        if exp_params:
-            obj_builder.assert_called_once_with(
-                obj, obj_params, obj_annotation
-            )
-        else:
-            obj_builder.assert_called_once_with(
-                None, None, obj_annotation
-            )
+        obj_builder.assert_called_once_with(obj, obj_annotation,
+                                            model, annotation)
 
         # Check the return values were correctly used
-        assert model.vertices == obj_vertex
-        assert model.groups == {v: 0 for v in obj_vertex}
+        assert smodel.vertices == obj_vertex
+        assert smodel.groups == {v: 0 for v in obj_vertex}
 
         # Check the nets reflect the splitting of the vertices
-        assert len(model.nets) == len(obj_vertex)
-        for new_net in model.nets:
+        assert len(smodel.nets) == len(obj_vertex)
+        for new_net in smodel.nets:
             assert new_net.source in obj_vertex
             assert new_net.sinks == obj_vertex
             assert new_net.keyspace is net.keyspace
