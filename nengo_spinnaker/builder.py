@@ -2,7 +2,10 @@
 """
 import collections
 from itertools import chain
+from rig.machine_control.utils import sdram_alloc_for_vertices
 from rig.place_and_route import place, allocate, route
+from rig.place_and_route.utils import (
+    build_application_map, build_routing_tables)
 from six import iteritems, itervalues
 
 from .keyspaces import keyspaces
@@ -40,14 +43,15 @@ class SpiNNakerModel(object):
         Map of vertices to the co-ordinates of chip it has been placed on.
     allocations : {vertex {resource : slice, ...}, ...}
         Map of vertices to the resources they have been assigned.
-    application_memory : {vertex : MemoryIO, ...}
-        Map of vertices to a file-like object which allows writing and reading
-        from the SDRAM allocated to them.
     routes : {Net: RoutingTree, ...}
         Map of Nets to the routes they will take through a SpiNNaker machine.
+    vertices_memory : {vertex : MemoryIO, ...}
+        Map of vertices to a file-like object which allows writing and reading
+        from the SDRAM allocated to them.
 
-    The last four attributes are only filled in when the model is placed and
-    routed.
+    The last three but one attributes are only filled in when the model is
+    placed and routed.  The last attribute is only supplied when the model is
+    loaded to a SpiNNaker machine.
     """
 
     builders = registerabledict()
@@ -71,8 +75,8 @@ class SpiNNakerModel(object):
         # We have no placements, allocations, routes or maps yet
         self.placements = dict()
         self.allocations = dict()
-        self.application_memory = dict()
         self.routes = dict()
+        self.vertices_memory = dict()
 
     @classmethod
     def from_annotations(cls, model, annotations):
@@ -153,6 +157,14 @@ class SpiNNakerModel(object):
     def place_and_route(self, machine):
         """Place and route the model for the given SpiNNaker machine.
 
+        Performs the following tasks:
+
+         - Place all vertices
+         - Allocates all resources
+         - Route all nets
+         - Assign cluster IDs to vertices for which it is appropriate
+         - Fix the keyspaces
+
         Parameters
         ----------
         machine : :py:class:`~rig.machine.Machine`
@@ -179,3 +191,33 @@ class SpiNNakerModel(object):
             vertices_resources, self.nets, machine, constraints,
             self.placements, self.allocations
         )
+
+    def load_application(self, controller):
+        """Load an application onto a SpiNNaker machine.
+
+        Parameters
+        ----------
+        controller : :py:class:`~rig.machine_control.MachineController`
+            Controller for communication with the SpiNNaker machine.
+        """
+        # Allocate SDRAM for each vertex that needs it
+        self.vertices_memory = sdram_alloc_for_vertices(
+            controller, self.placements, self.allocations)
+
+        # Call all the loading functions
+        for f in self.load_functions:
+            f(self, controller)
+
+        # Load the routing tables
+        net_keymasks = {net: (net.keyspace.get_value(tag="routing"),
+                              net.keyspace.get_mask(tag="routing")) for net in
+                        self.nets}
+        routing_tables = build_routing_tables(self.routes, net_keymasks)
+        controller.load_routing_tables(routing_tables)
+
+        # Load all the applications
+        vertices_applications = {v: v.application for v in self.vertices
+                                 if v.application is not None}
+        application_map = build_application_map(
+            vertices_applications, self.placements, self.allocations)
+        controller.load_application(application_map)

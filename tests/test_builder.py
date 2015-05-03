@@ -93,7 +93,7 @@ class TestBuildObjectsAndNets(object):
         assert smodel.after_simulation_functions == [obj_post]
         assert smodel.placements == dict()
         assert smodel.allocations == dict()
-        assert smodel.application_memory == dict()
+        assert smodel.vertices_memory == dict()
         assert smodel.routes == dict()
 
     @pytest.mark.parametrize(
@@ -258,17 +258,6 @@ def test_place_and_route():
         def assign_fields_fn():
             assert cluster.call_count == 1
 
-            def get_mask_fn(tag):
-                assert tag == "routing"
-                return 0xffff0000
-
-            def get_value_fn(tag):
-                assert tag == "routing"
-                return 0x3fabffff
-
-            keyspace.get_mask.side_effect = get_mask_fn
-            keyspace.get_value.side_effect = get_value_fn
-
         assign_fields.side_effect = assign_fields_fn
 
         routing_tree = mock.Mock(name="routing tree")
@@ -314,3 +303,160 @@ def test_place_and_route():
                                      v2a: {Cores: slice(9, 10)},
                                      v2b: {Cores: slice(4, 6)}, }
         assert model.routes == {net: routing_tree}
+
+
+def test_load_application():
+    """Test the steps involved in loading an application to a SpiNNaker
+    machine.
+
+     - Building and loading routing tables
+     - Allocating SDRAM for vertices which require it
+     - Calling application loading functions
+     - Loading applications to the machine
+    """
+    # Mock controller which will be used to load the model
+    controller = mock.Mock(name="controller")
+
+    # Create the objects to store in the model
+    v1 = Vertex("test_app", resources={Cores: 1, SDRAM: 400},
+                constraints=[mock.Mock(name="constraint1")])
+    v2a = Vertex("test_app2", resources={Cores: 2, SDRAM: 100},
+                 constraints=[mock.Mock(name="constraint2"),
+                              mock.Mock(name="constraint3")])
+    v2b = Vertex("test_app2", resources={Cores: 2, SDRAM: 100},
+                 constraints=[mock.Mock(name="constraint2"),
+                              mock.Mock(name="constraint3")])
+
+    keyspace = mock.Mock(name="keyspace")
+    keyspace.length = 32
+
+    def get_mask(tag):
+        assert tag == "routing"
+        return 0xffff0000
+
+    def get_value(tag):
+        assert tag == "routing"
+        return 0x33330000
+
+    keyspace.get_mask.side_effect = get_mask
+    keyspace.get_value.side_effect = get_value
+
+    net = Net(v1, [v2a, v2b], 1, keyspace)
+
+    groups = {v2a: 1, v2b: 1}
+
+    routing_tree = mock.Mock(name="routing tree")
+
+    # Create the model
+    model = SpiNNakerModel(
+        nets=[net],
+        vertices=[v1, v2a, v2b],
+        groups=groups,
+        load_functions=list(),
+        before_simulation_functions=list(),
+        after_simulation_functions=list()
+    )
+    model.placements = {v1: (0, 0), v2a: (0, 1), v2b: (1, 0)}
+    model.allocations = {
+        v1: {Cores: slice(0, 1), SDRAM: slice(0, 400)},
+        v2a: {Cores: slice(9, 11), SDRAM: slice(300, 400)},
+        v2b: {Cores: slice(9, 11), SDRAM: slice(300, 400)},
+    }
+    model.routes = {net: routing_tree}
+
+    # Mock routing table
+    routing_table = mock.Mock(name="routing table")
+
+    # Patch out all the methods that should be called
+    with \
+            mock.patch.object(
+                nengo_spinnaker.builder, "build_routing_tables") as \
+            build_routing_tables, \
+            mock.patch.object(
+                nengo_spinnaker.builder, "build_application_map") as \
+            build_application_map, \
+            mock.patch.object(
+                nengo_spinnaker.builder, "sdram_alloc_for_vertices") as \
+            sdram_alloc:
+
+        # Create replacement methods for patched methods
+        def build_routing_tables_fn(routes, net_keys, **kwargs):
+            # Assert that the arguments were correct
+            assert routes == model.routes
+            assert net_keys == {net: (0x33330000, 0xffff0000)}
+
+            # Assert that the keyspace was only called once
+            assert keyspace.get_mask.call_count == 1
+            assert keyspace.get_value.call_count == 1
+
+            # Return a routing table
+            return routing_table
+
+        build_routing_tables.side_effect = build_routing_tables_fn
+
+        def build_application_map_fn(vertices_applications, placements,
+                                     allocations):
+            # Assert that the arguments are correct
+            assert vertices_applications == {v: v.application for v in
+                                             model.vertices}
+            assert placements == model.placements
+            assert allocations == model.allocations
+
+            return {
+                "test_app": {(0, 0): set([0])},
+                "test_app2": {(0, 1): set([9, 10]),
+                              (1, 0): set([9, 10]),
+                              }
+            }
+
+        build_application_map.side_effect = build_application_map_fn
+
+        sdram_allocs = {
+            v1: mock.Mock(),
+            v2a: mock.Mock(),
+            v2b: mock.Mock(),
+        }
+
+        def sdram_alloc_fn(cn, placements, allocations):
+            assert cn is controller
+            assert placements == model.placements
+            assert allocations == model.allocations
+
+            return sdram_allocs
+
+        sdram_alloc.side_effect = sdram_alloc_fn
+
+        # Create some load functions, add them to the model
+        def load_fn(model_, controller_):
+            # Assert that memory is alloced before calling load functions
+            assert sdram_alloc.call_count == 1
+            assert model_.vertices_memory == sdram_allocs
+
+            # Assert that the arguments are correct
+            assert model_ is model
+            assert controller_ is controller
+
+        load_a = mock.Mock(wraps=load_fn)
+        load_b = mock.Mock(wraps=load_fn)
+        model.load_functions = [load_a, load_b]
+
+        # Perform the loading
+        model.load_application(controller)
+
+        # Assert methods were called
+        assert build_routing_tables.call_count == 1
+        assert build_application_map.call_count == 1
+        assert sdram_alloc.call_count == 1
+
+        assert load_a.call_count == 1
+        assert load_b.call_count == 1
+
+        controller.load_routing_tables.assert_called_once_with(routing_table)
+        controller.load_application.assert_called_once_with({
+            "test_app": {(0, 0): set([0])},
+            "test_app2": {(0, 1): set([9, 10]),
+                          (1, 0): set([9, 10]),
+                          }
+        })
+
+        assert model.vertices_memory == sdram_allocs
