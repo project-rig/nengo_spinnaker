@@ -5,7 +5,7 @@ import collections
 import math
 from six import iteritems, itervalues
 
-from .keyspaces import is_nengo_keyspace
+from .utils.keyspaces import is_nengo_keyspace
 
 
 class Constraint(collections.namedtuple("Constraint",

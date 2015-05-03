@@ -72,68 +72,11 @@ class KeyspaceContainer(collections.defaultdict):
     keyspace belongs.
 
     The default keyspace can be obtained by requesting the keyspace with the
-    name "nengo".
-
-        >>> ksc = KeyspaceContainer()
-        >>> default_ks = ksc["nengo"]
-        >>> isinstance(default_ks, BitField)
-        True
-        >>> default_ks.get_tags('object') == {ksc.routing_tag,
-        ...                                         ksc.filter_routing_tag}
-        True
-        >>> default_ks.get_tags('connection') == {ksc.routing_tag,
-        ...                                             ksc.filter_routing_tag}
-        True
-        >>> default_ks.get_tags('cluster') == {ksc.routing_tag}
-        True
-        >>> default_ks
-        <32-bit BitField 'user':0, 'object':?, 'cluster':?, 'connection':?, \
-'index':?>
-
-    Additional keyspaces can be requested and are automagically created.
-
-        >>> new_ks = ksc["new_user"]
-        >>> new_ks
-        <32-bit BitField 'user':1>
-
-        >>> new_ks2 = ksc["new_user2"]
-        >>> new_ks2
-        <32-bit BitField 'user':2>
-
-    ..warning::
-        Namespacing should be used to avoid collisions between keyspaces.
+    name "nengo". Additional keyspaces can be requested and are automagically
+    created.
 
     ..warning::
         The `user` field is reserved for this container.
-
-    Re-requesting an existing keyspace simply returns the existing one.
-
-        >>> ksc["new_user"]
-        <32-bit BitField 'user':1>
-        >>> ksc["new_user"] is new_ks
-        True
-        >>> ksc["new_user"] is not new_ks2
-        True
-
-    The routing and filter routing tags are also exposed through this interface
-    as strings.
-
-        >>> ksc.routing_tag
-        'routing'
-        >>> ksc.filter_routing_tag
-        'filter_routing'
-
-    Finally, field sizes may be fixed.
-
-        >>> # Before fixing trying to get a mask fails
-        >>> new_ks.get_mask(tag=ksc.routing_tag)
-        Traceback (most recent call last):
-        ValueError: Field 'user' does not have a fixed size/position.
-
-        >>> # After fixing it works fine
-        >>> ksc.assign_fields()
-        >>> hex(new_ks.get_mask(tag=ksc.routing_tag))
-        '0x30'
     """
     class _KeyspaceGetter(object):
         def __init__(self, ks):
@@ -187,10 +130,6 @@ class KeyspaceContainer(collections.defaultdict):
     def filter_routing_tag(self):
         """The tag used in creating filter routing table entries."""
         return self._filter_routing_tag
-
-
-keyspaces = KeyspaceContainer()
-"""The global set of keyspaces."""
 
 
 def is_nengo_keyspace(keyspace):

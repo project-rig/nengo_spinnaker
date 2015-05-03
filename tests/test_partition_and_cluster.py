@@ -3,7 +3,7 @@ from rig.bitfield import UnavailableFieldError
 
 from nengo_spinnaker import netlist as nl
 from nengo_spinnaker import partition_and_cluster as pac
-from nengo_spinnaker.keyspaces import KeyspaceContainer
+from nengo_spinnaker.utils.keyspaces import KeyspaceContainer
 
 
 def test_constraint():
@@ -55,8 +55,8 @@ class TestPartition(object):
         constraints = {constraint_a: lambda sl: sl.stop - sl.start + 49}
 
         # Perform the partitioning
-        assert list(pac.partition(slice(100), constraints)) == \
-            [slice(n, n+1) for n in range(100)]
+        assert (list(pac.partition(slice(100), constraints)) ==
+                [slice(n, n+1) for n in range(100)])  # pragma : no cover
 
     def test_unpartitionable(self):
         # Create the constraint

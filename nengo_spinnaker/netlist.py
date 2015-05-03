@@ -7,7 +7,7 @@ class Net(rig.netlist.Net):
     """A net represents connectivity from one vertex (or vertex slice) to many
     vertices and vertex slices.
 
-    .. note::
+    ..note::
         This extends the Rig :py:class:`~rig.netlist.Netlist` to add Nengo
         specific attributes and terms.
 
