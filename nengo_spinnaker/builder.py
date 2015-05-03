@@ -2,9 +2,12 @@
 """
 import collections
 from itertools import chain
+from rig.place_and_route import place, allocate, route
 from six import iteritems, itervalues
 
+from .keyspaces import keyspaces
 from .netlist import Net
+from .partition_and_cluster import identify_clusters
 from .utils.collections import (
     mrolookupdict, noneignoringlist, registerabledict, flatinsertionlist)
 from .utils.itertools import flatten
@@ -146,3 +149,33 @@ class SpiNNakerModel(object):
         # Create the model
         return cls(nets, vertices, groups, load_functions,
                    before_simulation_functions, after_simulation_functions)
+
+    def place_and_route(self, machine):
+        """Place and route the model for the given SpiNNaker machine.
+
+        Parameters
+        ----------
+        machine : :py:class:`~rig.machine.Machine`
+            Description of the SpiNNaker machine on which to place and route.
+        """
+        # Build the dictionary of vertex resources and constraints
+        vertices_resources = {v: v.resources for v in self.vertices}
+        constraints = list(flatten(v.constraints for v in self.vertices))
+
+        # Perform placement and allocation
+        self.placements = place(vertices_resources, self.nets,
+                                machine, constraints)
+        self.allocations = allocate(vertices_resources, self.nets, machine,
+                                    constraints, self.placements)
+
+        # Assign unique IDs to clusters of vertices and their related nets
+        identify_clusters(self.placements, self.nets, self.groups)
+
+        # Fix the bitfields so that routing keys can be allocated
+        keyspaces.assign_fields()
+
+        # Performing routing
+        self.routes = route(
+            vertices_resources, self.nets, machine, constraints,
+            self.placements, self.allocations
+        )
