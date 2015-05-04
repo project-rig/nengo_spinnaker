@@ -149,3 +149,15 @@ class mrolookupdict(dict):
                 return super(mrolookupdict, self).__getitem__(t)
         else:
             raise KeyError(cls)
+
+
+class counter(object):
+    """A counter which can be used with `defaultdict` to assign unique integers
+    to objects.
+    """
+    def __init__(self):
+        self._count = -1
+
+    def __call__(self):
+        self._count += 1
+        return self._count

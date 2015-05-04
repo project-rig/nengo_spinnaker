@@ -1,5 +1,6 @@
-import collections
+from __future__ import absolute_import
 
+import collections
 from rig.bitfield import BitField
 
 

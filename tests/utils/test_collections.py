@@ -73,3 +73,11 @@ def test_mrolookupdict():
     # Objects not in the dictionary raise KeyErrors
     with pytest.raises(KeyError):
         mdict[object]
+
+
+def test_counter():
+    """Test an object which increments every time it is called."""
+    counter = nscollections.counter()
+
+    for i in range(10):
+        assert counter() == i
