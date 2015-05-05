@@ -1,7 +1,8 @@
 """Higher and lower level netlist items.
 """
 import rig.netlist
-from rig.place_and_route import place, allocate, route
+from rig import place_and_route
+
 from rig.place_and_route.utils import (build_application_map,
                                        build_routing_tables)
 from rig.machine_control.utils import sdram_alloc_for_vertices
@@ -164,13 +165,35 @@ class Netlist(object):
         self.routes = dict()
         self.vertices_memory = dict()
 
-    def place_and_route(self, machine):
+    def place_and_route(self, machine,
+                        place=place_and_route.place,
+                        place_kwargs={},
+                        allocate=place_and_route.allocate,
+                        allocate_kwargs={},
+                        route=place_and_route.route,
+                        route_kwargs={}):
         """Place and route the netlist onto the given SpiNNaker machine.
 
         Parameters
         ----------
         machine : :py:class:`~rig.machine.Machine`
             Machine onto which the netlist should be placed and routed.
+
+        Other Parameters
+        ----------------
+        place : function
+            Placement function. Must support the interface defined by Rig.
+        place_kwargs : dict
+            Keyword arguments for the placement method.
+        allocate : function
+            Resource allocation function. Must support the interface defined by
+            Rig.
+        allocate_kwargs : dict
+            Keyword arguments for the allocation function.
+        route : function
+            Router function. Must support the interface defined by Rig.
+        route_kwargs : dict
+            Keyword arguments for the router function.
         """
         # Build a map of vertices to the resources they require, get a list of
         # constraints.
@@ -179,9 +202,10 @@ class Netlist(object):
 
         # Perform placement and allocation
         self.placements = place(vertices_resources, self.nets,
-                                machine, constraints)
+                                machine, constraints, **place_kwargs)
         self.allocations = allocate(vertices_resources, self.nets, machine,
-                                    constraints, self.placements)
+                                    constraints, self.placements,
+                                    **allocate_kwargs)
 
         # Identify clusters and modify keyspaces and vertices appropriately
         identify_clusters(self.placements, self.nets, self.groups)
@@ -191,7 +215,8 @@ class Netlist(object):
 
         # Finally, route all nets
         self.routes = route(vertices_resources, self.nets, machine,
-                            constraints, self.placements, self.allocations)
+                            constraints, self.placements, self.allocations,
+                            **route_kwargs)
 
     def load_application(self, controller):
         """Load the netlist to a SpiNNaker machine.

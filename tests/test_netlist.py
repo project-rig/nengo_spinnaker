@@ -133,30 +133,31 @@ def test_place_and_route():
     )
 
     # Patch out all the methods that should be called
-    with \
-            mock.patch("nengo_spinnaker.netlist.place") as place, \
-            mock.patch("nengo_spinnaker.netlist.allocate") as allocate, \
-            mock.patch(
-                "nengo_spinnaker.netlist.identify_clusters") as cluster, \
-            mock.patch("nengo_spinnaker.netlist.route") as route:
+    with mock.patch("nengo_spinnaker.netlist.identify_clusters") as cluster:
         # Create a mock machine to place/route against
         machine = mock.Mock(name="machine")
 
         # Set up these methods to ensure that the call order is correct and
         # that they return appropriate objects
-        def place_fn(resources, nets, machine, constraints):
+        placer_kwargs = {"spam": "foo"}
+
+        def place_fn(resources, nets, machine, constraints, **kwargs):
             # Check that the arguments were correct
             assert resources == {v: v.resources for v in nl.vertices}
             assert nets == nl.nets
             assert constraints == list(flatten(  # pragma : no branch
                 v.constraints for v in nl.vertices))
+            assert kwargs == placer_kwargs
 
             # Return some placements
             return {v1: (0, 0), v2a: (0, 1), v2b: (1, 0)}
 
-        place.side_effect = place_fn
+        place = mock.Mock(wraps=place_fn)
 
-        def allocate_fn(resources, nets, machine, constraints, placements):
+        allocater_kwargs = {"egg": "bar"}
+
+        def allocate_fn(resources, nets, machine, constraints, placements,
+                        **kwargs):
             assert place.call_count == 1
 
             # Check that the arguments were correct
@@ -165,6 +166,7 @@ def test_place_and_route():
             assert constraints == list(flatten(  # pragma : no branch
                 v.constraints for v in nl.vertices))
             assert placements == {v1: (0, 0), v2a: (0, 1), v2b: (1, 0)}
+            assert kwargs == allocater_kwargs
 
             # Return some allocations
             return {
@@ -173,7 +175,7 @@ def test_place_and_route():
                 v2b: {Cores: slice(4, 6)},
             }
 
-        allocate.side_effect = allocate_fn
+        allocate = mock.Mock(wraps=allocate_fn)
 
         def cluster_fn(placed_vertices, nets, groups):
             assert allocate.call_count == 1
@@ -192,8 +194,10 @@ def test_place_and_route():
 
         routing_tree = mock.Mock(name="routing tree")
 
+        router_kwargs = {"King": "of the Britons"}
+
         def route_fn(resources, nets, machine_, constraints, placements,
-                     allocations):
+                     allocations, **kwargs):
             assert keyspace_container.assign_fields.call_count == 1
 
             # Check that the arguments are correct
@@ -206,11 +210,12 @@ def test_place_and_route():
             assert allocations == {v1: {Cores: slice(0, 1)},
                                    v2a: {Cores: slice(9, 10)},
                                    v2b: {Cores: slice(4, 6)}, }
+            assert kwargs == router_kwargs
 
             # Return some routes
             return {net: routing_tree}
 
-        route.side_effect = route_fn
+        route = mock.Mock(wraps=route_fn)
 
         # Assert starting from a blank slate
         assert nl.placements == dict()
@@ -218,7 +223,15 @@ def test_place_and_route():
         assert nl.routes == dict()
 
         # Perform the place and route for the machine
-        nl.place_and_route(machine)
+        nl.place_and_route(
+            machine,
+            place=place,
+            place_kwargs=placer_kwargs,
+            allocate=allocate,
+            allocate_kwargs=allocater_kwargs,
+            route=route,
+            route_kwargs=router_kwargs
+        )
 
         # Assert methods were called once each
         assert place.call_count == 1
