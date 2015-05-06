@@ -68,7 +68,8 @@ class Model(object):
         .. py:function:: builder(model, connection)
 
     It is recommended that builders return a :py:class:`~.BuiltConnection`
-    object.
+    object as this will be inserted into the `params` dictionary in the
+    :py:class:`~.Model`.
     """
 
     source_getters = collections_ext.registerabledict()

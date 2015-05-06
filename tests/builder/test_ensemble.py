@@ -238,6 +238,77 @@ class TestNeuronSinks(object):
         assert sink.target.port is ensemble.EnsembleInputPort.neurons
 
 
+class TestBuildFromEnsembleConnection(object):
+    """Test the construction of parameters that describe connections from
+    Ensembles.
+    """
+    def test_standard_build(self):
+        """Test relatively standard build."""
+        # Create the network
+        with nengo.Network():
+            a = nengo.Ensemble(200, 3)
+            b = nengo.Node(lambda t, x: None, size_in=2)
+            a_b = nengo.Connection(a[:2], b, transform=0.5*np.eye(2))
+
+        # Create the model and built the pre-synaptic Ensemble
+        model = builder.Model()
+        model.rng = np.random
+        model.seeds[a] = 1
+        model.seeds[a_b] = 2
+        ensemble.build_ensemble(model, a)
+
+        # Now build the connection and check that the params seem sensible
+        params = ensemble.build_from_ensemble_connection(model, a_b)
+        assert params.decoders.shape == (200, 2)
+        assert np.all(params.transform == 0.5 * np.eye(2))
+        assert np.all(params.eval_points == model.params[a].eval_points)
+        assert params.solver_info is not None
+
+    @pytest.mark.xfail(reason="Unimplemented functionality")
+    def test_weights_built(self):
+        """Test a build using a weights-based solver."""
+        # Create the network
+        with nengo.Network():
+            a = nengo.Ensemble(200, 2)
+            b = nengo.Ensemble(400, 2)
+            a_b = nengo.Connection(
+                a, b, solver=nengo.solvers.Lstsq(weights=True)
+            )
+
+        # Create the model and built the pre-synaptic Ensemble
+        model = builder.Model()
+        model.rng = np.random
+        model.seeds[a] = 1
+        model.seeds[b] = 2
+        model.seeds[a_b] = 3
+        ensemble.build_ensemble(model, a)
+        ensemble.build_ensemble(model, b)
+
+        # Now build the connection and check that the params seem sensible
+        params = ensemble.build_from_ensemble_connection(model, a_b)
+        assert params.decoders.shape == (200, 400)
+
+
+class TestBuildFromNeuronsConnection(object):
+    """Test the construction of parameters that describe connections from
+    Neurons.
+    """
+    @pytest.mark.xfail(reason="Unimplemented functionality")
+    def test_standard_build(self):
+        # Create the network
+        with nengo.Network():
+            a = nengo.Ensemble(100, 2)
+            b = nengo.Ensemble(100, 3)
+            a_b = nengo.Connection(a.neurons, b.neurons)
+
+        # Get the connection parameters
+        params = ensemble.build_from_neurons_connection(None, a_b)
+        assert params.decoders is None
+        assert np.all(params.transform == np.eye(100))
+        assert params.eval_points is None
+        assert params.solver_info is None
+
+
 class TestEnsembleLIF(object):
     @pytest.mark.parametrize("size_in", [1, 4, 5])
     def test_init(self, size_in):

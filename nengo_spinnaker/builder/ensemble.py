@@ -1,13 +1,14 @@
 import collections
 import enum
 import nengo
+from nengo.builder import connection as connection_b
 from nengo.builder import ensemble
 from nengo.dists import Distribution
 from nengo.utils.builder import full_transform
 from nengo.utils import numpy as npext
 import numpy as np
 
-from .builder import InputPort, Model, ObjectPort, OutputPort, spec
+from .builder import BuiltConnection, InputPort, Model, ObjectPort, spec
 from ..utils import collections as collections_ext
 
 BuiltEnsemble = collections.namedtuple(
@@ -36,7 +37,7 @@ class EnsembleInputPort(enum.Enum):
 def get_neurons_source(model, connection):
     """Get the source for connections out of neurons."""
     raise NotImplementedError(
-        "SpiNNaker does not currently support neuron to neuron connections."
+        "SpiNNaker does not currently support neuron to neuron connections"
     )
 
 
@@ -143,6 +144,46 @@ def build_lif(model, ens):
     # functions to prepare the ensemble for simulation.  The object may be
     # modified by later methods.
     model.object_intermediates[ens] = EnsembleLIF(ens.size_in)
+
+
+@Model.connection_parameter_builders.register(nengo.Ensemble)
+def build_from_ensemble_connection(model, conn):
+    """Build the parameters object for a connection from an Ensemble."""
+    # Create a random number generator
+    rng = np.random.RandomState(model.seeds[conn])
+
+    # Get the transform
+    transform = full_transform(conn, slice_pre=False)
+
+    # Use Nengo upstream to build parameters for the solver
+    eval_points, activities, targets = connection_b.build_linear_system(
+        model, conn, rng
+    )
+
+    # Use cached solver
+    solver = model.decoder_cache.wrap_solver(conn.solver)
+    if solver.weights:
+        raise NotImplementedError(
+            "SpiNNaker does not currently support neuron to neuron connections"
+        )
+    else:
+        decoders, solver_info = solver(activities, targets, rng=rng)
+
+    # Return the parameters
+    return BuiltConnection(
+        decoders=decoders,
+        eval_points=eval_points,
+        transform=transform,
+        solver_info=solver_info
+    )
+
+
+@Model.connection_parameter_builders.register(nengo.ensemble.Neurons)
+def build_from_neurons_connection(model, conn):
+    """Build the parameters object for a connection from Neurons."""
+    raise NotImplementedError(
+        "SpiNNaker does not currently support connections from Neurons"""
+    )
 
 
 class EnsembleLIF(object):
