@@ -3,9 +3,16 @@ import collections
 import enum
 from nengo.cache import NoDecoderCache
 from nengo.utils.builder import objs_and_connections, remove_passthrough_nodes
+from nengo.utils import numpy as npext
+import numpy as np
 
 from nengo_spinnaker.utils import collections as collections_ext
 from nengo_spinnaker.utils.keyspaces import KeyspaceContainer
+
+
+def get_seed(obj, rng):
+    seed = rng.randint(npext.maxint)
+    return (seed if getattr(obj, "seed", None) is None else obj.seed)
 
 
 class Model(object):
@@ -26,14 +33,11 @@ class Model(object):
         Map of Nengo objects to the seeds used in their construction.
     keyspaces : {keyspace_name: keyspace}
         Map of keyspace names to the keyspace which they may use.
-    objects_intermediates : {object: [intermediate, ...], ...}
+    objects_intermediates : {object: intermediate, ...}
         Map of objects to the intermediate objects which will simulate them on
-        SpiNNaker.  `None` is used to indicate intermediates which are not
-        associated with any Nengo objects.
-    connections_signals : {connection: [:py:`~.Signal`, ...], ...}
-        Map of connections to the signals that simulate them.  `None` is used
-        to indicate signals which are not associated with an existing Nengo
-        connection.
+        SpiNNaker.
+    connections_signals : {connection: :py:`~.Signal`, ...}
+        Map of connections to the signals that simulate them.
     """
 
     builders = collections_ext.registerabledict()
@@ -94,9 +98,10 @@ class Model(object):
 
         self.params = dict()
         self.seeds = dict()
+        self.rng = None
 
-        self.object_intermediates = collections.defaultdict(list)
-        self.connections_signals = collections.defaultdict(list)
+        self.object_intermediates = dict()
+        self.connections_signals = dict()
 
         if keyspaces is None:
             keyspaces = KeyspaceContainer()
@@ -135,6 +140,11 @@ class Model(object):
         extra_sink_getters : {type: fn, ...}
             Extra sink getter methods.
         """
+        # Get the seed and random number generator
+
+        self.seeds[network] = get_seed(network, np.random)
+        self.rng = np.random.RandomState(self.seeds[network])
+
         # Get all objects and connections and remove all passthrough Nodes
         objs, conns = remove_passthrough_nodes(*objs_and_connections(network))
 
@@ -163,6 +173,7 @@ class Model(object):
     def make_object(self, obj):
         """Call an appropriate build function for the given object.
         """
+        self.seeds[obj] = get_seed(obj, self.rng)
         self._builders[type(obj)](self, obj)
 
     def make_connection(self, conn):
@@ -171,6 +182,7 @@ class Model(object):
         This method will build a connection and construct a new signal which
         will be included in the model.
         """
+        self.seeds[conn] = get_seed(conn, self.rng)
         # TODO Build the connection!
 
         # Get the source and sink specification, then make the signal provided
@@ -179,9 +191,9 @@ class Model(object):
         sink = self._sink_getters[type(conn.post_obj)](self, conn)
 
         if source is not None and sink is not None:
-            self.connections_signals[conn].append(
-                _make_signal(self, conn, source, sink)
-            )
+            assert conn not in self.connections_signals
+            self.connections_signals[conn] = _make_signal(self, conn,
+                                                          source, sink)
 
 
 ObjectPort = collections.namedtuple("ObjectPort", "obj port")

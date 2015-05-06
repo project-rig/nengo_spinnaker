@@ -2,6 +2,7 @@ import mock
 from mock import patch
 import nengo
 from nengo.cache import NoDecoderCache
+import numpy as np
 import pytest
 
 from nengo_spinnaker.builder.builder import Model, Signal, spec, _make_signal
@@ -75,7 +76,7 @@ class TestBuild(object):
         and that a mrolookupdict is used.
         """
         class A(object):
-            pass
+            seed = 101
 
         class B(object):
             pass
@@ -87,6 +88,7 @@ class TestBuild(object):
         b = B()
 
         network = mock.Mock()
+        network.seed = None
         network.connections = []
         network.ensembles = [a]
         network.nodes = [b]
@@ -101,6 +103,7 @@ class TestBuild(object):
         else:
             # Create the model
             model = Model()
+            model.rng = np.random
 
             # When using `make_object` directly `_builders` should be defined
             # and used.
@@ -110,6 +113,10 @@ class TestBuild(object):
             # Build the objects
             model.make_object(a)
             model.make_object(b)
+
+        # Assert that seeds were supplied
+        assert model.seeds[a] == a.seed
+        assert model.seeds[b] is not None
 
         # Assert the builders got called
         builders[A].assert_called_once_with(model, a)
@@ -150,7 +157,8 @@ class TestBuild(object):
 
 class TestMakeConnection(object):
     @pytest.mark.parametrize("use_registered_dicts", [True, False])
-    def test_make_connections(self, use_registered_dicts):
+    @pytest.mark.parametrize("seed", [None, 456])
+    def test_make_connections(self, use_registered_dicts, seed):
         """Test that building connections adds a new signal to the model."""
         # TODO Test that the connection is fully built
         model = Model()
@@ -166,6 +174,7 @@ class TestMakeConnection(object):
 
         # Create a connection from a to b
         connection = mock.Mock()
+        connection.seed = seed
         connection.pre_obj = a
         connection.post_obj = b
 
@@ -191,6 +200,7 @@ class TestMakeConnection(object):
 
         # Create a mock network
         network = mock.Mock()
+        network.seed = None
         network.connections = [connection]
         network.ensembles = []
         network.nodes = []
@@ -207,15 +217,20 @@ class TestMakeConnection(object):
                         extra_source_getters={A: source_getter},
                         extra_sink_getters={B: sink_getter})
 
+        # Check that seeds were provided
+        if seed is not None:
+            assert model.seeds[connection] == seed
+        else:
+            assert model.seeds[connection] is not None
+
         # Assert the getters were called
         assert source_getter.call_count == 1
         assert sink_getter.call_count == 1
 
         # Assert that the signal exists
-        assert len(model.connections_signals[connection]) == 1
-        for signal in model.connections_signals[connection]:
-            assert signal.source is source
-            assert signal.sinks == [sink]
+        signal = model.connections_signals[connection]
+        assert signal.source is source
+        assert signal.sinks == [sink]
 
     @pytest.mark.parametrize(
         "source_getter, sink_getter",
@@ -237,6 +252,7 @@ class TestMakeConnection(object):
 
         # Create a mock network
         network = mock.Mock()
+        network.seed = None
         network.connections = [connection]
         network.ensembles = []
         network.nodes = []
@@ -249,7 +265,7 @@ class TestMakeConnection(object):
             model.build(network)
 
         # Assert that no signal exists
-        assert len(model.connections_signals[connection]) == 0
+        assert connection not in model.connections_signals
 
 
 def test_get_object_and_connection_id():
