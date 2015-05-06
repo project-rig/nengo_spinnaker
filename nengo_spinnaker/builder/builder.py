@@ -1,6 +1,7 @@
 """SpiNNaker builder for Nengo models."""
 import collections
 import enum
+import nengo
 from nengo.cache import NoDecoderCache
 from nengo.utils.builder import objs_and_connections, remove_passthrough_nodes
 from nengo.utils import numpy as npext
@@ -134,7 +135,11 @@ class Model(object):
         )
 
         # Internally used dictionaries of build methods
-        self._builders = collections_ext.mrolookupdict()
+        self._builders = dict()
+        self._connection_parameter_builders = dict()
+        self._source_getters = dict()
+        self._sink_getters = dict()
+        self._probe_builders = dict()
 
     def _get_object_and_connection_id(self, obj, connection):
         """Get a unique ID for the object and connection pair for use in
@@ -147,7 +152,8 @@ class Model(object):
 
     def build(self, network, extra_builders={},
               extra_source_getters={}, extra_sink_getters={},
-              extra_connection_parameter_builders={}):
+              extra_connection_parameter_builders={},
+              extra_probe_builders={}):
         """Build a Network into this model.
 
         Parameters
@@ -162,6 +168,8 @@ class Model(object):
             Extra sink getter methods.
         extra_connection_parameter_builder : {type: fn, ...}
             Extra connection parameter builders.
+        extra_probe_builders : {type: fn, ...}
+            Extra probe builder methods.
         """
         # Get the seed and random number generator
 
@@ -171,16 +179,11 @@ class Model(object):
         # Get all objects and connections and remove all passthrough Nodes
         objs, conns = remove_passthrough_nodes(*objs_and_connections(network))
 
-        # Get a clean set of builders
+        # Get a clean set of builders and getters
         self._builders = collections_ext.mrolookupdict()
         self._builders.update(self.builders)
         self._builders.update(extra_builders)
 
-        # Build all objects
-        for obj in objs:
-            self.make_object(obj)
-
-        # Get a clean set of getters and builders
         self._connection_parameter_builders = collections_ext.mrolookupdict()
         self._connection_parameter_builders.update(
             self.connection_parameter_builders
@@ -197,9 +200,21 @@ class Model(object):
         self._sink_getters.update(self.sink_getters)
         self._sink_getters.update(extra_sink_getters)
 
+        self._probe_builders = dict()
+        self._probe_builders.update(self.probe_builders)
+        self._probe_builders.update(extra_probe_builders)
+
+        # Build all objects
+        for obj in objs:
+            self.make_object(obj)
+
         # Build all the connections
         for connection in conns:
             self.make_connection(connection)
+
+        # Build all the probes
+        for probe in network.all_probes:
+            self.make_probe(probe)
 
     def make_object(self, obj):
         """Call an appropriate build function for the given object.
@@ -226,6 +241,18 @@ class Model(object):
             assert conn not in self.connections_signals
             self.connections_signals[conn] = _make_signal(self, conn,
                                                           source, sink)
+
+    def make_probe(self, probe):
+        """Call an appropriate build function for the given probe."""
+        self.seeds[probe] = get_seed(probe, self.rng)
+
+        # Get the target type
+        target_obj = probe.target
+        if isinstance(target_obj, nengo.base.ObjView):
+            target_obj = target_obj.obj
+
+        # Build
+        self._probe_builders[type(target_obj)](self, probe)
 
 
 ObjectPort = collections.namedtuple("ObjectPort", "obj port")

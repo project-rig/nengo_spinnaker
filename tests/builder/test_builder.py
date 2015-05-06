@@ -95,6 +95,7 @@ class TestBuild(object):
         network.ensembles = [a]
         network.nodes = [b]
         network.networks = []
+        network.all_probes = []
 
         if not use_make_object:
             # Patch the default builders
@@ -233,6 +234,7 @@ class TestMakeConnection(object):
         network.ensembles = []
         network.nodes = []
         network.networks = []
+        network.all_probes = []
 
         if use_registered_dicts:
             # Patch the getters, add a null builder
@@ -299,6 +301,7 @@ class TestMakeConnection(object):
         network.ensembles = []
         network.nodes = []
         network.networks = []
+        network.all_probes = []
 
         # Patch the getters, add a null builder
         with patch.object(model, "source_getters", {A: source_getter}), \
@@ -310,6 +313,62 @@ class TestMakeConnection(object):
 
         # Assert that no signal exists
         assert connection not in model.connections_signals
+
+
+class TestBuildProbe(object):
+    """Test the building of probes."""
+    @pytest.mark.parametrize("use_arguments", [False, True])
+    @pytest.mark.parametrize("with_slice", [False, True])
+    def test_standard(self, use_arguments, with_slice):
+        # Create test network
+        with nengo.Network() as network:
+            a = nengo.Ensemble(100, 2)
+
+            if not with_slice:
+                p_a = nengo.Probe(a)
+            else:
+                p_a = nengo.Probe(a[0])
+
+            p_n = nengo.Probe(a.neurons)
+
+        # Create a model
+        model = Model()
+
+        # Dummy neurons builder
+        ens_build = mock.Mock(name="ensemble builder")
+
+        # Define two different probe build functions
+        def build_ens_probe_fn(model, probe):
+            assert ens_build.called
+            assert model is model
+            assert probe is p_a
+
+        build_ens_probe = mock.Mock(wraps=build_ens_probe_fn)
+
+        def build_neurons_probe_fn(model, probe):
+            assert ens_build.called
+            assert model is model
+            assert probe is p_n
+
+        build_neurons_probe = mock.Mock(wraps=build_neurons_probe_fn)
+
+        # Build the model
+        probe_builders = {nengo.Ensemble: build_ens_probe,
+                          nengo.ensemble.Neurons: build_neurons_probe}
+        with patch.object(model, "builders", new={nengo.Ensemble: ens_build}):
+            if not use_arguments:
+                with patch.object(model, "probe_builders", new=probe_builders):
+                    model.build(network)
+            else:
+                with patch.object(model, "probe_builders", new={}):
+                    model.build(network, extra_probe_builders=probe_builders)
+
+
+        # Assert the probe functions were built
+        assert p_a in model.seeds
+        assert p_n in model.seeds
+        assert build_ens_probe.call_count == 1
+        assert build_neurons_probe.call_count == 1
 
 
 def test_get_object_and_connection_id():
