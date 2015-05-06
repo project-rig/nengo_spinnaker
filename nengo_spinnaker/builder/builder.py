@@ -261,7 +261,8 @@ class Signal(
     """
     def __new__(cls, source, sinks, keyspace, weight=0, latching=False):
         # Ensure the sinks are a list
-        if isinstance(sinks, collections.Iterable):
+        if (not isinstance(sinks, ObjectPort) and
+                isinstance(sinks, collections.Iterable)):
             sinks = list(sinks)
         else:
             sinks = [sinks]

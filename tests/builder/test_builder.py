@@ -5,7 +5,9 @@ from nengo.cache import NoDecoderCache
 import numpy as np
 import pytest
 
-from nengo_spinnaker.builder.builder import Model, Signal, spec, _make_signal
+from nengo_spinnaker.builder.builder import (
+    Model, Signal, spec, _make_signal, ObjectPort
+)
 
 
 class TestSignal(object):
@@ -179,8 +181,8 @@ class TestMakeConnection(object):
         connection.post_obj = b
 
         # Create getter methods
-        source = mock.Mock()
-        sink = mock.Mock()
+        source = ObjectPort(mock.Mock(), None)
+        sink = ObjectPort(mock.Mock(), None)
 
         def source_getter_fn(m, c):
             assert m is model

@@ -3,10 +3,11 @@ import enum
 import nengo
 from nengo.builder import ensemble
 from nengo.dists import Distribution
+from nengo.utils.builder import full_transform
 from nengo.utils import numpy as npext
 import numpy as np
 
-from .builder import Model
+from .builder import InputPort, Model, ObjectPort, OutputPort, spec
 from ..utils import collections as collections_ext
 
 BuiltEnsemble = collections.namedtuple(
@@ -29,6 +30,57 @@ class EnsembleInputPort(enum.Enum):
 
     global_inhibition = 1
     """Global inhibition input."""
+
+
+@Model.source_getters.register(nengo.ensemble.Neurons)
+def get_neurons_source(model, connection):
+    """Get the source for connections out of neurons."""
+    raise NotImplementedError(
+        "SpiNNaker does not currently support neuron to neuron connections."
+    )
+
+
+@Model.sink_getters.register(nengo.Ensemble)
+def get_ensemble_sink(model, connection):
+    """Get the sink for connections into an Ensemble."""
+    ens = model.object_intermediates[connection.post_obj]
+
+    if (isinstance(connection.pre_obj, nengo.Node) and
+            not callable(connection.pre_obj.output)):
+        # Connections from constant valued Nodes are optimised out.
+        # Build the value that will be added to the direct input for the
+        # ensemble.
+        val = connection.pre_obj.output[connection.pre_slice]
+
+        if connection.function is not None:
+            val = connection.function(val)
+
+        transform = full_transform(connection, slice_pre=False)
+        ens.direct_input += np.dot(transform, val)
+    else:
+        # Otherwise we just sink into the Ensemble
+        return spec(ObjectPort(ens, InputPort.standard))
+
+
+@Model.sink_getters.register(nengo.ensemble.Neurons)
+def get_neurons_sink(model, connection):
+    """Get the sink for connections into the neurons of an ensemble."""
+    ens = model.object_intermediates[connection.post_obj.ensemble]
+
+    if isinstance(connection.pre_obj, nengo.ensemble.Neurons):
+        # Connections from Neurons can go straight to the Neurons
+        return spec(ObjectPort(ens, EnsembleInputPort.neurons))
+    elif np.all(connection.transform[1:] == connection.transform[0]):
+        # Connections from non-neurons to Neurons where the transform delivers
+        # the same value to all neurons are treated as global inhibition
+        # connection.
+        return spec(ObjectPort(ens, EnsembleInputPort.global_inhibition))
+    else:
+        # We don't support arbitrary connections into neurons
+        raise NotImplementedError(
+            "SpiNNaker does not support arbitrary connections into Neurons. "
+            "If this is a serious hindrance please open an issue on GitHub."
+        )
 
 
 ensemble_builders = collections_ext.registerabledict()
