@@ -9,6 +9,7 @@ from nengo.utils import numpy as npext
 import numpy as np
 
 from .builder import BuiltConnection, InputPort, Model, ObjectPort, spec
+from .. import operators
 from ..utils import collections as collections_ext
 
 BuiltEnsemble = collections.namedtuple(
@@ -143,7 +144,7 @@ def build_lif(model, ens):
     # object will be responsible for adding items to the netlist and providing
     # functions to prepare the ensemble for simulation.  The object may be
     # modified by later methods.
-    model.object_intermediates[ens] = EnsembleLIF(ens.size_in)
+    model.object_intermediates[ens] = operators.EnsembleLIF(ens.size_in)
 
 
 @Model.connection_parameter_builders.register(nengo.Ensemble)
@@ -186,9 +187,43 @@ def build_from_neurons_connection(model, conn):
     )
 
 
-class EnsembleLIF(object):
-    """Controller for an ensemble of LIF neurons."""
-    def __init__(self, size_in):
-        """Create a new LIF ensemble controller."""
-        self.direct_input = np.zeros(size_in)
-        self.local_probes = list()
+@Model.probe_builders.register(nengo.Ensemble)
+def build_ensemble_probe(model, probe):
+    """Build a Probe which has an Ensemble as its target."""
+    if probe.attr == "decoded_output":
+        # Create an object to receive the probed data
+        model.object_intermediates[probe] = operators.ValueSink(
+            probe.size_in, probe.sample_every / model.dt
+        )
+
+        # Create a new connection from the ensemble to the probe
+        seed = model.seeds[probe]
+        conn = nengo.Connection(
+            probe.target, probe, synapse=probe.synapse, solver=probe.solver,
+            seed=seed, add_to_container=False
+        )
+        model.make_connection(conn)
+    else:
+        raise NotImplementedError(
+            "SpiNNaker does not support probing '{}' on Ensembles.".format(
+                probe.attr
+            )
+        )
+
+
+@Model.probe_builders.register(nengo.ensemble.Neurons)
+def build_neurons_probe(model, probe):
+    """Build a probe which has Neurons as its target."""
+    if probe.attr in ("output", "spikes"):
+        # Add this probe to the list of probes attached to the ensemble object.
+        model.object_intermediates[probe.target.ensemble].local_probes.append(
+            probe
+        )
+    else:
+        raise NotImplementedError(
+            "SpiNNaker does not currently support probing '{}' on '{}' "
+            "neurons".format(
+                probe.attr,
+                probe.target.ensemble.neuron_type.__class__.__name__
+            )
+        )

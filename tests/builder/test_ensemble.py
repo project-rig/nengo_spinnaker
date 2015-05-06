@@ -3,6 +3,7 @@ import numpy as np
 import pytest
 
 from nengo_spinnaker.builder import builder, ensemble
+from nengo_spinnaker import operators
 
 
 class TestBuildEnsembleLIF(object):
@@ -32,7 +33,7 @@ class TestBuildEnsembleLIF(object):
 
         # Check that a new object was inserted into the objects dictionary
         assert isinstance(model.object_intermediates[ens],
-                          ensemble.EnsembleLIF)
+                          operators.EnsembleLIF)
 
     def test_with_encoders_and_gain_bias(self):
         """Test that the encoders we provide are used (albeit scaled)"""
@@ -102,7 +103,7 @@ def test_neurons_source():
 
     # Create a model with the Ensemble for a in it
     model = builder.Model()
-    a_ens = ensemble.EnsembleLIF(a.size_in)
+    a_ens = operators.EnsembleLIF(a.size_in)
     model.object_intermediates[a] = a_ens
 
     # Get the source, check that an appropriate target is return
@@ -125,7 +126,7 @@ class TestEnsembleSink(object):
 
         # Create a model with the Ensemble for b in it
         model = builder.Model()
-        b_ens = ensemble.EnsembleLIF(b.size_in)
+        b_ens = operators.EnsembleLIF(b.size_in)
         model.object_intermediates[b] = b_ens
 
         # Get the sink, check that an appropriate target is return
@@ -146,7 +147,7 @@ class TestEnsembleSink(object):
 
         # Create a model with the Ensemble for b in it
         model = builder.Model()
-        b_ens = ensemble.EnsembleLIF(b.size_in)
+        b_ens = operators.EnsembleLIF(b.size_in)
         model.object_intermediates[b] = b_ens
 
         # Check that no sink is created but that the direct input is modified
@@ -168,7 +169,7 @@ class TestEnsembleSink(object):
 
         # Create a model with the Ensemble for b in it
         model = builder.Model()
-        b_ens = ensemble.EnsembleLIF(b.size_in)
+        b_ens = operators.EnsembleLIF(b.size_in)
         model.object_intermediates[b] = b_ens
 
         # Check that no sink is created but that the direct input is modified
@@ -191,7 +192,7 @@ class TestNeuronSinks(object):
 
         # Create a model with the Ensemble for b in it
         model = builder.Model()
-        b_ens = ensemble.EnsembleLIF(b.size_in)
+        b_ens = operators.EnsembleLIF(b.size_in)
         model.object_intermediates[b] = b_ens
 
         # Get the sink, check that an appropriate target is return
@@ -210,7 +211,7 @@ class TestNeuronSinks(object):
 
         # Create a model with the Ensemble for b in it
         model = builder.Model()
-        b_ens = ensemble.EnsembleLIF(b.size_in)
+        b_ens = operators.EnsembleLIF(b.size_in)
         model.object_intermediates[b] = b_ens
 
         # This should fail
@@ -229,7 +230,7 @@ class TestNeuronSinks(object):
 
         # Create a model with the Ensemble for b in it
         model = builder.Model()
-        b_ens = ensemble.EnsembleLIF(b.size_in)
+        b_ens = operators.EnsembleLIF(b.size_in)
         model.object_intermediates[b] = b_ens
 
         # Get the sink, check that an appropriate target is return
@@ -309,12 +310,111 @@ class TestBuildFromNeuronsConnection(object):
         assert params.solver_info is None
 
 
-class TestEnsembleLIF(object):
-    @pytest.mark.parametrize("size_in", [1, 4, 5])
-    def test_init(self, size_in):
-        """Test that creating an Ensemble LIF creates an empty list of local
-        probes and an empty input vector.
+class TestProbeEnsemble(object):
+    """Test probing ensembles."""
+    @pytest.mark.parametrize("with_slice", [False, True])
+    def test_probe_output(self, with_slice):
+        """Test that probing the output of an Ensemble generates a new
+        connection and a new object.
         """
-        lif = ensemble.EnsembleLIF(size_in)
-        assert np.all(lif.direct_input == np.zeros(size_in))
-        assert lif.local_probes == list()
+        with nengo.Network() as net:
+            a = nengo.Ensemble(100, 3)
+
+            if not with_slice:
+                p = nengo.Probe(a, sample_every=0.002)
+            else:
+                p = nengo.Probe(a[0:1], sample_every=0.002)
+
+        # Create an empty model to build the probe into
+        model = builder.Model()
+        model.build(net)
+
+        # Check that a new connection was added and built
+        assert len(model.connections_signals) == 1
+        for conn in model.connections_signals.keys():
+            assert conn.pre_obj is a
+            assert conn.post_obj is p
+            assert conn in model.params  # Was it built?
+
+            if with_slice:
+                assert conn.pre_slice == p.slice
+
+        # Check that a new object was added to the model
+        vs = model.object_intermediates[p]
+        assert isinstance(vs, operators.ValueSink)
+        assert vs.size_in == p.size_in
+        assert vs.sample_every == 2
+
+    @pytest.mark.xfail(reason="Unimplemented functionality")
+    def test_probe_input(self):
+        """Test probing the input of an Ensemble."""
+        with nengo.Network():
+            a = nengo.Ensemble(100, 3)
+            p = nengo.Probe(a, "input")
+
+        # Create an empty model to build the probe into
+        model = builder.Model()
+        model.rng = np.random
+        model.seeds[p] = 1
+
+        # Build the probe
+        ensemble.build_ensemble_probe(model, p)
+
+
+class TestProbeNeurons(object):
+    """Test probing neurons."""
+    def test_probe_spikes(self):
+        """Check that probing spikes modifies the local_probes list on the
+        operator, but does nothing else.
+        """
+        with nengo.Network() as net:
+            a = nengo.Ensemble(300, 1)
+            p = nengo.Probe(a.neurons, "spikes")
+
+        # Create an empty model to build the probe into
+        model = builder.Model()
+        model.build(net)
+
+        # Assert that we added the probe to the list of local probes and
+        # nothing else
+        assert model.object_intermediates[a].local_probes == [p]
+        assert len(model.object_intermediates) == 1
+        assert len(model.connections_signals) == 0
+
+    @pytest.mark.xfail(reason="Unimplemented functionality")
+    def test_probe_voltage(self):
+        """Check that probing voltage modifies the local_probes list on the
+        operator, but does nothing else.
+        """
+        with nengo.Network() as net:
+            a = nengo.Ensemble(300, 1)
+            p = nengo.Probe(a.neurons, "voltage")
+
+        # Create an empty model to build the probe into
+        model = builder.Model()
+        model.build(net)
+
+        # Assert that we added the probe to the list of local probes and
+        # nothing else
+        assert model.object_intermediates[a].local_probes == [p]
+        assert len(model.object_intermediates) == 1
+        assert len(model.connections_signals) == 0
+
+    @pytest.mark.xfail(reason="Unimplemented functionality")
+    def test_refractory_time(self):
+        """Check that probing refractory time modifies the local_probes list on
+        the operator, but does nothing else.
+        """
+        with nengo.Network() as net:
+            a = nengo.Ensemble(300, 1)
+            p = nengo.Probe(a.neurons, "refractory_time")
+
+        # Create an empty model to build the probe into
+        model = builder.Model()
+        model.build(net)
+
+        # Assert that we added the probe to the list of local probes and
+        # nothing else
+        assert model.object_intermediates[a].local_probes == [p]
+        assert len(model.object_intermediates) == 1
+        assert len(model.connections_signals) == 0
