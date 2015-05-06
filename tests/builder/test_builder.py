@@ -131,30 +131,44 @@ class TestBuild(object):
             b = nengo.Node(None, size_in=3, size_out=3)
             c = nengo.Ensemble(100, 3)
 
-            nengo.Connection(a, b, synapse=None)
-            nengo.Connection(b, c)
+            a_b = nengo.Connection(a, b, synapse=None)
+            b_c = nengo.Connection(b, c)
 
         # Create a generic builder which just ensures that it is NEVER passed
         # `b`
         def generic_builder_fn(model, obj):
             assert obj is not b
 
-        def generic_getter(model, conn):
-            pass
+        def generic_connection_builder_fn(model, conn):
+            assert conn not in [a_b, b_c]
+
+        def generic_getter_fn(model, conn):
+            assert conn not in [a_b, b_c]
 
         generic_builder = mock.Mock(wraps=generic_builder_fn)
+        generic_getter = mock.Mock(wraps=generic_getter_fn)
+        generic_connection_builder = mock.Mock(
+            wraps=generic_connection_builder_fn
+        )
+
         builders = {nengo.base.NengoObject: generic_builder}
+        getters = {nengo.base.NengoObject: generic_getter}
+        connection_builders = {
+            nengo.base.NengoObject: generic_connection_builder
+        }
 
         # Build the model
         with patch.object(Model, "builders", new=builders),\
-                patch.object(Model, "source_getters",
-                             new={object: generic_getter}),\
-                patch.object(Model, "sink_getters",
-                             new={object: generic_getter}):
+                patch.object(Model, "source_getters", new=getters),\
+                patch.object(Model, "sink_getters", new=getters),\
+                patch.object(Model, "connection_parameter_builders",
+                             new=connection_builders):
             model = Model()
             model.build(network)
 
             assert generic_builder.call_count == 2
+            assert generic_getter.call_count == 2
+            assert generic_connection_builder.call_count == 1
 
 
 class TestMakeConnection(object):
@@ -200,6 +214,18 @@ class TestMakeConnection(object):
 
         sink_getter = mock.Mock(wraps=sink_getter_fn)
 
+        # Create a method to build the connection
+        built_connection = mock.Mock(name="built connection")
+
+        def connection_builder_fn(m, c):
+            assert m is model
+            assert c is connection
+
+            return built_connection
+
+        connection_builder_a = mock.Mock(wraps=connection_builder_fn)
+        connection_builder_b = mock.Mock(wraps=connection_builder_fn)
+
         # Create a mock network
         network = mock.Mock()
         network.seed = None
@@ -211,13 +237,20 @@ class TestMakeConnection(object):
         if use_registered_dicts:
             # Patch the getters, add a null builder
             with patch.object(model, "source_getters", {A: source_getter}), \
-                    patch.object(model, "sink_getters", {B: sink_getter}):
+                    patch.object(model, "sink_getters", {B: sink_getter}), \
+                    patch.object(model, "connection_parameter_builders",
+                                 {A: connection_builder_a,
+                                  B: connection_builder_b}):
                 # Build the network
                 model.build(network)
         else:
             model.build(network,
                         extra_source_getters={A: source_getter},
-                        extra_sink_getters={B: sink_getter})
+                        extra_sink_getters={B: sink_getter},
+                        extra_connection_parameter_builders={
+                            A: connection_builder_a,
+                            B: connection_builder_b,
+                        })
 
         # Check that seeds were provided
         if seed is not None:
@@ -228,6 +261,13 @@ class TestMakeConnection(object):
         # Assert the getters were called
         assert source_getter.call_count == 1
         assert sink_getter.call_count == 1
+
+        # Assert that the connection parameter builder was called
+        assert connection_builder_a.call_count == 1
+        assert connection_builder_b.call_count == 0
+
+        # Assert that the parameters were saved
+        assert model.params[connection] is built_connection
 
         # Assert that the signal exists
         signal = model.connections_signals[connection]
@@ -262,7 +302,9 @@ class TestMakeConnection(object):
 
         # Patch the getters, add a null builder
         with patch.object(model, "source_getters", {A: source_getter}), \
-                patch.object(model, "sink_getters", {A: sink_getter}):
+                patch.object(model, "sink_getters", {A: sink_getter}), \
+                patch.object(model, "connection_parameter_builders",
+                             {A: mock.Mock()}):
             # Build the network
             model.build(network)
 

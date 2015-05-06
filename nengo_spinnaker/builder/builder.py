@@ -9,6 +9,11 @@ import numpy as np
 from nengo_spinnaker.utils import collections as collections_ext
 from nengo_spinnaker.utils.keyspaces import KeyspaceContainer
 
+BuiltConnection = collections.namedtuple(
+    "BuiltConnection", "decoders, eval_points, transform, solver_info"
+)
+"""Parameters which describe a Connection."""
+
 
 def get_seed(obj, rng):
     seed = rng.randint(npext.maxint)
@@ -50,6 +55,20 @@ class Model(object):
 
     It is free to modify the model as required (including doing nothing to
     suppress SpiNNaker simulation of the object).
+    """
+
+    connection_parameter_builders = collections_ext.registerabledict()
+    """Functions which can build the parameters for a connection.
+
+    The parameters for a connection are built differently depending on the type
+    of the object at the start of the connection.  Functions to perform this
+    building can be registered in this dictionary against this type of the
+    originating object.  Functions must be of the form:
+
+        .. py:function:: builder(model, connection)
+
+    It is recommended that builders return a :py:class:`~.BuiltConnection`
+    object.
     """
 
     source_getters = collections_ext.registerabledict()
@@ -126,7 +145,8 @@ class Model(object):
         return (obj_id, conn_id)
 
     def build(self, network, extra_builders={},
-              extra_source_getters={}, extra_sink_getters={}):
+              extra_source_getters={}, extra_sink_getters={},
+              extra_connection_parameter_builders={}):
         """Build a Network into this model.
 
         Parameters
@@ -139,6 +159,8 @@ class Model(object):
             Extra source getter methods.
         extra_sink_getters : {type: fn, ...}
             Extra sink getter methods.
+        extra_connection_parameter_builder : {type: fn, ...}
+            Extra connection parameter builders.
         """
         # Get the seed and random number generator
 
@@ -157,7 +179,15 @@ class Model(object):
         for obj in objs:
             self.make_object(obj)
 
-        # Get a clean set of getters
+        # Get a clean set of getters and builders
+        self._connection_parameter_builders = collections_ext.mrolookupdict()
+        self._connection_parameter_builders.update(
+            self.connection_parameter_builders
+        )
+        self._connection_parameter_builders.update(
+            extra_connection_parameter_builders
+        )
+
         self._source_getters = collections_ext.mrolookupdict()
         self._source_getters.update(self.source_getters)
         self._source_getters.update(extra_source_getters)
@@ -183,7 +213,8 @@ class Model(object):
         will be included in the model.
         """
         self.seeds[conn] = get_seed(conn, self.rng)
-        # TODO Build the connection!
+        self.params[conn] = \
+            self._connection_parameter_builders[type(conn.pre_obj)](self, conn)
 
         # Get the source and sink specification, then make the signal provided
         # that neither of specs is None.
