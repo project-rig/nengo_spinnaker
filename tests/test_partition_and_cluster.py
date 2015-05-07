@@ -86,9 +86,7 @@ def test_identify_clusters():
     # Vertex slices
     v1s = [nl.VertexSlice(v1, slice(n, n+1)) for n in range(5)]
     v2s = [nl.VertexSlice(v2, slice(n, n+1)) for n in range(6)]
-    groups = {}
-    groups.update({v: 0 for v in v1s})
-    groups.update({v: 1 for v in v2s})
+    groups = [set(v1s), set(v2s)]
 
     # Nets: v1 -> v2 with default keyspace
     v12_nets = [nl.Net(a, v2s[:], 0, ks()) for a in v1s]
@@ -114,6 +112,7 @@ def test_identify_clusters():
         v2s[2]: (1, 0),
         v2s[3]: (1, 0),
         v2s[4]: (1, 0),
+        v2s[5]: (1, 0),
         # (1, 1) has: v1[4] and v3
         v1s[4]: (1, 1),
         v3: (1, 1),

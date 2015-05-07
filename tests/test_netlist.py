@@ -117,7 +117,7 @@ def test_place_and_route():
     keyspace = mock.Mock(name="keyspace")
     keyspace.length = 32
     net = netlist.Net(v1, [v2a, v2b], 1, keyspace)
-    groups = {v2a: 1, v2b: 1}
+    groups = [(v2a, v2b)]
 
     keyspace_container = mock.Mock()
 
@@ -289,7 +289,7 @@ def test_load_application():
 
     net = netlist.Net(v1, [v2a, v2b], 1, keyspace)
 
-    groups = {v2a: 1, v2b: 1}
+    groups = [(v2a, v2b)]
 
     routing_tree = mock.Mock(name="routing tree")
 

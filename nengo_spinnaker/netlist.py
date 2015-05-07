@@ -123,8 +123,8 @@ class Netlist(object):
         List of vertex objects (executables).
     keyspaces : :py:class:`~nengo_spinnaker.utils.keyspaces.KeyspaceContainer`
         Object containing keyspaces for nets.
-    groups : {:py:class:`~.Vertex`: int, ...}
-        Map of vertices to their group numbers.
+    groups : [{:py:class:`~.Vertex`, ...}, ...]
+        List of groups of vertices.
     load_functions : [`fn(netlist, controller)`, ...]
         List of functions which will be called to load the model to a SpiNNaker
         machine.  Each must accept a netlist and a controller.
@@ -153,7 +153,7 @@ class Netlist(object):
         self.nets = list(nets)
         self.vertices = list(vertices)
         self.keyspaces = keyspaces
-        self.groups = dict(groups)
+        self.groups = list(groups)
         self.load_functions = list(load_functions)
         self.before_simulation_functions = list(before_simulation_functions)
         self.after_simulation_functions = list(after_simulation_functions)
