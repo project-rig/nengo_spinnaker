@@ -128,13 +128,13 @@ class Netlist(object):
     load_functions : [`fn(netlist, controller)`, ...]
         List of functions which will be called to load the model to a SpiNNaker
         machine.  Each must accept a netlist and a controller.
-    before_simulation_functions : [`fn(netlist, controller, n_steps)`, ...]
+    before_simulation_functions : [`fn(netlist, simulator, n_steps)`, ...]
         List of functions which will be called to prepare the executables for a
-        number of simulation steps.  Each must accept a netlist, a controller
+        number of simulation steps.  Each must accept a netlist, the simulator
         and a number of simulation steps.
-    after_simulation_functions : [`fn(netlist, controller, n_steps)`, ...]
+    after_simulation_functions : [`fn(netlist, simulator, n_steps)`, ...]
         List of functions which will be called to clean the executables after a
-        number of simulation steps.  Each must accept a netlist, a controller
+        number of simulation steps.  Each must accept a netlist, the simulator
         and a number of simulation steps.
     placements : {vertex: (x, y), ...}
         Map from vertices to the chips on which they are placed.
@@ -250,3 +250,17 @@ class Netlist(object):
             vertices_applications, self.placements, self.allocations
         )
         controller.load_application(application_map)
+
+    def before_simulation(self, simulator, n_steps):
+        """Prepare the objects in the netlist for a simulation of a given
+        number of steps.
+        """
+        for fn in self.before_simulation_functions:
+            fn(self, simulator, n_steps)
+
+    def after_simulation(self, simulator, n_steps):
+        """Retrieve data from the objects in the netlist after a simulation of
+        a given number of steps.
+        """
+        for fn in self.after_simulation_functions:
+            fn(self, simulator, n_steps)

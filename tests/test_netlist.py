@@ -404,3 +404,53 @@ def test_load_application():
         })
 
         assert model.vertices_memory == sdram_allocs
+
+
+def test_before_simulation():
+    """Test that all methods are called when asked to prepare a simulation."""
+    # Create some "before_simulation" functions
+    before_a = mock.Mock()
+    before_b = mock.Mock()
+
+    # Create a netlist
+    model = netlist.Netlist(
+        nets=[],
+        vertices=[],
+        keyspaces={},
+        groups={},
+        load_functions=[],
+        before_simulation_functions=[before_a, before_b]
+    )
+
+    # Call the before_simulation_functions
+    controller = mock.Mock(name="Controller")
+    simulator = mock.Mock(name="Simulator")
+    model.before_simulation(simulator, 100)
+
+    before_a.assert_called_once_with(model, simulator, 100)
+    before_b.assert_called_once_with(model, simulator, 100)
+
+
+def test_after_simulation():
+    """Test that all methods are called when asked to finish a simulation."""
+    # Create some "before_simulation" functions
+    after_a = mock.Mock()
+    after_b = mock.Mock()
+
+    # Create a netlist
+    model = netlist.Netlist(
+        nets=[],
+        vertices=[],
+        keyspaces={},
+        groups={},
+        load_functions=[],
+        after_simulation_functions=[after_a, after_b]
+    )
+
+    # Call the before_simulation_functions
+    controller = mock.Mock(name="Controller")
+    simulator = mock.Mock(name="Simulator")
+    model.after_simulation(simulator, 100)
+
+    after_a.assert_called_once_with(model, simulator, 100)
+    after_b.assert_called_once_with(model, simulator, 100)
