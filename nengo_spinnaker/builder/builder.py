@@ -6,6 +6,7 @@ from nengo.cache import NoDecoderCache
 from nengo.utils.builder import objs_and_connections, remove_passthrough_nodes
 from nengo.utils import numpy as npext
 import numpy as np
+from six import iteritems
 
 from nengo_spinnaker.utils import collections as collections_ext
 from nengo_spinnaker.utils.keyspaces import KeyspaceContainer
@@ -254,6 +255,35 @@ class Model(object):
         # Build
         self._probe_builders[type(target_obj)](self, probe)
 
+    def get_signals_connections_from_object(self, obj):
+        """Get a dictionary mapping ports to signals to connections which
+        originate from a given intermediate object.
+        """
+        ports_sigs_conns = collections.defaultdict(
+            lambda: collections.defaultdict(list)
+        )
+
+        for (conn, signal) in iteritems(self.connections_signals):
+            if signal.source.obj is obj:
+                ports_sigs_conns[signal.source.port][signal].append(conn)
+
+        return ports_sigs_conns
+
+    def get_signals_connections_to_object(self, obj):
+        """Get a dictionary mapping ports to signals to connections which
+        terminate at a given intermediate object.
+        """
+        ports_sigs_conns = collections.defaultdict(
+            lambda: collections.defaultdict(list)
+        )
+
+        for (conn, signal) in iteritems(self.connections_signals):
+            for sink in signal.sinks:
+                if sink.obj is obj:
+                    ports_sigs_conns[sink.port][signal].append(conn)
+
+        return ports_sigs_conns
+
 
 ObjectPort = collections.namedtuple("ObjectPort", "obj port")
 """Source or sink of a signal.
@@ -329,6 +359,9 @@ class Signal(
         # Create the tuple
         return super(Signal, cls).__new__(cls, source, sinks, keyspace,
                                           weight, latching)
+
+    def __hash__(self):
+        return hash(id(self))
 
 
 def _make_signal(model, connection, source_spec, sink_spec):

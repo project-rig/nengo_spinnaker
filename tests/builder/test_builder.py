@@ -4,9 +4,10 @@ import nengo
 from nengo.cache import NoDecoderCache
 import numpy as np
 import pytest
+from six import iteritems
 
 from nengo_spinnaker.builder.builder import (
-    Model, Signal, spec, _make_signal, ObjectPort
+    Model, Signal, spec, _make_signal, ObjectPort, OutputPort, InputPort
 )
 
 
@@ -363,7 +364,6 @@ class TestBuildProbe(object):
                 with patch.object(model, "probe_builders", new={}):
                     model.build(network, extra_probe_builders=probe_builders)
 
-
         # Assert the probe functions were built
         assert p_a in model.seeds
         assert p_n in model.seeds
@@ -598,3 +598,131 @@ class TestMakeSignalFromSpecs(object):
         with pytest.raises(NotImplementedError) as excinfo:
             _make_signal(model, connection, source_spec, sink_spec)
         assert "keyspace" in str(excinfo.value)
+
+
+class TestGetSignalsAndConnections(object):
+    """Test getting the signals and connections which either originate or
+    terminate at a given object.
+    """
+    def test_get_signals_and_connections_starting_from(self):
+        """Test getting the signals and connections which start from a given
+        object.
+        """
+        # Create some objects and some connections
+        obj_a = mock.Mock(name="object a")
+        obj_b = mock.Mock(name="object b")
+
+        conn_ab1 = mock.Mock()
+        sig_ab1 = Signal(ObjectPort(obj_a, OutputPort.standard),
+                         ObjectPort(obj_b, InputPort.standard),
+                         None)
+        conn_ab2 = mock.Mock()
+        sig_ab2 = Signal(ObjectPort(obj_a, OutputPort.standard),
+                         ObjectPort(obj_b, InputPort.standard),
+                         None)
+
+        conn_ba1 = mock.Mock()
+        port_b1 = mock.Mock(name="port B1")
+        sig_ba1 = Signal(ObjectPort(obj_b, port_b1),
+                         ObjectPort(obj_a, InputPort.standard),
+                         None)
+        conn_ba2 = mock.Mock()
+        conn_ba3 = mock.Mock()
+        port_b2 = mock.Mock(name="port B2")
+        sig_ba2 = Signal(ObjectPort(obj_b, port_b2),
+                         ObjectPort(obj_a, InputPort.standard),
+                         None)
+
+        # Create a model holding all of these items
+        model = Model()
+        model.connections_signals = {
+            conn_ab1: sig_ab1,
+            conn_ab2: sig_ab2,
+            conn_ba1: sig_ba1,
+            conn_ba2: sig_ba2,
+            conn_ba3: sig_ba2,
+        }
+
+        # Query it for connections starting from different objects
+        assert model.get_signals_connections_from_object(obj_a) == {
+            OutputPort.standard: {
+                sig_ab1: [conn_ab1],
+                sig_ab2: [conn_ab2],
+            },
+        }
+
+        for port, sigs_conns in iteritems(
+                model.get_signals_connections_from_object(obj_b)):
+            if port is port_b1:
+                assert sigs_conns == {
+                    sig_ba1: [conn_ba1],
+                }
+            elif port is port_b2:
+                for sig, conns in iteritems(sigs_conns):
+                    assert sig is sig_ba2
+                    for conn in conns:
+                        assert conn is conn_ba2 or conn is conn_ba3
+            else:
+                assert False, "Unexpected signal"
+
+    def test_get_signals_and_connections_terminating_at(self):
+        """Test getting the signals and connections which end at a given
+        object.
+        """
+        # Create some objects and some connections
+        obj_a = mock.Mock(name="object a")
+        obj_b = mock.Mock(name="object b")
+
+        conn_ab1 = mock.Mock()
+        port_b1 = mock.Mock(name="port B1")
+        sig_ab1 = Signal(ObjectPort(obj_a, OutputPort.standard),
+                         ObjectPort(obj_b, port_b1),
+                         None)
+        conn_ab2 = mock.Mock()
+        port_b2 = mock.Mock(name="port B2")
+        sig_ab2 = Signal(ObjectPort(obj_a, OutputPort.standard),
+                         ObjectPort(obj_b, port_b2),
+                         None)
+
+        conn_ba1 = mock.Mock()
+        sig_ba1 = Signal(ObjectPort(obj_b, OutputPort.standard),
+                         ObjectPort(obj_a, InputPort.standard),
+                         None)
+        conn_ba2 = mock.Mock()
+        conn_ba3 = mock.Mock()
+        sig_ba2 = Signal(ObjectPort(obj_b, port_b2),
+                         ObjectPort(obj_a, InputPort.standard),
+                         None)
+
+        # Create a model holding all of these items
+        model = Model()
+        model.connections_signals = {
+            conn_ab1: sig_ab1,
+            conn_ab2: sig_ab2,
+            conn_ba1: sig_ba1,
+            conn_ba2: sig_ba2,
+            conn_ba3: sig_ba2,
+        }
+
+        # Query it for connections terminating at different objects
+        for port, sigs_conns in iteritems(
+                model.get_signals_connections_to_object(obj_a)):
+            assert port is InputPort.standard
+
+            for sig, conns in iteritems(sigs_conns):
+                if sig is sig_ba1:
+                    assert conns == [conn_ba1]
+                elif sig is sig_ba2:
+                    for conn in conns:
+                        assert conn in [conn_ba2, conn_ba3]
+                else:
+                    assert False, "Unexpected signal"
+
+        assert model.get_signals_connections_to_object(obj_b) == {
+            port_b1: {
+                sig_ab1: [conn_ab1],
+            },
+            port_b2: {
+                sig_ab2: [conn_ab2],
+            },
+        }
