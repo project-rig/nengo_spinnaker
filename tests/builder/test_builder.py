@@ -7,8 +7,10 @@ import pytest
 from six import iteritems
 
 from nengo_spinnaker.builder.builder import (
-    Model, Signal, spec, _make_signal, ObjectPort, OutputPort, InputPort
+    Model, Signal, spec, _make_signal, ObjectPort, OutputPort, InputPort,
+    netlistspec
 )
+from nengo_spinnaker.netlist import Vertex, VertexSlice
 
 
 class TestSignal(object):
@@ -726,3 +728,157 @@ class TestGetSignalsAndConnections(object):
                 sig_ab2: [conn_ab2],
             },
         }
+
+
+class TestMakeNetlist(object):
+    """Test production of netlists from operators and signals."""
+    def test_single_vertices(self):
+        """Test that operators which produce single vertices work correctly and
+        that all functions and signals are correctly collected and included in
+        the final netlist.
+        """
+        # Create the first operator
+        vertex_a = mock.Mock(name="vertex A")
+        load_fn_a = mock.Mock(name="load function A")
+        pre_fn_a = mock.Mock(name="pre function A")
+        post_fn_a = mock.Mock(name="post function A")
+
+        object_a = mock.Mock(name="object A")
+        operator_a = mock.Mock(name="operator A")
+        operator_a.make_vertices.return_value = \
+            netlistspec(vertex_a, load_fn_a, pre_fn_a, post_fn_a)
+
+        # Create the second operator
+        vertex_b = mock.Mock(name="vertex B")
+        load_fn_b = mock.Mock(name="load function B")
+
+        object_b = mock.Mock(name="object B")
+        operator_b = mock.Mock(name="operator B")
+        operator_b.make_vertices.return_value = \
+            netlistspec(vertex_b, load_fn_b)
+
+        # Create a signal between the operators
+        keyspace = mock.Mock(name="keyspace")
+        keyspace.length = 32
+        signal_ab = Signal(ObjectPort(operator_a, None),
+                           ObjectPort(operator_b, None),
+                           keyspace=keyspace, weight=43)
+
+        # Create the model, add the items and then generate the netlist
+        model = Model()
+        model.object_intermediates[object_a] = operator_a
+        model.object_intermediates[object_b] = operator_b
+        model.connections_signals[None] = signal_ab
+        netlist = model.make_netlist()
+
+        # Check that the make_vertices functions were called
+        assert operator_a.make_vertices.called
+        assert operator_b.make_vertices.called
+
+        # Check that the netlist is as expected
+        assert len(netlist.nets) == 1
+        for net in netlist.nets:
+            assert net.source is vertex_a
+            assert net.sinks == [vertex_b]
+            assert net.keyspace is keyspace
+            assert net.weight == signal_ab.weight
+
+        assert set(netlist.vertices) == set([vertex_a, vertex_b])
+        assert netlist.keyspaces is model.keyspaces
+        assert netlist.groups == list()
+        assert set(netlist.load_functions) == set([load_fn_a, load_fn_b])
+        assert netlist.before_simulation_functions == [pre_fn_a]
+        assert netlist.after_simulation_functions == [post_fn_a]
+
+    def test_multiple_sink_vertices(self):
+        # Create the first operator
+        vertex_a = mock.Mock(name="vertex A")
+        load_fn_a = mock.Mock(name="load function A")
+        pre_fn_a = mock.Mock(name="pre function A")
+        post_fn_a = mock.Mock(name="post function A")
+
+        object_a = mock.Mock(name="object A")
+        operator_a = mock.Mock(name="operator A")
+        operator_a.make_vertices.return_value = \
+            netlistspec(vertex_a, load_fn_a, pre_fn_a, post_fn_a)
+
+        # Create the second operator
+        vertex_b0 = mock.Mock(name="vertex B0")
+        vertex_b1 = mock.Mock(name="vertex B1")
+        load_fn_b = mock.Mock(name="load function B")
+
+        object_b = mock.Mock(name="object B")
+        operator_b = mock.Mock(name="operator B")
+        operator_b.make_vertices.return_value = \
+            netlistspec([vertex_b0, vertex_b1], load_fn_b)
+
+        # Create a signal between the operators
+        keyspace = mock.Mock(name="keyspace")
+        keyspace.length = 32
+        signal_ab = Signal(ObjectPort(operator_a, None),
+                           ObjectPort(operator_b, None),
+                           keyspace=keyspace, weight=3)
+
+        # Create the model, add the items and then generate the netlist
+        model = Model()
+        model.object_intermediates[object_a] = operator_a
+        model.object_intermediates[object_b] = operator_b
+        model.connections_signals[None] = signal_ab
+        netlist = model.make_netlist()
+
+        # Check that the netlist is as expected
+        assert set(netlist.vertices) == set([vertex_a, vertex_b0, vertex_b1])
+        assert len(netlist.nets) == 1
+        for net in netlist.nets:
+            assert net.source is vertex_a
+            assert net.sinks == [vertex_b0, vertex_b1]
+            assert net.keyspace is keyspace
+            assert net.weight == signal_ab.weight
+
+        # Check that the groups are correct
+        assert netlist.groups == [set([vertex_b0, vertex_b1])]
+
+    def test_multiple_source_vertices(self):
+        # Create the first operator
+        vertex_a0 = VertexSlice(slice(0, 1))
+        vertex_a1 = VertexSlice(slice(1, 2))
+        load_fn_a = mock.Mock(name="load function A")
+        pre_fn_a = mock.Mock(name="pre function A")
+        post_fn_a = mock.Mock(name="post function A")
+
+        object_a = mock.Mock(name="object A")
+        operator_a = mock.Mock(name="operator A")
+        operator_a.make_vertices.return_value = \
+            netlistspec([vertex_a0, vertex_a1], load_fn_a, pre_fn_a, post_fn_a)
+
+        # Create the second operator
+        vertex_b = Vertex()
+        load_fn_b = mock.Mock(name="load function B")
+
+        object_b = mock.Mock(name="object B")
+        operator_b = mock.Mock(name="operator B")
+        operator_b.make_vertices.return_value = \
+            netlistspec(vertex_b, load_fn_b)
+
+        # Create a signal between the operators
+        keyspace = mock.Mock(name="keyspace")
+        keyspace.length = 32
+        signal_ab = Signal(ObjectPort(operator_a, None),
+                           ObjectPort(operator_b, None),
+                           keyspace=keyspace, weight=43)
+
+        # Create the model, add the items and then generate the netlist
+        model = Model()
+        model.object_intermediates[object_a] = operator_a
+        model.object_intermediates[object_b] = operator_b
+        model.connections_signals[None] = signal_ab
+        netlist = model.make_netlist()
+
+        # Check that the netlist is as expected
+        assert set(netlist.vertices) == set([vertex_a0, vertex_a1, vertex_b])
+        assert len(netlist.nets) == 2
+        for net in netlist.nets:
+            assert net.source in [vertex_a0, vertex_a1]
+            assert net.sinks == [vertex_b]
+
+        assert netlist.groups == [set([vertex_a0, vertex_a1])]

@@ -6,8 +6,9 @@ from nengo.cache import NoDecoderCache
 from nengo.utils.builder import objs_and_connections, remove_passthrough_nodes
 from nengo.utils import numpy as npext
 import numpy as np
-from six import iteritems
+from six import iteritems, itervalues
 
+from nengo_spinnaker.netlist import Net, Netlist
 from nengo_spinnaker.utils import collections as collections_ext
 from nengo_spinnaker.utils.keyspaces import KeyspaceContainer
 
@@ -173,7 +174,6 @@ class Model(object):
             Extra probe builder methods.
         """
         # Get the seed and random number generator
-
         self.seeds[network] = get_seed(network, np.random)
         self.rng = np.random.RandomState(self.seeds[network])
 
@@ -284,6 +284,68 @@ class Model(object):
 
         return ports_sigs_conns
 
+    def make_netlist(self):
+        """Convert the model into a netlist for simulating on SpiNNaker.
+
+        Returns
+        -------
+        :py:class:`~nengo_spinnaker.netlist.Netlist`
+            A netlist which can be placed and routed to simulate this model on
+            a SpiNNaker machine.
+        """
+        # Call each operator to make vertices
+        operator_vertices = dict()
+        vertices = collections_ext.flatinsertionlist()
+        load_functions = collections_ext.noneignoringlist()
+        before_simulation_functions = collections_ext.noneignoringlist()
+        after_simulation_functions = collections_ext.noneignoringlist()
+
+        for op in itervalues(self.object_intermediates):
+            vxs, load_fn, pre_fn, post_fn = op.make_vertices()
+
+            operator_vertices[op] = vxs
+            vertices.append(vxs)
+
+            load_functions.append(load_fn)
+            before_simulation_functions.append(pre_fn)
+            after_simulation_functions.append(post_fn)
+
+        # Construct the groups set
+        groups = list()
+        for vxs in itervalues(operator_vertices):
+            # If multiple vertices were provided by an operator then we add
+            # them as a new group.
+            if isinstance(vxs, collections.Iterable):
+                groups.append(set(vxs))
+
+        # Construct nets from the signals
+        nets = list()
+        for signal in itervalues(self.connections_signals):
+            # Get the source and sink vertices
+            sources = operator_vertices[signal.source.obj]
+            if not isinstance(sources, collections.Iterable):
+                sources = (sources, )
+
+            sinks = collections_ext.flatinsertionlist()
+            for sink in signal.sinks:
+                sinks.append(operator_vertices[sink.obj])
+
+            # Create the net(s)
+            for source in sources:
+                nets.append(Net(source, list(sinks),
+                            signal.weight, signal.keyspace))
+
+        # Return a netlist
+        return Netlist(
+            nets=nets,
+            vertices=vertices,
+            keyspaces=self.keyspaces,
+            groups=groups,
+            load_functions=load_functions,
+            before_simulation_functions=before_simulation_functions,
+            after_simulation_functions=after_simulation_functions
+        )
+
 
 ObjectPort = collections.namedtuple("ObjectPort", "obj port")
 """Source or sink of a signal.
@@ -308,6 +370,19 @@ class InputPort(enum.Enum):
     """Indicate the intended receiving part of an executable."""
     standard = 0
     """Standard, value-based, output port."""
+
+
+class netlistspec(collections.namedtuple(
+        "netlistspec", "vertices, load_function, before_simulation_function, "
+                       "after_simulation_function")):
+    """Specification of how an operator should be added to a netlist."""
+    def __new__(cls, vertices, load_function=None,
+                before_simulation_function=None,
+                after_simulation_function=None):
+        return super(netlistspec, cls).__new__(
+            cls, vertices, load_function, before_simulation_function,
+            after_simulation_function
+        )
 
 
 class spec(collections.namedtuple("spec",
