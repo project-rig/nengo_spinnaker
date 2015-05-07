@@ -772,8 +772,8 @@ class TestMakeNetlist(object):
         netlist = model.make_netlist()
 
         # Check that the make_vertices functions were called
-        assert operator_a.make_vertices.called
-        assert operator_b.make_vertices.called
+        operator_a.make_vertices.assert_called_once_with(model)
+        operator_b.make_vertices.assert_called_once_with(model)
 
         # Check that the netlist is as expected
         assert len(netlist.nets) == 1

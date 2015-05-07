@@ -144,7 +144,7 @@ def build_lif(model, ens):
     # object will be responsible for adding items to the netlist and providing
     # functions to prepare the ensemble for simulation.  The object may be
     # modified by later methods.
-    model.object_intermediates[ens] = operators.EnsembleLIF(ens.size_in)
+    model.object_intermediates[ens] = operators.EnsembleLIF(ens)
 
 
 @Model.connection_parameter_builders.register(nengo.Ensemble)

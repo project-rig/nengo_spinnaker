@@ -301,7 +301,7 @@ class Model(object):
         after_simulation_functions = collections_ext.noneignoringlist()
 
         for op in itervalues(self.object_intermediates):
-            vxs, load_fn, pre_fn, post_fn = op.make_vertices()
+            vxs, load_fn, pre_fn, post_fn = op.make_vertices(self)
 
             operator_vertices[op] = vxs
             vertices.append(vxs)

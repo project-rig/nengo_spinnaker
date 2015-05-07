@@ -1,3 +1,4 @@
+import nengo
 import numpy as np
 import pytest
 import struct
@@ -15,7 +16,11 @@ class TestEnsembleLIF(object):
         """Test that creating an Ensemble LIF creates an empty list of local
         probes and an empty input vector.
         """
-        op = lif.EnsembleLIF(size_in)
+        # Create an ensemble
+        ens = nengo.Ensemble(100, size_in, add_to_container=False)
+
+        op = lif.EnsembleLIF(ens)
+        assert op.ensemble is ens
         assert np.all(op.direct_input == np.zeros(size_in))
         assert op.local_probes == list()
 

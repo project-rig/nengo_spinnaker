@@ -16,9 +16,10 @@ s1615 = type_casts.float_to_fix(True, 32, 15)
 
 class EnsembleLIF(object):
     """Controller for an ensemble of LIF neurons."""
-    def __init__(self, size_in):
+    def __init__(self, ensemble):
         """Create a new LIF ensemble controller."""
-        self.direct_input = np.zeros(size_in)
+        self.ensemble = ensemble
+        self.direct_input = np.zeros(ensemble.size_in)
         self.local_probes = list()
 
 

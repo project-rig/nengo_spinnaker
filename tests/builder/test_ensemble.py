@@ -103,7 +103,7 @@ def test_neurons_source():
 
     # Create a model with the Ensemble for a in it
     model = builder.Model()
-    a_ens = operators.EnsembleLIF(a.size_in)
+    a_ens = operators.EnsembleLIF(a)
     model.object_intermediates[a] = a_ens
 
     # Get the source, check that an appropriate target is return
@@ -126,7 +126,7 @@ class TestEnsembleSink(object):
 
         # Create a model with the Ensemble for b in it
         model = builder.Model()
-        b_ens = operators.EnsembleLIF(b.size_in)
+        b_ens = operators.EnsembleLIF(b)
         model.object_intermediates[b] = b_ens
 
         # Get the sink, check that an appropriate target is return
@@ -147,7 +147,7 @@ class TestEnsembleSink(object):
 
         # Create a model with the Ensemble for b in it
         model = builder.Model()
-        b_ens = operators.EnsembleLIF(b.size_in)
+        b_ens = operators.EnsembleLIF(b)
         model.object_intermediates[b] = b_ens
 
         # Check that no sink is created but that the direct input is modified
@@ -169,7 +169,7 @@ class TestEnsembleSink(object):
 
         # Create a model with the Ensemble for b in it
         model = builder.Model()
-        b_ens = operators.EnsembleLIF(b.size_in)
+        b_ens = operators.EnsembleLIF(b)
         model.object_intermediates[b] = b_ens
 
         # Check that no sink is created but that the direct input is modified
@@ -192,7 +192,7 @@ class TestNeuronSinks(object):
 
         # Create a model with the Ensemble for b in it
         model = builder.Model()
-        b_ens = operators.EnsembleLIF(b.size_in)
+        b_ens = operators.EnsembleLIF(b)
         model.object_intermediates[b] = b_ens
 
         # Get the sink, check that an appropriate target is return
@@ -211,7 +211,7 @@ class TestNeuronSinks(object):
 
         # Create a model with the Ensemble for b in it
         model = builder.Model()
-        b_ens = operators.EnsembleLIF(b.size_in)
+        b_ens = operators.EnsembleLIF(b)
         model.object_intermediates[b] = b_ens
 
         # This should fail
@@ -230,7 +230,7 @@ class TestNeuronSinks(object):
 
         # Create a model with the Ensemble for b in it
         model = builder.Model()
-        b_ens = operators.EnsembleLIF(b.size_in)
+        b_ens = operators.EnsembleLIF(b)
         model.object_intermediates[b] = b_ens
 
         # Get the sink, check that an appropriate target is return
