@@ -76,3 +76,16 @@ class TestSystemRegion(object):
         assert ((probe_spikes and rec_spikes != 0) or
                 (not probe_spikes and rec_spikes == 0))
         assert i_dims == 1
+
+
+class TestPESRegion(object):
+    def test_dummy(self):
+        """Test the current dummy PES region."""
+        region = lif.PESRegion()
+        assert region.sizeof() == 4
+
+        # Test writing out
+        fp = tempfile.TemporaryFile()
+        region.write_region_to_file(fp)
+        fp.seek(0)
+        assert fp.read() == b'\x00' * 4

@@ -51,3 +51,16 @@ class SystemRegion(collections.namedtuple(
             1
         )
         fp.write(data)
+
+
+class PESRegion(object):
+    """Region representing parameters for PES learning rules.
+    """
+    # TODO Implement PES
+
+    def sizeof(self):
+        return 4
+
+    def write_region_to_file(self, fp):
+        # Write out a zero, indicating no PES data
+        fp.write(b"\x00" * 4)
