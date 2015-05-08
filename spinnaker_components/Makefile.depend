@@ -1,0 +1,5 @@
+SOURCES += ../common/spin1_config.c
+CFLAGS += -I ../common/
+CFLAGS += -Wall -Wextra
+APP_DIR = ../../nengo_spinnaker/binaries
+include ../Makefile.common
