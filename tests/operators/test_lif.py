@@ -30,6 +30,7 @@ class TestSystemRegion(object):
     def test_sizeof(self):
         region = lif.SystemRegion(1, 5, 1000, 0.01, 0.02, 0.001, False)
         assert region.sizeof() == 8 * 4  # 8 words
+        assert region.sizeof_padded(slice(None)) == region.sizeof(slice(None))
 
     @pytest.mark.parametrize(
         "vertex_slice, vertex_neurons",
@@ -58,7 +59,7 @@ class TestSystemRegion(object):
         fp = tempfile.TemporaryFile()
 
         # Write to it
-        region.write_subregion_to_file(vertex_slice, fp)
+        region.write_subregion_to_file(fp, vertex_slice)
 
         # Read back and check that the values are sane
         fp.seek(0)
@@ -86,6 +87,6 @@ class TestPESRegion(object):
 
         # Test writing out
         fp = tempfile.TemporaryFile()
-        region.write_region_to_file(fp)
+        region.write_subregion_to_file(fp, slice(None))
         fp.seek(0)
         assert fp.read() == b'\x00' * 4

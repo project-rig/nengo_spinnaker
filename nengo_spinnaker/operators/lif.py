@@ -11,6 +11,8 @@ import numpy as np
 from rig import type_casts
 import struct
 
+from nengo_spinnaker import regions
+
 s1615 = type_casts.float_to_fix(True, 32, 15)
 
 
@@ -28,13 +30,15 @@ class SystemRegion(collections.namedtuple(
                     "machine_timestep, t_ref, t_rc, dt, probe_spikes")):
     """Region of memory describing the general parameters of a LIF ensemble."""
 
-    def sizeof(self):
+    def sizeof(self, vertex_slice=slice(None)):
         """Get the number of bytes necessary to represent this region of
         memory.
         """
         return 8 * 4  # 8 words
 
-    def write_subregion_to_file(self, vertex_slice, fp):
+    sizeof_padded = sizeof
+
+    def write_subregion_to_file(self, fp, vertex_slice):
         """Write the system region for a specific vertex slice to a file-like
         object.
         """
@@ -53,7 +57,7 @@ class SystemRegion(collections.namedtuple(
         fp.write(data)
 
 
-class PESRegion(object):
+class PESRegion(regions.Region):
     """Region representing parameters for PES learning rules.
     """
     # TODO Implement PES
@@ -61,6 +65,6 @@ class PESRegion(object):
     def sizeof(self):
         return 4
 
-    def write_region_to_file(self, fp):
+    def write_subregion_to_file(self, fp, vertex_slice):
         # Write out a zero, indicating no PES data
         fp.write(b"\x00" * 4)

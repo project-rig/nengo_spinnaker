@@ -113,7 +113,7 @@ def test_filter_region():
 
     # Check that the data is written out correctly
     fp = tempfile.TemporaryFile()
-    fr.write_to_file(fp)
+    fr.write_subregion_to_file(fp)
     fp.seek(0)
 
     length, = struct.unpack("<I", fp.read(4))
@@ -147,7 +147,7 @@ def test_filter_routing_region():
 
     # Check that the written out data is sensible
     fp = tempfile.TemporaryFile()
-    filter_region.write_to_file(fp)
+    filter_region.write_subregion_to_file(fp)
 
     # Check that the data is sensible
     fp.seek(0)

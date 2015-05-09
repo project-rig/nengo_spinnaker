@@ -8,5 +8,7 @@ Regions are able to report their size, represent data and write portions of
 their data out to files as necessary.
 """
 
-from . import matrix
-from . import keyspaces
+from .matrix import MatrixPartitioning, MatrixRegion
+from .keyspaces import KeyspacesRegion, KeyField, MaskField
+from .region import Region
+from . import utils

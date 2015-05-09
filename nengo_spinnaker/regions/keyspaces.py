@@ -61,7 +61,7 @@ class KeyspacesRegion(object):
 
         return self.bytes_per_field * n_keys * len(self.fields) + pp_size
 
-    def write_subregion_to_file(self, vertex_slice, fp, **field_args):
+    def write_subregion_to_file(self, fp, vertex_slice=None, **field_args):
         """Write the data contained in a portion of this region out to file.
         """
         data = b''

@@ -68,7 +68,7 @@ class TestKeyspacesRegion(object):
         fp = tempfile.TemporaryFile()
 
         kwargs = {"spam": "and eggs", "green_eggs": "and ham"}
-        r.write_subregion_to_file(slice(0, 1), fp, **kwargs)
+        r.write_subregion_to_file(fp, slice(0, 1), **kwargs)
 
         for f in fields:
             f.assert_has_calls([mock.call(k, **kwargs) for k in keys])
@@ -82,7 +82,7 @@ class TestKeyspacesRegion(object):
             fp = tempfile.TemporaryFile()
 
             kwargs = {"spam": "spam spam spam", "in_a_box": "with a fox"}
-            r.write_subregion_to_file(sl, fp, **kwargs)
+            r.write_subregion_to_file(fp, sl, **kwargs)
 
             for f in fields:
                 f.assert_has_calls([mock.call(k, **kwargs) for k in keys[sl]])
@@ -106,7 +106,7 @@ class TestKeyspacesRegion(object):
         # Write out the region, then check that the data corresponds to what
         # we'd expect.
         fp = tempfile.TemporaryFile()
-        r.write_subregion_to_file(slice(0, 10), fp, c=5)
+        r.write_subregion_to_file(fp, slice(0, 10), c=5)
 
         fp.seek(0)
         assert fp.read(4) == b'\x02\x00\x00\x00'  # Number of keyspaces

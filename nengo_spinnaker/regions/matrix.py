@@ -2,26 +2,15 @@ import enum
 import numpy as np
 import struct
 
+from .region import Region
+
 
 class MatrixPartitioning(enum.IntEnum):
     rows = 0
     columns = 1
 
 
-class NpIntFormatter(object):
-    def __init__(self, dtype):
-        self.dtype = dtype
-        self.bytes_per_element = {
-            np.uint8: 1, np.int8: 1,
-            np.uint16: 2, np.int16: 2,
-            np.uint32: 4, np.int32: 4,
-        }[dtype]
-
-    def __call__(self, matrix, **kwargs):
-        return matrix.astype(dtype=self.dtype)
-
-
-class MatrixRegion(object):
+class MatrixRegion(Region):
     """A region of memory which represents data from a matrix.
 
     The number of rows and columns may be prepended to the data as it is
@@ -30,17 +19,10 @@ class MatrixRegion(object):
     Notes
     -----
     If the number of rows and columns are to be written out then they are
-    always written in the order: rows, columns.  By default they are
-    written as 4-byte values.
-
-    See also
-    --------
-     - :py:class:`NpIntFormatter` formats matrix elements as integers.
-     - :py:class:`rig.fixed_point.FixedPointFormatter` formats matrix
-       elements as fixed point values.
+    always written in the order: rows, columns.
     """
     def __init__(self, matrix, prepend_n_rows=False, prepend_n_columns=False,
-                 formatter=NpIntFormatter(np.uint32), sliced_dimension=None):
+                 sliced_dimension=None):
         """Create a new region to represent a matrix data structure in memory.
 
         Parameters
@@ -56,11 +38,6 @@ class MatrixRegion(object):
         prepend_n_columns : bool
             Prepend the number of columns as a 4-byte integer to the matrix as
             it is written out in memory.
-        formatter : callable
-            A formatter which will be applied to the NumPy matrix before
-            writing the value out.  The formatter must accept calls with a
-            NumPy matrix and must report as `bytes_per_element` the number of
-            bytes used to store each formatted element.
         sliced_dimension : None or :py:class:`MatrixPartitioning` or int
             Indicates the dimension on which the matrix will be partitioned.
             None indicates no partitioning, 0 indicates partitioning of rows, 1
@@ -78,9 +55,6 @@ class MatrixRegion(object):
         # Slicing
         assert sliced_dimension is None or sliced_dimension < self.matrix.ndim
         self.partition_index = sliced_dimension
-
-        # Store the formatter
-        self.formatter = formatter
 
     def expanded_slice(self, vertex_slice):
         if self.partition_index is None:
@@ -105,10 +79,11 @@ class MatrixRegion(object):
         if self.prepend_n_columns:
             pp_size += 4
 
-        return (pp_size + self.matrix[self.expanded_slice(vertex_slice)].size *
-                self.formatter.bytes_per_element)
+        return (pp_size +
+                self.matrix[self.expanded_slice(vertex_slice)].nbytes)
 
-    def write_subregion_to_file(self, vertex_slice, fp, **formatter_args):
+    def write_subregion_to_file(self, fp, vertex_slice=slice(None),
+                                **formatter_args):
         """Write the data contained in a portion of this region out to file.
         """
         # Partition the data
@@ -125,5 +100,4 @@ class MatrixRegion(object):
                 fp.write(struct.pack('I', 1))
 
         # Format the data and then write to file
-        formatted = self.formatter(data, **formatter_args)
-        fp.write(formatted.reshape((formatted.size, 1)).data)
+        fp.write(data.data)

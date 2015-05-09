@@ -4,6 +4,7 @@ from rig.type_casts import float_to_fix
 from six import iteritems, itervalues
 import struct
 
+from .region import Region
 from ..utils.collections import registerabledict
 
 s1615 = float_to_fix(True, 32, 15)
@@ -56,7 +57,7 @@ def make_filter_regions(signals_and_connections, dt, minimise=False,
     return filter_region, routing_region
 
 
-class FilterRegion(object):
+class FilterRegion(Region):
     """Region of memory which contains filter parameters."""
 
     supported_filter_types = registerabledict()
@@ -76,7 +77,7 @@ class FilterRegion(object):
         # 1 word + the size of the largest supported filter * number of filters
         return 4 + self._largest_struct * len(self.filters)
 
-    def write_to_file(self, fp):
+    def write_subregion_to_file(self, fp, *args, **kwargs):
         """Write the region to a file-like object."""
         data = bytearray(self.sizeof())
 
@@ -183,7 +184,7 @@ class FilterRoutingRegion(object):
         # 1 word + 4 words per entry
         return 4 * (1 + 4*len(self.keyspace_routes))
 
-    def write_to_file(self, fp):
+    def write_subregion_to_file(self, fp, *args, **kwargs):
         """Write the routing region to a file-like object."""
         data = bytearray(self.sizeof())
 
