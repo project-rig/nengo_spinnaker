@@ -84,17 +84,18 @@ class ValueSink(object):
         # Store the location of the recording region
         self.recording_region_mem = region_memory[14]
 
-    def before_simulation(self, netlist, controller, simulator, n_steps):
-        """Load data for a specific number of steps to the machine."""
-        # TODO When supported by executables
-        raise NotImplementedError
-
     def after_simulation(self, netlist, simulator, n_steps):
         """Retrieve data from a simulation."""
         self.recording_region_mem.seek(0)
-        recorded_data = np.frombuffer(self.recording_region_mem.read(),
-                                      dtype=np.int32)
-        simulator.data[self.probe] = fix_to_np(recorded_data)
+        recorded_data = fix_to_np(
+            np.frombuffer(self.recording_region_mem.read(), dtype=np.int32)
+        ).reshape(n_steps, self.size_in)
+
+        if self.probe not in simulator.data:
+            simulator.data[self.probe] = recorded_data
+        else:
+            full_data = np.vstack([simulator.data[self.probe], recorded_data])
+            simulator.data[self.probe] = full_data
 
 
 class SystemRegion(regions.Region):
