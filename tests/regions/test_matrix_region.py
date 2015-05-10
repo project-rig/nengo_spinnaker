@@ -48,7 +48,7 @@ class TestMatrixRegion(object):
 
         # Check the size is correct
         assert (mr.sizeof(partition) ==
-                n_prepend_bytes + matrix[slices].data.nbytes)
+                n_prepend_bytes + matrix[slices].nbytes)
 
     @pytest.mark.parametrize(
         "prepend_n_rows, prepend_n_cols",
@@ -96,7 +96,7 @@ class TestMatrixRegion(object):
         assert np.all(data == partitioned_matrix)
 
     def test_write_subregion_to_file_with_1d_array(self):
-        matrix = np.ones(100)
+        matrix = np.ones(100, dtype=np.uint32)
         mr = MatrixRegion(matrix, True, True)
 
         # Get the temporary file
@@ -115,6 +115,7 @@ class TestMatrixRegion(object):
         assert 1 == struct.unpack('I', n_cols)[0]
 
         # Check the actual data
-        data = np.frombuffer(fp.read(), dtype=matrix.dtype).reshape(
+        read_data = fp.read()
+        data = np.frombuffer(read_data, dtype=matrix.dtype).reshape(
             matrix.shape)
         assert np.all(data == matrix)
