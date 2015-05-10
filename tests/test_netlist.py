@@ -3,6 +3,7 @@ import pytest
 from rig.bitfield import BitField
 from rig import machine
 from rig.machine import Cores, SDRAM
+from rig.place_and_route.constraints import ReserveResourceConstraint
 
 from nengo_spinnaker import netlist
 from nengo_spinnaker.utils.itertools import flatten
@@ -145,8 +146,10 @@ def test_place_and_route():
             # Check that the arguments were correct
             assert resources == {v: v.resources for v in nl.vertices}
             assert nets == nl.nets
-            assert constraints == list(flatten(  # pragma : no branch
-                v.constraints for v in nl.vertices))
+
+            for c in flatten(v.constraints for v in nl.vertices):
+                assert c in constraints
+
             assert kwargs == placer_kwargs
 
             # Return some placements
@@ -163,8 +166,22 @@ def test_place_and_route():
             # Check that the arguments were correct
             assert resources == {v: v.resources for v in nl.vertices}
             assert nets == nl.nets
-            assert constraints == list(flatten(  # pragma : no branch
-                v.constraints for v in nl.vertices))
+
+            for c in flatten(v.constraints for v in nl.vertices):
+                assert c in constraints
+
+            # Assert there is a constraint on not using core 0
+            if isinstance(constraints[0], ReserveResourceConstraint):
+                assert constraints[0].resource is Cores
+                assert constraints[0].reservation == slice(0, 1)
+                assert constraints[0].location is None
+            elif isinstance(constraints[-1], ReserveResourceConstraint):
+                assert constraints[-1].resource is Cores
+                assert constraints[-1].reservation == slice(0, 1)
+                assert constraints[-1].location is None
+            else:
+                assert False, "Missing monitor processor reserving constraint."
+
             assert placements == {v1: (0, 0), v2a: (0, 1), v2b: (1, 0)}
             assert kwargs == allocater_kwargs
 
@@ -204,8 +221,10 @@ def test_place_and_route():
             assert resources == {v: v.resources for v in nl.vertices}
             assert nets == nl.nets
             assert machine_ is machine
-            assert constraints == list(flatten(  # pragma : no branch
-                v.constraints for v in nl.vertices))
+
+            for c in flatten(v.constraints for v in nl.vertices):
+                assert c in constraints
+
             assert placements == {v1: (0, 0), v2a: (0, 1), v2b: (1, 0)}
             assert allocations == {v1: {Cores: slice(0, 1)},
                                    v2a: {Cores: slice(9, 10)},

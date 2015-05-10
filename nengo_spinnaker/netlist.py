@@ -1,14 +1,20 @@
 """Higher and lower level netlist items.
 """
+import logging
 import rig.netlist
 from rig import place_and_route
+from rig.place_and_route.constraints import ReserveResourceConstraint
 
 from rig.place_and_route.utils import (build_application_map,
                                        build_routing_tables)
+from rig.machine import Cores
 from rig.machine_control.utils import sdram_alloc_for_vertices
+from six import iteritems
 
 from .partition_and_cluster import identify_clusters
 from .utils.itertools import flatten
+
+logger = logging.getLogger(__name__)
 
 
 class Net(rig.netlist.Net):
@@ -199,6 +205,7 @@ class Netlist(object):
         # constraints.
         vertices_resources = {v: v.resources for v in self.vertices}
         constraints = list(flatten(v.constraints for v in self.vertices))
+        constraints.append(ReserveResourceConstraint(Cores, slice(0, 1)))
 
         # Perform placement and allocation
         self.placements = place(vertices_resources, self.nets,
@@ -228,6 +235,7 @@ class Netlist(object):
         """
         # Build and load the routing tables, first by building a mapping from
         # nets to keys and masks.
+        logger.debug("Loading routing tables")
         net_keys = {n: (n.keyspace.get_value(tag=self.keyspaces.routing_tag),
                         n.keyspace.get_mask(tag=self.keyspaces.routing_tag))
                     for n in self.nets}
@@ -235,15 +243,25 @@ class Netlist(object):
         controller.load_routing_tables(routing_tables)
 
         # Assign memory to each vertex as required
+        logger.debug("Assigning application memory")
         self.vertices_memory = sdram_alloc_for_vertices(
             controller, self.placements, self.allocations
         )
 
+        # Inform the vertices of where that chunk of memory is
+        for vertex, memory in iteritems(self.vertices_memory):
+            x, y = self.placements[vertex]
+            p = self.allocations[vertex][Cores].start
+            controller.write_vcpu_struct_field(
+                "user0", memory.address, x, y, p)
+
         # Call each loading function in turn
+        logger.debug("Loading data")
         for fn in self.load_functions:
             fn(self, controller)
 
         # Load the applications onto the machine
+        logger.debug("Loading application executables")
         vertices_applications = {v: v.application for v in self.vertices
                                  if v.application is not None}
         application_map = build_application_map(
