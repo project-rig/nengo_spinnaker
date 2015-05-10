@@ -79,8 +79,10 @@ def test_create_app_ptr_and_filelikes(vertex_slice):
     )
 
 
-@pytest.mark.parametrize("vertex_slice", [slice(0, 1), slice(100, 150)])
-def test_sizeof_regions(vertex_slice):
+@pytest.mark.parametrize(
+    "vertex_slice, include_app_ptr",
+    [(slice(0, 1), True), (slice(100, 150), False)])
+def test_sizeof_regions(vertex_slice, include_app_ptr):
     """Test getting the total memory usage of some regions."""
     class MyRegion(Region):
         def __init__(self, size):
@@ -103,5 +105,6 @@ def test_sizeof_regions(vertex_slice):
     ]
 
     # Now query their size
-    assert utils.sizeof_regions(regions, vertex_slice) == 37*4
+    assert (utils.sizeof_regions(regions, vertex_slice, include_app_ptr) ==
+            37*4 + (len(regions)*4 if include_app_ptr else 0))
     assert all(r.called for r in regions if r is not None)
