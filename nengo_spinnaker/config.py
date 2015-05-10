@@ -3,7 +3,7 @@ import nengo
 from nengo.params import BoolParam, DictParam, NumberParam, Parameter
 from rig import place_and_route as par
 
-from .simulator import SpiNNakerSimulator
+from nengo_spinnaker.simulator import SpiNNakerSimulator
 
 
 def add_spinnaker_params(config):

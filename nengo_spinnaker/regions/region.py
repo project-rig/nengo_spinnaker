@@ -12,7 +12,7 @@ class Region(object):
         n_bytes = self.sizeof(vertex_slice)
         return n_bytes + (0 if (n_bytes % 4 == 0) else (4 - n_bytes % 4))
 
-    def write_subregion_to_file(self, fp, *args, vertex_slice=None,
+    def write_subregion_to_file(self, fp, vertex_slice=None,
                                 **kwargs):  # pragma : no cover
         """Write the region or a slice of the region to a file-like object.
 

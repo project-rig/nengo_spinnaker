@@ -106,5 +106,5 @@ def test_sizeof_regions(vertex_slice, include_app_ptr):
 
     # Now query their size
     assert (utils.sizeof_regions(regions, vertex_slice, include_app_ptr) ==
-            37*4 + (len(regions)*4 if include_app_ptr else 0))
+            37*4 + (len(regions)*4 + 4 if include_app_ptr else 0))
     assert all(r.called for r in regions if r is not None)

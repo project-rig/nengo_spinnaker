@@ -1,5 +1,4 @@
 import collections
-import enum
 import nengo
 from nengo.builder import connection as connection_b
 from nengo.builder import ensemble
@@ -9,6 +8,7 @@ from nengo.utils import numpy as npext
 import numpy as np
 
 from .builder import BuiltConnection, InputPort, Model, ObjectPort, spec
+from .ports import EnsembleInputPort
 from .. import operators
 from ..utils import collections as collections_ext
 
@@ -17,21 +17,6 @@ BuiltEnsemble = collections.namedtuple(
                      "scaled_encoders, gain, bias"
 )
 """Parameters which describe an Ensemble."""
-
-
-class EnsembleOutputPort(enum.Enum):
-    """Ensemble only output ports."""
-    neurons = 0
-    """Spike-based neuron output."""
-
-
-class EnsembleInputPort(enum.Enum):
-    """Ensemble only input ports."""
-    neurons = 0
-    """Spike-based neuron input."""
-
-    global_inhibition = 1
-    """Global inhibition input."""
 
 
 @Model.source_getters.register(nengo.ensemble.Neurons)
@@ -192,9 +177,8 @@ def build_ensemble_probe(model, probe):
     """Build a Probe which has an Ensemble as its target."""
     if probe.attr == "decoded_output":
         # Create an object to receive the probed data
-        model.object_intermediates[probe] = operators.ValueSink(
-            probe.size_in, probe.sample_every / model.dt
-        )
+        model.object_intermediates[probe] = operators.ValueSink(probe,
+                                                                model.dt)
 
         # Create a new connection from the ensemble to the probe
         seed = model.seeds[probe]

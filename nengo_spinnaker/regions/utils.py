@@ -24,10 +24,9 @@ def create_app_ptr_and_region_files(fp, regions, vertex_slice):
             region_memory.append(None)
         else:
             ptrs[i] = offset
-            region_memory.append(
-                fp[offset:offset + r.sizeof_padded(vertex_slice)]
-            )
-            offset += r.sizeof_padded(vertex_slice)
+            next_offset = offset + r.sizeof_padded(vertex_slice)
+            region_memory.append(fp[offset:next_offset])
+            offset = next_offset
 
     # Write in the pointer table
     fp.seek(0)
@@ -43,5 +42,5 @@ def sizeof_regions(regions, vertex_slice, include_app_ptr=True):
     """
     size = sum(r.sizeof_padded(vertex_slice) for r in regions if r is not None)
     if include_app_ptr:
-        size += len(regions) * 4
+        size += len(regions) * 4 + 4
     return size

@@ -2,7 +2,6 @@ import math
 import mock
 import nengo
 import pytest
-from rig.type_casts import float_to_fix
 import struct
 import tempfile
 
@@ -10,8 +9,7 @@ from nengo_spinnaker.regions.filters import (
     FilterRegion, FilterRoutingRegion, LowpassFilter, NoneFilter,
     make_filter_regions)
 from nengo_spinnaker.utils.keyspaces import KeyspaceContainer
-
-s1615 = float_to_fix(True, 32, 15)
+from nengo_spinnaker.utils import type_casts as tp
 
 
 class TestNoneFilter(object):
@@ -27,7 +25,7 @@ class TestNoneFilter(object):
         # Check the values are sane
         v1, v2, mask, size = struct.unpack("<4I", data)
         assert v1 == 0
-        assert v2 == s1615(1.0)
+        assert v2 == tp.value_to_fix(1.0)
         assert mask == (0xffffffff if latching else 0x00000000)
         assert size == width
 
@@ -61,8 +59,8 @@ class TestLowpassFilter(object):
         # Check the values are sane
         v1, v2, mask, size = struct.unpack("<4I", data)
         val = math.exp(-dt / tc)
-        assert v1 == s1615(val)
-        assert v2 == s1615(1 - val)
+        assert v1 == tp.value_to_fix(val)
+        assert v2 == tp.value_to_fix(1 - val)
         assert mask == (0xffffffff if latching else 0x00000000)
         assert size == width
 
@@ -271,7 +269,7 @@ class TestMakeFilterRegions(object):
 
         for f in filter_region.filters:
             assert (f == LowpassFilter(3, False, 0.01) or
-                    f == NoneFilter(3, False))
+                    f == NoneFilter(3, False))  # noqa: E711
 
         # Check that the routing region is as expected
         assert routing_region.filter_routing_tag == "spam"

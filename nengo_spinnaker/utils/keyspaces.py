@@ -114,7 +114,7 @@ class KeyspaceContainer(collections.defaultdict):
         nengo_ks.add_field("cluster", tags=[self.routing_tag])
         nengo_ks.add_field("connection", tags=[self.routing_tag,
                                                self.filter_routing_tag])
-        nengo_ks.add_field("index")
+        nengo_ks.add_field("index", start_at=0)
 
     def assign_fields(self):
         """Call `assign_fields` on the master keyspace, forcing field

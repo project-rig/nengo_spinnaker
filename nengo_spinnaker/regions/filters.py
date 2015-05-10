@@ -1,18 +1,16 @@
 import math
 import nengo.synapses
-from rig.type_casts import float_to_fix
 from six import iteritems, itervalues
 import struct
 
 from .region import Region
-from ..utils.collections import registerabledict
-
-s1615 = float_to_fix(True, 32, 15)
+from nengo_spinnaker.utils.collections import registerabledict
+from nengo_spinnaker.utils import type_casts as tp
 
 
 def make_filter_regions(signals_and_connections, dt, minimise=False,
                         filter_routing_tag="filter_routing",
-                        index_field="index_field"):
+                        index_field="index"):
     """Create a filter region and a filter routing region from the given
     signals and connections.
 
@@ -138,8 +136,8 @@ class LowpassFilter(Filter):
         """Pack the struct describing the filter into the buffer."""
         val = math.exp(-dt / self.time_constant)
         struct.pack_into(self._pack_chars, buffer, offset,
-                         s1615(val),
-                         s1615(1 - val))
+                         tp.value_to_fix(val),
+                         tp.value_to_fix(1 - val))
         super(LowpassFilter, self).pack_into(
             dt, buffer, offset + struct.calcsize(self._pack_chars))
 
@@ -157,12 +155,12 @@ class NoneFilter(Filter):
     def pack_into(self, dt, buffer, offset=0):
         """Pack the struct describing the filter into the buffer."""
         struct.pack_into(self._pack_chars, buffer, offset,
-                         s1615(0.0), s1615(1.0))
+                         tp.value_to_fix(0.0), tp.value_to_fix(1.0))
         super(NoneFilter, self).pack_into(
             dt, buffer, offset + struct.calcsize(self._pack_chars))
 
 
-class FilterRoutingRegion(object):
+class FilterRoutingRegion(Region):
     """Region of memory which maps routing entries to filter indices.
 
     Attributes

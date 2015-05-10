@@ -1,8 +1,10 @@
 from six import iteritems
 import struct
 
+from .region import Region
 
-class KeyspacesRegion(object):
+
+class KeyspacesRegion(Region):
     """A region of memory which represents data formed from a list of
     :py:class:`~rig.bitfield.BitField` instances representing SpiNNaker routing
     keys.

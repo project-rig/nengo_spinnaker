@@ -284,7 +284,7 @@ class Model(object):
 
         return ports_sigs_conns
 
-    def make_netlist(self):
+    def make_netlist(self, *args, **kwargs):
         """Convert the model into a netlist for simulating on SpiNNaker.
 
         Returns
@@ -301,7 +301,9 @@ class Model(object):
         after_simulation_functions = collections_ext.noneignoringlist()
 
         for op in itervalues(self.object_intermediates):
-            vxs, load_fn, pre_fn, post_fn = op.make_vertices(self)
+            vxs, load_fn, pre_fn, post_fn = op.make_vertices(
+                self, *args, **kwargs
+            )
 
             operator_vertices[op] = vxs
             vertices.append(vxs)

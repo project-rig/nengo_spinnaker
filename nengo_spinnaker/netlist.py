@@ -225,7 +225,7 @@ class Netlist(object):
                             constraints, self.placements, self.allocations,
                             **route_kwargs)
 
-    def load_application(self, controller):
+    def load_application(self, controller, steps=0):
         """Load the netlist to a SpiNNaker machine.
 
         Parameters
@@ -254,6 +254,8 @@ class Netlist(object):
             p = self.allocations[vertex][Cores].start
             controller.write_vcpu_struct_field(
                 "user0", memory.address, x, y, p)
+            controller.write_vcpu_struct_field(
+                "user1", steps, x, y, p)
 
         # Call each loading function in turn
         logger.debug("Loading data")

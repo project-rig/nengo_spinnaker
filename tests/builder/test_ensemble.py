@@ -313,7 +313,7 @@ class TestBuildFromNeuronsConnection(object):
 class TestProbeEnsemble(object):
     """Test probing ensembles."""
     @pytest.mark.parametrize("with_slice", [False, True])
-    def test_probe_output(self, with_slice):
+    def test_probe_output_with_sampling(self, with_slice):
         """Test that probing the output of an Ensemble generates a new
         connection and a new object.
         """
@@ -321,9 +321,9 @@ class TestProbeEnsemble(object):
             a = nengo.Ensemble(100, 3)
 
             if not with_slice:
-                p = nengo.Probe(a, sample_every=0.002)
+                p = nengo.Probe(a, sample_every=0.0023)
             else:
-                p = nengo.Probe(a[0:1], sample_every=0.002)
+                p = nengo.Probe(a[0:1], sample_every=0.0023)
 
         # Create an empty model to build the probe into
         model = builder.Model()
@@ -342,8 +342,23 @@ class TestProbeEnsemble(object):
         # Check that a new object was added to the model
         vs = model.object_intermediates[p]
         assert isinstance(vs, operators.ValueSink)
-        assert vs.size_in == p.size_in
-        assert vs.sample_every == 2
+        assert vs.probe is p
+
+    def test_probe_output_no_sampling(self):
+        """Test that probing the output of an Ensemble generates a new
+        connection and a new object.
+        """
+        with nengo.Network() as net:
+            a = nengo.Ensemble(100, 3)
+            p = nengo.Probe(a)
+
+        # Create an empty model to build the probe into
+        model = builder.Model()
+        model.build(net)
+
+        # Check that a new object was added to the model
+        vs = model.object_intermediates[p]
+        assert vs.sample_every == 1
 
     @pytest.mark.xfail(reason="Unimplemented functionality")
     def test_probe_input(self):

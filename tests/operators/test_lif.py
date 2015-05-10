@@ -4,10 +4,8 @@ import pytest
 import struct
 import tempfile
 
-from rig import type_casts
-s1615 = type_casts.float_to_fix(True, 32, 15)
-
 from nengo_spinnaker.operators import lif
+from nengo_spinnaker.utils import type_casts as tp
 
 
 class TestEnsembleLIF(object):
@@ -73,7 +71,7 @@ class TestSystemRegion(object):
         assert n_n == vertex_neurons
         assert m_t == machine_timestep
         assert t_ref == int(tau_ref // dt)
-        assert dt_over_t_rc == s1615(dt / tau_rc)
+        assert dt_over_t_rc == tp.value_to_fix(dt / tau_rc)
         assert ((probe_spikes and rec_spikes != 0) or
                 (not probe_spikes and rec_spikes == 0))
         assert i_dims == 1
