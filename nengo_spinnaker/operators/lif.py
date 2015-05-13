@@ -221,7 +221,7 @@ class PESRegion(regions.Region):
 
     def write_subregion_to_file(self, fp, vertex_slice):
         # Write out a zero, indicating no PES data
-        assert fp.write(b"\x00" * 4) == 4
+        fp.write(b"\x00" * 4)
 
 
 def get_decoders_and_keys(model, signals_connections):
