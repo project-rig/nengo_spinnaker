@@ -32,7 +32,7 @@ class TestBuildEnsembleLIF(object):
                 model.params[ens].bias.shape == (n_neurons, ))
 
         # Check that a new object was inserted into the objects dictionary
-        assert isinstance(model.object_intermediates[ens],
+        assert isinstance(model.object_operators[ens],
                           operators.EnsembleLIF)
 
     def test_with_encoders_and_gain_bias(self):
@@ -104,7 +104,7 @@ def test_neurons_source():
     # Create a model with the Ensemble for a in it
     model = builder.Model()
     a_ens = operators.EnsembleLIF(a)
-    model.object_intermediates[a] = a_ens
+    model.object_operators[a] = a_ens
 
     # Get the source, check that an appropriate target is return
     source = ensemble.get_neurons_source(model, a_b)
@@ -127,7 +127,7 @@ class TestEnsembleSink(object):
         # Create a model with the Ensemble for b in it
         model = builder.Model()
         b_ens = operators.EnsembleLIF(b)
-        model.object_intermediates[b] = b_ens
+        model.object_operators[b] = b_ens
 
         # Get the sink, check that an appropriate target is return
         sink = ensemble.get_ensemble_sink(model, a_b)
@@ -148,7 +148,7 @@ class TestEnsembleSink(object):
         # Create a model with the Ensemble for b in it
         model = builder.Model()
         b_ens = operators.EnsembleLIF(b)
-        model.object_intermediates[b] = b_ens
+        model.object_operators[b] = b_ens
 
         # Check that no sink is created but that the direct input is modified
         assert np.all(b_ens.direct_input == np.zeros(2))
@@ -170,7 +170,7 @@ class TestEnsembleSink(object):
         # Create a model with the Ensemble for b in it
         model = builder.Model()
         b_ens = operators.EnsembleLIF(b)
-        model.object_intermediates[b] = b_ens
+        model.object_operators[b] = b_ens
 
         # Check that no sink is created but that the direct input is modified
         assert np.all(b_ens.direct_input == np.zeros(2))
@@ -193,7 +193,7 @@ class TestNeuronSinks(object):
         # Create a model with the Ensemble for b in it
         model = builder.Model()
         b_ens = operators.EnsembleLIF(b)
-        model.object_intermediates[b] = b_ens
+        model.object_operators[b] = b_ens
 
         # Get the sink, check that an appropriate target is return
         sink = ensemble.get_neurons_sink(model, a_b)
@@ -212,7 +212,7 @@ class TestNeuronSinks(object):
         # Create a model with the Ensemble for b in it
         model = builder.Model()
         b_ens = operators.EnsembleLIF(b)
-        model.object_intermediates[b] = b_ens
+        model.object_operators[b] = b_ens
 
         # This should fail
         with pytest.raises(NotImplementedError):
@@ -231,7 +231,7 @@ class TestNeuronSinks(object):
         # Create a model with the Ensemble for b in it
         model = builder.Model()
         b_ens = operators.EnsembleLIF(b)
-        model.object_intermediates[b] = b_ens
+        model.object_operators[b] = b_ens
 
         # Get the sink, check that an appropriate target is return
         sink = ensemble.get_neurons_sink(model, a_b)
@@ -340,7 +340,7 @@ class TestProbeEnsemble(object):
                 assert conn.pre_slice == p.slice
 
         # Check that a new object was added to the model
-        vs = model.object_intermediates[p]
+        vs = model.object_operators[p]
         assert isinstance(vs, operators.ValueSink)
         assert vs.probe is p
 
@@ -357,7 +357,7 @@ class TestProbeEnsemble(object):
         model.build(net)
 
         # Check that a new object was added to the model
-        vs = model.object_intermediates[p]
+        vs = model.object_operators[p]
         assert vs.sample_every == 1
 
     @pytest.mark.xfail(reason="Unimplemented functionality")
@@ -392,8 +392,8 @@ class TestProbeNeurons(object):
 
         # Assert that we added the probe to the list of local probes and
         # nothing else
-        assert model.object_intermediates[a].local_probes == [p]
-        assert len(model.object_intermediates) == 1
+        assert model.object_operators[a].local_probes == [p]
+        assert len(model.object_operators) == 1
         assert len(model.connections_signals) == 0
 
     @pytest.mark.xfail(reason="Unimplemented functionality")
@@ -411,8 +411,8 @@ class TestProbeNeurons(object):
 
         # Assert that we added the probe to the list of local probes and
         # nothing else
-        assert model.object_intermediates[a].local_probes == [p]
-        assert len(model.object_intermediates) == 1
+        assert model.object_operators[a].local_probes == [p]
+        assert len(model.object_operators) == 1
         assert len(model.connections_signals) == 0
 
     @pytest.mark.xfail(reason="Unimplemented functionality")
@@ -430,6 +430,6 @@ class TestProbeNeurons(object):
 
         # Assert that we added the probe to the list of local probes and
         # nothing else
-        assert model.object_intermediates[a].local_probes == [p]
-        assert len(model.object_intermediates) == 1
+        assert model.object_operators[a].local_probes == [p]
+        assert len(model.object_operators) == 1
         assert len(model.connections_signals) == 0

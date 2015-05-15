@@ -30,7 +30,7 @@ def get_neurons_source(model, connection):
 @Model.sink_getters.register(nengo.Ensemble)
 def get_ensemble_sink(model, connection):
     """Get the sink for connections into an Ensemble."""
-    ens = model.object_intermediates[connection.post_obj]
+    ens = model.object_operators[connection.post_obj]
 
     if (isinstance(connection.pre_obj, nengo.Node) and
             not callable(connection.pre_obj.output)):
@@ -52,7 +52,7 @@ def get_ensemble_sink(model, connection):
 @Model.sink_getters.register(nengo.ensemble.Neurons)
 def get_neurons_sink(model, connection):
     """Get the sink for connections into the neurons of an ensemble."""
-    ens = model.object_intermediates[connection.post_obj.ensemble]
+    ens = model.object_operators[connection.post_obj.ensemble]
 
     if isinstance(connection.pre_obj, nengo.ensemble.Neurons):
         # Connections from Neurons can go straight to the Neurons
@@ -129,7 +129,7 @@ def build_lif(model, ens):
     # object will be responsible for adding items to the netlist and providing
     # functions to prepare the ensemble for simulation.  The object may be
     # modified by later methods.
-    model.object_intermediates[ens] = operators.EnsembleLIF(ens)
+    model.object_operators[ens] = operators.EnsembleLIF(ens)
 
 
 @Model.connection_parameter_builders.register(nengo.Ensemble)
@@ -177,8 +177,7 @@ def build_ensemble_probe(model, probe):
     """Build a Probe which has an Ensemble as its target."""
     if probe.attr == "decoded_output":
         # Create an object to receive the probed data
-        model.object_intermediates[probe] = operators.ValueSink(probe,
-                                                                model.dt)
+        model.object_operators[probe] = operators.ValueSink(probe, model.dt)
 
         # Create a new connection from the ensemble to the probe
         seed = model.seeds[probe]
@@ -200,7 +199,7 @@ def build_neurons_probe(model, probe):
     """Build a probe which has Neurons as its target."""
     if probe.attr in ("output", "spikes"):
         # Add this probe to the list of probes attached to the ensemble object.
-        model.object_intermediates[probe.target.ensemble].local_probes.append(
+        model.object_operators[probe.target.ensemble].local_probes.append(
             probe
         )
     else:

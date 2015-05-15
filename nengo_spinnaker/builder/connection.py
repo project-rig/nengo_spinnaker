@@ -8,13 +8,13 @@ from .builder import (
 
 @Model.source_getters.register(nengo.base.NengoObject)
 def generic_source_getter(model, conn):
-    obj = model.object_intermediates[conn.pre_obj]
+    obj = model.object_operators[conn.pre_obj]
     return spec(ObjectPort(obj, OutputPort.standard))
 
 
 @Model.sink_getters.register(nengo.base.NengoObject)
 def generic_sink_getter(model, conn):
-    obj = model.object_intermediates[conn.post_obj]
+    obj = model.object_operators[conn.post_obj]
     return spec(ObjectPort(obj, InputPort.standard))
 
 

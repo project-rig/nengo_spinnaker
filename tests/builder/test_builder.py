@@ -59,8 +59,10 @@ def test_model_init():
     assert model.params == dict()
     assert model.seeds == dict()
 
-    assert dict(model.object_intermediates) == dict()
+    assert dict(model.object_operators) == dict()
     assert dict(model.connections_signals) == dict()
+    assert model.extra_operators == list()
+    assert model.extra_signals == list()
 
     assert isinstance(model.decoder_cache, NoDecoderCache)
     assert len(model.keyspaces) == 1
@@ -766,9 +768,63 @@ class TestMakeNetlist(object):
 
         # Create the model, add the items and then generate the netlist
         model = Model()
-        model.object_intermediates[object_a] = operator_a
-        model.object_intermediates[object_b] = operator_b
+        model.object_operators[object_a] = operator_a
+        model.object_operators[object_b] = operator_b
         model.connections_signals[None] = signal_ab
+        netlist = model.make_netlist()
+
+        # Check that the make_vertices functions were called
+        operator_a.make_vertices.assert_called_once_with(model)
+        operator_b.make_vertices.assert_called_once_with(model)
+
+        # Check that the netlist is as expected
+        assert len(netlist.nets) == 1
+        for net in netlist.nets:
+            assert net.source is vertex_a
+            assert net.sinks == [vertex_b]
+            assert net.keyspace is keyspace
+            assert net.weight == signal_ab.weight
+
+        assert set(netlist.vertices) == set([vertex_a, vertex_b])
+        assert netlist.keyspaces is model.keyspaces
+        assert netlist.groups == list()
+        assert set(netlist.load_functions) == set([load_fn_a, load_fn_b])
+        assert netlist.before_simulation_functions == [pre_fn_a]
+        assert netlist.after_simulation_functions == [post_fn_a]
+
+    def test_extra_operators_and_signals(self):
+        """Test the operators and signals in the extra_operators and
+        extra_signals lists are included when building netlists.
+        """
+        # Create the first operator
+        vertex_a = mock.Mock(name="vertex A")
+        load_fn_a = mock.Mock(name="load function A")
+        pre_fn_a = mock.Mock(name="pre function A")
+        post_fn_a = mock.Mock(name="post function A")
+
+        operator_a = mock.Mock(name="operator A")
+        operator_a.make_vertices.return_value = \
+            netlistspec(vertex_a, load_fn_a, pre_fn_a, post_fn_a)
+
+        # Create the second operator
+        vertex_b = mock.Mock(name="vertex B")
+        load_fn_b = mock.Mock(name="load function B")
+
+        operator_b = mock.Mock(name="operator B")
+        operator_b.make_vertices.return_value = \
+            netlistspec(vertex_b, load_fn_b)
+
+        # Create a signal between the operators
+        keyspace = mock.Mock(name="keyspace")
+        keyspace.length = 32
+        signal_ab = Signal(ObjectPort(operator_a, None),
+                           ObjectPort(operator_b, None),
+                           keyspace=keyspace, weight=43)
+
+        # Create the model, add the items and then generate the netlist
+        model = Model()
+        model.extra_operators = [operator_a, operator_b]
+        model.extra_signals = [signal_ab]
         netlist = model.make_netlist()
 
         # Check that the make_vertices functions were called
@@ -821,8 +877,8 @@ class TestMakeNetlist(object):
 
         # Create the model, add the items and then generate the netlist
         model = Model()
-        model.object_intermediates[object_a] = operator_a
-        model.object_intermediates[object_b] = operator_b
+        model.object_operators[object_a] = operator_a
+        model.object_operators[object_b] = operator_b
         model.connections_signals[None] = signal_ab
         netlist = model.make_netlist()
 
@@ -869,8 +925,8 @@ class TestMakeNetlist(object):
 
         # Create the model, add the items and then generate the netlist
         model = Model()
-        model.object_intermediates[object_a] = operator_a
-        model.object_intermediates[object_b] = operator_b
+        model.object_operators[object_a] = operator_a
+        model.object_operators[object_b] = operator_b
         model.connections_signals[None] = signal_ab
         netlist = model.make_netlist()
 

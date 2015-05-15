@@ -94,7 +94,7 @@ class NodeIOController(object):
     def build_node_probe(self, model, probe):
         """Modify the model to build the Probe."""
         # Create a new ValueSink for the probe and add this to the model.
-        model.object_intermediates[probe] = ValueSink(probe, model.dt)
+        model.object_operators[probe] = ValueSink(probe, model.dt)
 
         # Create a new connection from the Node to the Probe and then get the
         # model to build this.

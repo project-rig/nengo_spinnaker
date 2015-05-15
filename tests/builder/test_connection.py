@@ -24,8 +24,8 @@ def test_generic_source_getter():
     post_int = mock.Mock(name="post intermediate")
 
     model = Model()
-    model.object_intermediates[conn.pre_obj] = pre_int
-    model.object_intermediates[conn.post_obj] = post_int
+    model.object_operators[conn.pre_obj] = pre_int
+    model.object_operators[conn.post_obj] = post_int
 
     # Get the source
     spec = generic_source_getter(model, conn)
@@ -47,8 +47,8 @@ def test_generic_sink_getter():
     post_int = mock.Mock(name="post intermediate")
 
     model = Model()
-    model.object_intermediates[conn.pre_obj] = pre_int
-    model.object_intermediates[conn.post_obj] = post_int
+    model.object_operators[conn.pre_obj] = pre_int
+    model.object_operators[conn.post_obj] = post_int
 
     # Get the sink
     spec = generic_sink_getter(model, conn)

@@ -1,6 +1,7 @@
 """SpiNNaker builder for Nengo models."""
 import collections
 import enum
+import itertools
 import nengo
 from nengo.cache import NoDecoderCache
 from nengo.utils.builder import objs_and_connections, remove_passthrough_nodes
@@ -41,11 +42,14 @@ class Model(object):
         Map of Nengo objects to the seeds used in their construction.
     keyspaces : {keyspace_name: keyspace}
         Map of keyspace names to the keyspace which they may use.
-    objects_intermediates : {object: intermediate, ...}
-        Map of objects to the intermediate objects which will simulate them on
-        SpiNNaker.
+    objects_operators : {object: operator, ...}
+        Map of objects to the operators which will simulate them on SpiNNaker.
+    extra_operators: [operator, ...]
+        Additional operators.
     connections_signals : {connection: :py:`~.Signal`, ...}
         Map of connections to the signals that simulate them.
+    extra_signals: [operator, ...]
+        Additional signals.
     """
 
     builders = collections_ext.registerabledict()
@@ -123,8 +127,10 @@ class Model(object):
         self.seeds = dict()
         self.rng = None
 
-        self.object_intermediates = dict()
+        self.object_operators = dict()
+        self.extra_operators = list()
         self.connections_signals = dict()
+        self.extra_signals = list()
 
         if keyspaces is None:
             keyspaces = KeyspaceContainer()
@@ -300,7 +306,8 @@ class Model(object):
         before_simulation_functions = collections_ext.noneignoringlist()
         after_simulation_functions = collections_ext.noneignoringlist()
 
-        for op in itervalues(self.object_intermediates):
+        for op in itertools.chain(itervalues(self.object_operators),
+                                  self.extra_operators):
             vxs, load_fn, pre_fn, post_fn = op.make_vertices(
                 self, *args, **kwargs
             )
@@ -322,7 +329,8 @@ class Model(object):
 
         # Construct nets from the signals
         nets = list()
-        for signal in itervalues(self.connections_signals):
+        for signal in itertools.chain(itervalues(self.connections_signals),
+                                      self.extra_signals):
             # Get the source and sink vertices
             sources = operator_vertices[signal.source.obj]
             if not isinstance(sources, collections.Iterable):

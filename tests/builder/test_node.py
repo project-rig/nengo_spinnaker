@@ -53,9 +53,9 @@ class TestNodeIOController(object):
 
         # Create a model to manipulate
         model = mock.Mock(name="model", spec_set=[
-            "object_intermediates", "seeds", "make_connection", "dt"
+            "object_operators", "seeds", "make_connection", "dt"
         ])
-        model.object_intermediates = dict()
+        model.object_operators = dict()
         model.seeds = {p: 123}
         model.dt = 0.001
 
@@ -74,8 +74,8 @@ class TestNodeIOController(object):
         assert make_conn.call_count == 1
 
         # Assert that a ValueSink was inserted in the model
-        assert isinstance(model.object_intermediates[p], ValueSink)
-        assert model.object_intermediates[p].probe is p
+        assert isinstance(model.object_operators[p], ValueSink)
+        assert model.object_operators[p].probe is p
 
     def test_get_node_source_standard(self):
         """Test that calling a NodeIOController to get the source for a
