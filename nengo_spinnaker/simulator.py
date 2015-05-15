@@ -3,7 +3,9 @@ import numpy as np
 from rig.machine_control import MachineController
 
 from .builder import Model
+from .node_io import Ethernet
 from .rc import rc
+from .utils.config import getconfig
 from .utils.machine_control import test_and_boot
 
 logger = logging.getLogger(__name__)
@@ -21,10 +23,16 @@ class SpiNNakerSimulator(object):
         self.controller = MachineController(hostname)
         test_and_boot(self.controller, hostname, machine_width, machine_height)
 
-        # Create a model from the network
-        # TODO Include the IO builder in the build process
+        # Create the IO controller
+        io_cls = getconfig(network.config, SpiNNakerSimulator,
+                           "node_io", Ethernet)
+        io_kwargs = getconfig(network.config, SpiNNakerSimulator,
+                              "node_io_kwargs", dict())
+        self.io_controller = io_cls(**io_kwargs)
+
+        # Create a model from the network, using the IO controller
         self.model = Model(dt)
-        self.model.build(network)
+        self.model.build(network, **self.io_controller.builder_kwargs)
         self.dt = self.model.dt
 
         # Holder for probe data

@@ -3,6 +3,7 @@ import nengo
 from nengo.params import BoolParam, DictParam, NumberParam, Parameter
 from rig import place_and_route as par
 
+from nengo_spinnaker.node_io import Ethernet
 from nengo_spinnaker.simulator import SpiNNakerSimulator
 
 
@@ -25,6 +26,11 @@ def add_spinnaker_params(config):
         "router", CallableParameter(default=par.route))
     config[SpiNNakerSimulator].set_param(
         "router_kwargs", DictParam(default={}))
+
+    config[SpiNNakerSimulator].set_param(
+        "node_io", Parameter(default=Ethernet))
+    config[SpiNNakerSimulator].set_param(
+        "node_io_kwargs", DictParam(default={}))
 
     # Add function_of_time parameters to Nodes
     config[nengo.Node].set_param("function_of_time", BoolParam(default=False))

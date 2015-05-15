@@ -5,6 +5,7 @@ from rig import place_and_route as par
 
 from nengo_spinnaker import SpiNNakerSimulator, add_spinnaker_params
 from nengo_spinnaker.config import CallableParameter
+from nengo_spinnaker import node_io
 
 
 def test_add_spinnaker_params():
@@ -32,6 +33,8 @@ def test_add_spinnaker_params():
             ("allocater_kwargs", {}),
             ("router", lambda r, n, m, c, p, a: None),
             ("router_kwargs", {}),
+            ("node_io", None),
+            ("node_io_kwargs", {}),
             ]:
         with pytest.raises(KeyError) as excinfo:
             setattr(net.config[SpiNNakerSimulator], param, value)
@@ -49,6 +52,9 @@ def test_add_spinnaker_params():
     assert net.config[SpiNNakerSimulator].allocater_kwargs == {}
     assert net.config[SpiNNakerSimulator].router is par.route
     assert net.config[SpiNNakerSimulator].router_kwargs == {}
+
+    assert net.config[SpiNNakerSimulator].node_io is node_io.Ethernet
+    assert net.config[SpiNNakerSimulator].node_io_kwargs == {}
 
 
 def test_callable_parameter_validate():
