@@ -1,3 +1,4 @@
+import mock
 import nengo
 import pytest
 from rig import place_and_route as par
