@@ -91,10 +91,7 @@ class EnsembleLIF(object):
             sliced_dimension=regions.MatrixPartitioning.rows
         )
         self.output_keys_region = regions.KeyspacesRegion(
-            output_keys, fields=[
-                regions.KeyField({'cluster': 'cluster'},
-                                 tag=model.keyspaces.routing_tag)
-            ]
+            output_keys, fields=[regions.KeyField({'cluster': 'cluster'})]
         )
 
         # Create the regions list
