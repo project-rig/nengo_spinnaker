@@ -49,6 +49,8 @@ class SpiNNakerSimulator(object):
         # NOTE: constructing a netlist, placing, routing and loading should
         # move into Simulator initialisation when the new simulation protocol
         # is implemented.
+        self._n_steps_last = steps
+
         # Convert the model into a netlist
         logger.info("Building netlist")
         netlist = self.model.make_netlist(steps)  # TODO remove steps!
@@ -83,7 +85,7 @@ class SpiNNakerSimulator(object):
 
         # TODO: Execute the local model
         import time
-        time.sleep(10.)
+        time.sleep(steps * self.dt * 1.5)
 
         # Retrieve simulation data
         logger.info("Retrieving simulation data")
@@ -91,4 +93,7 @@ class SpiNNakerSimulator(object):
 
         # Done, for now
         # TODO: Allow further simulation
-        # self.controller.send_signal("stop")
+        self.controller.send_signal("stop")
+
+    def trange(self, dt=None):
+        return np.arange(self._n_steps_last) * (self.dt or dt)
