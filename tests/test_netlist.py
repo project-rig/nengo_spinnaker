@@ -442,7 +442,6 @@ def test_before_simulation():
     )
 
     # Call the before_simulation_functions
-    controller = mock.Mock(name="Controller")
     simulator = mock.Mock(name="Simulator")
     model.before_simulation(simulator, 100)
 
@@ -467,7 +466,6 @@ def test_after_simulation():
     )
 
     # Call the before_simulation_functions
-    controller = mock.Mock(name="Controller")
     simulator = mock.Mock(name="Simulator")
     model.after_simulation(simulator, 100)
 

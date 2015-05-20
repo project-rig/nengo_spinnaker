@@ -129,10 +129,10 @@ class EnsembleLIF(object):
         sdram_constraint = partition.Constraint(8*2**20)  # Max 8MiB
         dtcm_constraint = partition.Constraint(64*2**10, .75)  # 75% of 64KiB
         constraints = {
-            sdram_constraint:
-                lambda s: regions.utils.sizeof_regions(self.regions, s),
-            dtcm_constraint:
-                lambda s: regions.utils.sizeof_regions(self.regions, s),
+            sdram_constraint: lambda s: regions.utils.sizeof_regions(
+                self.regions, s),
+            dtcm_constraint: lambda s: regions.utils.sizeof_regions(
+                self.regions, s),
         }
         for sl in partition.partition(slice(0, self.ensemble.n_neurons),
                                       constraints):

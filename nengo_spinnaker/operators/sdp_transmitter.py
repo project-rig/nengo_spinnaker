@@ -1,5 +1,4 @@
 from rig.machine import Cores, SDRAM
-import six
 import struct
 
 from nengo_spinnaker.builder.builder import netlistspec, InputPort

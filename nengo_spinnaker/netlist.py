@@ -2,7 +2,7 @@
 """
 import logging
 import rig.netlist
-from rig import place_and_route
+from rig import place_and_route  # noqa : F401
 from rig.place_and_route.constraints import ReserveResourceConstraint
 
 from rig.place_and_route.utils import (build_application_map,
