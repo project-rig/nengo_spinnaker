@@ -1,4 +1,3 @@
-import collections
 from rig.machine import Cores, SDRAM
 import six
 import struct
@@ -15,72 +14,58 @@ class SDPTransmitter(object):
     """An operator which receives multicast packets, performs filtering and
     transmits the filtered vector as an SDP packet.
     """
-    def __init__(self):
-        # Store a map of Nodes to vertices and vertices to regions
-        self.nodes_vertices = dict()
-        self._sys_regions = dict()  # Vertex to system region
-        self._filter_regions = dict()
-        self._routing_regions = dict()
+    def __init__(self, size_in):
+        self.size_in = size_in
+        self._vertex = None
+        self._sys_region = None
+        self._filter_region = None
+        self._routing_region = None
 
     def make_vertices(self, model, *args, **kwargs):
         """Create vertices that will simulate the SDPTransmitter."""
-        # Group the incoming signals and connections by the post-object.
-        nodes_sigs_conns = collections.defaultdict(dict)
-        in_ = model.get_signals_connections_from_object(self)
-        for signal, connections in six.iteritems(in_[InputPort.standard]):
-            for conn in connections:
-                nodes_sigs_conns[conn.post_obj][signal].append(conn)
+        # Build the system region
+        self._sys_region = SystemRegion(model.machine_timestep,
+                                        self.size_in, 1)
 
-        # For each Node create a vertex
-        for node, signals_connections in six.iteritems(nodes_sigs_conns):
-            # Build the system region
-            sys_region = SystemRegion(model.machine_timestep, node.size_in, 1)
+        # Build the filter regions
+        in_sigs = model.get_signals_connections_to_object(self)
+        self._filter_region, self._routing_region = make_filter_regions(
+            in_sigs[InputPort.standard], model.dt, True,
+            model.keyspaces.filter_routing_tag
+        )
 
-            # Build the filter regions
-            filter_region, routing_region = make_filter_regions(
-                signals_connections, model.dt, True,
-                model.keyspaces.filter_routing_tag
+        # Get the resources
+        resources = {
+            Cores: 1,
+            SDRAM: region_utils.sizeof_regions(
+                [self._sys_region, self._filter_region, self._routing_region],
+                None
             )
+        }
 
-            # Get the resources
-            resources = {
-                Cores: 1,
-                SDRAM: region_utils.sizeof_regions(
-                    [sys_region, filter_region, routing_region], None
-                )
-            }
-
-            # Create the vertex
-            v = self.nodes_vertices[conn] = Vertex(get_application("tx"),
-                                                   resources)
-            self._sys_regions[v] = sys_region
-            self._filter_regions[v] = filter_region
-            self._routing_regions[v] = routing_region
+        # Create the vertex
+        self._vertex = Vertex(get_application("tx"), resources)
 
         # Return the netlist specification
-        return netlistspec(list(self.nodes_vertices.values()),
+        return netlistspec(self.vertices,
                            load_function=self.load_to_machine)
 
     def load_to_machine(self, netlist, controller):
         """Load data to the machine."""
-        for vx in six.itervalues(self.nodes_vertices):
-            # Grab the regions for the vertex
-            sys_region = self._sys_regions[vx]
-            filter_region = self._filter_regions[vx]
-            routing_region = self._routing_regions[vx]
+        # Get the memory
+        sys_mem, filter_mem, routing_mem = \
+            region_utils.create_app_ptr_and_region_files(
+                netlist.vertices_memory[self._vertex],
+                [self._sys_region,
+                 self._filter_region,
+                 self._routing_region],
+                None
+            )
 
-            # Get the memory
-            sys_mem, filter_mem, routing_mem = \
-                region_utils.create_app_ptr_and_region_files(
-                    netlist.vertices_memory[vx],
-                    [sys_region, filter_region, routing_region],
-                    None
-                )
-
-            # Write the regions into memory
-            sys_region.write_region_to_file(sys_mem)
-            filter_region.write_subregion_to_file(filter_mem)
-            routing_region.write_subregion_to_file(routing_mem)
+        # Write the regions into memory
+        self._sys_region.write_region_to_file(sys_mem)
+        self._filter_region.write_subregion_to_file(filter_mem)
+        self._routing_region.write_subregion_to_file(routing_mem)
 
 
 class SystemRegion(Region):
