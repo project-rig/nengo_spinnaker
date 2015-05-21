@@ -235,10 +235,10 @@ def get_decoders_and_keys(model, signals_connections):
         decoder = model.params[connections[0]].decoders
         transform = model.params[connections[0]].transform
 
-        decoder = np.dot(transform, decoder)
-        decoders.append(decoder)
+        decoder = np.dot(transform, decoder.T)
+        decoders.append(decoder.T)
 
-        for i in range(decoder.shape[1]):
+        for i in range(decoder.shape[0]):
             keys.append(signal.keyspace(index=i))
 
     # Stack the decoders
