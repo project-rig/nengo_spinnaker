@@ -67,3 +67,23 @@ def test_callable_parameter_validate():
     assert "must be callable" in str(excinfo.value)
 
     cp.validate(None, lambda x: None)
+
+
+@pytest.mark.xfail(reason="Problems with Parameters")
+def test_function_of_time_node():
+    # Test that function of time can't be marked on Nodes unless they have size
+    # in == 0
+    with nengo.Network() as net:
+        not_f_of_t = nengo.Node(lambda t, x: t**2, size_in=1)
+        f_of_t = nengo.Node(lambda t: t)
+
+    # Modify the config
+    add_spinnaker_params(net.config)
+    net.config[f_of_t].function_of_time = True
+
+    with pytest.raises(ValueError):
+        net.config[not_f_of_t].function_of_time = True
+
+    # Check the settings are valid
+    assert not net.config[not_f_of_t].function_of_time
+    assert net.config[f_of_t].function_of_time
