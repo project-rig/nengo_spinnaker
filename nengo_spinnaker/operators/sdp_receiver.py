@@ -73,7 +73,8 @@ class SDPReceiver(object):
             )
 
             self._sys_regions[vx].write_region_to_file(sys_mem)
-            self._key_regions[vx].write_subregion_to_file(key_mem)
+            self._key_regions[vx].write_subregion_to_file(
+                key_mem, cluster=vx.cluster)
 
 
 class SystemRegion(Region):

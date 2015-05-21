@@ -46,7 +46,7 @@ class SDPTransmitter(object):
         self._vertex = Vertex(get_application("tx"), resources)
 
         # Return the netlist specification
-        return netlistspec(self.vertices,
+        return netlistspec(self._vertex,
                            load_function=self.load_to_machine)
 
     def load_to_machine(self, netlist, controller):

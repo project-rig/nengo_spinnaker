@@ -41,7 +41,8 @@ class NodeIOController(object):
     implement :py:meth:`~.set_node_output` for setting Node values and should
     write received node inputs into :py:attr:`~.node_inputs`, a dictionary with
     Nodes as the keys and Numpy arrays as the values using the
-    :py:attr:`~.node_inputs_lock`.
+    :py:attr:`~.node_inputs_lock`.  Subclasses should override
+    :py:meth:`~.prepare` if they need access to a netlist.
 
     Finally, subclasses should implement a `spawn` method, which returns a
     thread which manages IO.  This thread must have a `stop` method which
@@ -187,6 +188,12 @@ class NodeIOController(object):
         """
         raise NotImplementedError
 
+    def prepare(self, controller, netlist):
+        """Prepare the Node controller to work with the given netlist and
+        machine controller.
+        """
+        pass
+
     def set_node_output(self, node, value):  # pragma: no cover
         """Transmit the value output by a Node.
 
@@ -204,6 +211,10 @@ class NodeIOController(object):
         **OVERRIDE THIS METHOD** when creating a new IO controller.
         """
         raise NotImplementedError
+
+    def close(self):
+        """Close the NodeIOController."""
+        pass
 
 
 class InputNode(nengo.Node):

@@ -21,6 +21,19 @@ class TestNodeIOController(object):
         assert nioc.host_network.all_connections == list()
         assert nioc.host_network.all_probes == list()
 
+    def test_prepare(self):
+        """Preparing the default NodeIOController does nothing."""
+        controller = mock.Mock(spec_set=[])
+        netlist = mock.Mock(spec_set=[])
+
+        nioc = NodeIOController()
+        nioc.prepare(controller, netlist)
+
+    def test_close(self):
+        """Closing the default NodeIOController does nothing."""
+        nioc = NodeIOController()
+        nioc.close()
+
     def test_builder_kwargs(self):
         """Test getting builder keyword arguments."""
         nioc = NodeIOController()

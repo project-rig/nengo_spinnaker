@@ -1,6 +1,8 @@
 import logging
+import nengo
 import numpy as np
 from rig.machine_control import MachineController
+import time
 
 from .builder import Model
 from .node_io import Ethernet
@@ -35,6 +37,10 @@ class SpiNNakerSimulator(object):
         self.model.build(network, **self.io_controller.builder_kwargs)
         self.dt = self.model.dt
 
+        # Build the host simulator
+        self.host_sim = nengo.Simulator(self.io_controller.host_network,
+                                        dt=self.dt)
+
         # Holder for probe data
         self.data = {}
 
@@ -63,6 +69,11 @@ class SpiNNakerSimulator(object):
         logger.info("Placing and routing")
         netlist.place_and_route(machine)
 
+        # Prepare the simulator against the placed, allocated and routed
+        # netlist.
+        self.io_controller.prepare(self.controller, netlist)
+        io_thread = self.io_controller.spawn()
+
         # Load the application
         logger.info("Loading application")
         netlist.load_application(self.controller, steps)
@@ -79,21 +90,39 @@ class SpiNNakerSimulator(object):
             # TODO: Find the failed cores
             raise Exception("Unexpected core failures.")
 
-        # TODO: Wait for all cores to hit SYNC0
-        logger.info("Running simulation...")
-        self.controller.send_signal("sync0")
+        try:
+            # Prep
+            exp_time = steps * self.dt
+            io_thread.start()
 
-        # TODO: Execute the local model
-        import time
-        time.sleep(steps * self.dt * 1.5)
+            # TODO: Wait for all cores to hit SYNC0
+            logger.info("Running simulation...")
+            self.controller.send_signal("sync0")
+
+            # Execute the local model
+            while exp_time > 0:
+                # Run a step
+                start = time.time()
+                self.host_sim.step()
+                run_time = time.time() - start
+
+                # If that step took less than timestep then spin
+                time.sleep(0.0001)
+                while run_time < self.dt:
+                    run_time = time.time() - start
+
+                exp_time -= run_time
+        finally:
+            # Stop the IO thread whatever occurs
+            io_thread.stop()
 
         # Retrieve simulation data
         logger.info("Retrieving simulation data")
         netlist.after_simulation(self, steps)
 
-        # Done, for now
-        # TODO: Allow further simulation
+        # Stop the application
         self.controller.send_signal("stop")
+        self.io_controller.close()
 
     def trange(self, dt=None):
         return np.arange(self._n_steps_last) * (self.dt or dt)
