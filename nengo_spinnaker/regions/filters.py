@@ -124,9 +124,8 @@ class LowpassFilter(Filter):
 
     @classmethod
     def from_signal_and_connection(cls, signal, connection):
-        return cls(
-            connection.size_out, signal.latching, connection.synapse.tau
-        )
+        return cls(connection.post_obj.size_in, signal.latching,
+                   connection.synapse.tau)
 
     def __eq__(self, other):
         return (super(LowpassFilter, self).__eq__(other) and
@@ -150,7 +149,7 @@ class NoneFilter(Filter):
 
     @classmethod
     def from_signal_and_connection(cls, signal, connection):
-        return cls(connection.size_out, signal.latching)
+        return cls(connection.post_obj.size_in, signal.latching)
 
     def pack_into(self, dt, buffer, offset=0):
         """Pack the struct describing the filter into the buffer."""
