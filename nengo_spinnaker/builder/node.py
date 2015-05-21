@@ -166,13 +166,13 @@ class NodeIOController(object):
             with self.host_network:
                 self._add_node(cn.post_obj)
 
-                # Create the input node if necessary
+                # Create the input node AND connection if necessary
                 if cn.post_obj not in self._input_nodes:
                     self._input_nodes[cn.post_obj] = \
                         InputNode(cn.post_obj, self)
 
-                input_node = self._input_nodes[cn.post_obj]
-                nengo.Connection(input_node, cn.post_obj, synapse=None)
+                    input_node = self._input_nodes[cn.post_obj]
+                    nengo.Connection(input_node, cn.post_obj, synapse=None)
 
             # Return a specification that describes how the signal should be
             # represented on SpiNNaker.
