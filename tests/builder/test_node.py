@@ -21,6 +21,19 @@ class TestNodeIOController(object):
         assert nioc.host_network.all_connections == list()
         assert nioc.host_network.all_probes == list()
 
+    def test_prepare(self):
+        """Preparing the default NodeIOController does nothing."""
+        controller = mock.Mock(spec_set=[])
+        netlist = mock.Mock(spec_set=[])
+
+        nioc = NodeIOController()
+        nioc.prepare(controller, netlist)
+
+    def test_close(self):
+        """Closing the default NodeIOController does nothing."""
+        nioc = NodeIOController()
+        nioc.close()
+
     def test_builder_kwargs(self):
         """Test getting builder keyword arguments."""
         nioc = NodeIOController()
@@ -261,8 +274,8 @@ class TestNodeIOController(object):
             else:
                 assert node is b
 
-        # Check that there is a connection from a to the output node
-        assert len(nioc.host_network.all_connections) == 2
+        # Check that there is ONLY ONE connection from a to the output node
+        assert len(nioc.host_network.all_connections) == 1
         for conn in nioc.host_network.all_connections:
             assert conn.pre_obj is in_node
             assert conn.post_obj is b

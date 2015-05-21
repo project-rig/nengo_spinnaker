@@ -46,6 +46,7 @@ def test_get_spinnaker_source_for_node():
     assert isinstance(spec.target.obj, SDPReceiver)
     assert spec.target.port is OutputPort.standard
     assert spec.latching
+    assert model.extra_operators == [spec.target.obj]
 
 
 def test_get_spinnaker_source_for_node_repeated():
@@ -65,6 +66,7 @@ def test_get_spinnaker_source_for_node_repeated():
     spec1 = io.get_node_source(model, a_b1)
 
     assert spec0.target.obj is spec1.target.obj
+    assert model.extra_operators == [spec0.target.obj]
 
 
 def test_get_spinnaker_sink_for_node():
@@ -83,6 +85,7 @@ def test_get_spinnaker_sink_for_node():
 
     assert isinstance(spec.target.obj, SDPTransmitter)
     assert spec.target.port is InputPort.standard
+    assert model.extra_operators == [spec.target.obj]
 
 
 def test_get_spinnaker_sink_for_node_repeated():
@@ -102,3 +105,4 @@ def test_get_spinnaker_sink_for_node_repeated():
     spec1 = io.get_node_sink(model, a_b1)
 
     assert spec0.target.obj is spec1.target.obj
+    assert model.extra_operators == [spec0.target.obj]

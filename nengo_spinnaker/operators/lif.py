@@ -129,10 +129,10 @@ class EnsembleLIF(object):
         sdram_constraint = partition.Constraint(8*2**20)  # Max 8MiB
         dtcm_constraint = partition.Constraint(64*2**10, .75)  # 75% of 64KiB
         constraints = {
-            sdram_constraint:
-                lambda s: regions.utils.sizeof_regions(self.regions, s),
-            dtcm_constraint:
-                lambda s: regions.utils.sizeof_regions(self.regions, s),
+            sdram_constraint: lambda s: regions.utils.sizeof_regions(
+                self.regions, s),
+            dtcm_constraint: lambda s: regions.utils.sizeof_regions(
+                self.regions, s),
         }
         for sl in partition.partition(slice(0, self.ensemble.n_neurons),
                                       constraints):
@@ -235,10 +235,10 @@ def get_decoders_and_keys(model, signals_connections):
         decoder = model.params[connections[0]].decoders
         transform = model.params[connections[0]].transform
 
-        decoder = np.dot(transform, decoder)
-        decoders.append(decoder)
+        decoder = np.dot(transform, decoder.T)
+        decoders.append(decoder.T)
 
-        for i in range(decoder.shape[1]):
+        for i in range(decoder.shape[0]):
             keys.append(signal.keyspace(index=i))
 
     # Stack the decoders

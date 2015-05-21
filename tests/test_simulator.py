@@ -1,5 +1,6 @@
 import mock
 from mock import patch
+import nengo
 import pytest
 
 from nengo_spinnaker import SpiNNakerSimulator
@@ -22,6 +23,7 @@ def test_init(dt):
     config[SpiNNakerSimulator].node_io_kwargs = {"arthur": "King"}
     nioc = NodeIOController.return_value = mock.Mock("nioc")
     nioc.builder_kwargs = {"spam": "a lot"}
+    nioc.host_network = nengo.Network()
 
     # Create a mock RC file that will be read from
     def rc_get(section, parameter):

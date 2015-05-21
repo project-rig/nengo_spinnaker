@@ -26,6 +26,7 @@ pip-log.txt
 .coverage
 .tox
 nosetests.xml
+htmlcov/
 
 # Translations
 *.mo
@@ -64,3 +65,6 @@ docs/_build/*
 *.dot
 spinnaker_components/*/nengo_*.txt
 *.swp
+
+# Nengo cache
+.cache/

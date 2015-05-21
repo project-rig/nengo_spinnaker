@@ -35,14 +35,29 @@ class TestNoneFilter(object):
         signal = mock.Mock(name="signal", spec_set=["latching"])
         signal.latching = latching
 
-        connection = mock.Mock(name="connection",
-                               spec_set=["size_out", "synapse"])
-        connection.size_out = width
-        connection.synapse = None
+        with nengo.Network():
+            a = nengo.Ensemble(100, width)
+            b = nengo.Ensemble(100, width)
+            connection = nengo.Connection(a, b, synapse=None)
 
         # Build the filter
         nf = NoneFilter.from_signal_and_connection(signal, connection)
         assert NoneFilter(width, latching) == nf
+
+    @pytest.mark.parametrize("latching", [True, False])
+    def test_from_signal_and_connection_to_slice(self, latching):
+        # Create the mock signal and connection
+        signal = mock.Mock(name="signal", spec_set=["latching"])
+        signal.latching = latching
+
+        with nengo.Network():
+            a = nengo.Ensemble(100, 2)
+            b = nengo.Ensemble(100, 2)
+            connection = nengo.Connection(a[1], b[0], synapse=None)
+
+        # Build the filter
+        nf = NoneFilter.from_signal_and_connection(signal, connection)
+        assert NoneFilter(2, latching) == nf
 
 
 class TestLowpassFilter(object):
@@ -71,15 +86,29 @@ class TestLowpassFilter(object):
         signal = mock.Mock(name="signal", spec_set=["latching"])
         signal.latching = latching
 
-        connection = mock.Mock(name="connection",
-                               spec_set=["size_out", "synapse"])
-        connection.size_out = width
-        connection.synapse = mock.Mock(spec=nengo.Lowpass)
-        connection.synapse.tau = tc
+        with nengo.Network():
+            a = nengo.Ensemble(100, width)
+            b = nengo.Ensemble(100, width)
+            connection = nengo.Connection(a, b, synapse=nengo.Lowpass(tc))
 
         # Create the filter
         lpf = LowpassFilter.from_signal_and_connection(signal, connection)
         assert lpf == LowpassFilter(width, latching, tc)
+
+    @pytest.mark.parametrize("latching, tc", [(False, 0.01), (True, 0.2)])
+    def test_from_signal_and_connection_with_slice(self, latching, tc):
+        # Create the mock signal and connection
+        signal = mock.Mock(name="signal", spec_set=["latching"])
+        signal.latching = latching
+
+        with nengo.Network():
+            a = nengo.Ensemble(100, 1)
+            b = nengo.Ensemble(100, 2)
+            connection = nengo.Connection(a, b[1], synapse=nengo.Lowpass(tc))
+
+        # Create the filter
+        lpf = LowpassFilter.from_signal_and_connection(signal, connection)
+        assert lpf == LowpassFilter(2, latching, tc)
 
     def test_eq(self):
         lpfs = [LowpassFilter(5, True, 0.01),
@@ -185,11 +214,11 @@ class TestMakeFilterRegions(object):
         signal_b.keyspace, signal_b.latching = ks_b, False
 
         conn_a = mock.Mock(name="Connection[A]")
-        conn_a.size_out = 3
+        conn_a.post_obj.size_in = 3
         conn_a.synapse = nengo.Lowpass(0.01)
 
         conn_b = mock.Mock(name="Connection[B]")
-        conn_b.size_out = 3
+        conn_b.post_obj.size_in = 3
         conn_b.synapse = nengo.Lowpass(0.01)
 
         # Create the type of dictionary that is expected as input
@@ -242,11 +271,11 @@ class TestMakeFilterRegions(object):
         signal_b.keyspace, signal_b.latching = ks_b, False
 
         conn_a = mock.Mock(name="Connection[A]")
-        conn_a.size_out = 3
+        conn_a.post_obj.size_in = 3
         conn_a.synapse = nengo.Lowpass(0.01)
 
         conn_b = mock.Mock(name="Connection[B]")
-        conn_b.size_out = 3
+        conn_b.post_obj.size_in = 3
         conn_b.synapse = None
 
         # Create the type of dictionary that is expected as input
