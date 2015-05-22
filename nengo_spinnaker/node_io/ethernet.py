@@ -166,11 +166,10 @@ class EthernetThread(threading.Thread):
 
                 # Unpack the data, and store it as the input for the
                 # appropriate Node.
-                packet = SDPPacket.from_bytestring(data)
+                packet = SCPPacket.from_bytestring(data)
                 values = tp.fix_to_np(
-                    np.frombuffer(packet.data[16:], dtype=np.int32)
+                    np.frombuffer(packet.data, dtype=np.int32)
                 )
-                print(values)
 
                 # Get the Node
                 node = self.handler._node_incoming[(packet.src_x,

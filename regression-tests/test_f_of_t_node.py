@@ -5,8 +5,6 @@ import nengo
 import nengo_spinnaker
 import numpy as np
 
-from matplotlib import pyplot as plt
-
 
 def test_function_of_time_node():
     with nengo.Network("Test Network") as network:
@@ -37,10 +35,6 @@ def test_function_of_time_node():
     index11 = 1.0 / sim.dt
     index20 = index11 + int(p_b.synapse.tau * 3 / sim.dt)
     data = sim.data[p_b]
-
-    plt.plot(sim.trange(), sim.data[p_b])
-    plt.plot(sim.trange(), sim.data[p_c])
-    plt.show()
 
     assert (np.all(+0.44 <= data[index10:index11, 0]) and
             np.all(+0.72 >= data[index10:index11, 0]) and
