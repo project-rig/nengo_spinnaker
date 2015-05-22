@@ -10,7 +10,7 @@ from nengo_spinnaker.utils import type_casts as tp
 
 def make_filter_regions(signals_and_connections, dt, minimise=False,
                         filter_routing_tag="filter_routing",
-                        index_field="index"):
+                        index_field="index", width=None):
     """Create a filter region and a filter routing region from the given
     signals and connections.
 
@@ -20,6 +20,8 @@ def make_filter_regions(signals_and_connections, dt, minimise=False,
         Map of signals to the connections they represent.
     dt : float
         Simulation timestep.
+    width : int
+        Force all filters to be a given width.
 
     Other Parameters
     ----------------
@@ -36,7 +38,7 @@ def make_filter_regions(signals_and_connections, dt, minimise=False,
         for connection in connections:
             # Make the filter
             f = FilterRegion.supported_filter_types[type(connection.synapse)].\
-                from_signal_and_connection(signal, connection)
+                from_signal_and_connection(signal, connection, width=width)
 
             # Store the filter and add the route
             for index, g in enumerate(filters):
@@ -123,9 +125,10 @@ class LowpassFilter(Filter):
         self.time_constant = time_constant
 
     @classmethod
-    def from_signal_and_connection(cls, signal, connection):
-        return cls(connection.post_obj.size_in, signal.latching,
-                   connection.synapse.tau)
+    def from_signal_and_connection(cls, signal, connection, width=None):
+        if width is None:
+            width = connection.post_obj.size_in
+        return cls(width, signal.latching, connection.synapse.tau)
 
     def __eq__(self, other):
         return (super(LowpassFilter, self).__eq__(other) and
@@ -148,8 +151,10 @@ class NoneFilter(Filter):
     size = struct.calcsize(_pack_chars) + struct.calcsize(Filter._pack_chars)
 
     @classmethod
-    def from_signal_and_connection(cls, signal, connection):
-        return cls(connection.post_obj.size_in, signal.latching)
+    def from_signal_and_connection(cls, signal, connection, width=None):
+        if width is None:
+            width = connection.post_obj.size_in
+        return cls(width, signal.latching)
 
     def pack_into(self, dt, buffer, offset=0):
         """Pack the struct describing the filter into the buffer."""
