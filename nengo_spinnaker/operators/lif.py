@@ -242,6 +242,9 @@ def get_decoders_and_keys(model, signals_connections):
             keys.append(signal.keyspace(index=i))
 
     # Stack the decoders
-    decoders = np.hstack(decoders)
+    if len(decoders) > 0:
+        decoders = np.hstack(decoders)
+    else:
+        decoders = np.array([[]])
 
     return decoders, keys
