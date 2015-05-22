@@ -66,11 +66,11 @@ class EnsembleLIF(object):
 
         self.input_filters, self.input_filter_routing = make_filter_regions(
             incoming[InputPort.standard], model.dt, True,
-            model.keyspaces.filter_routing_tag
+            model.keyspaces.filter_routing_tag, width=self.ensemble.size_in
         )
         self.inhib_filters, self.inhib_filter_routing = make_filter_regions(
             incoming[EnsembleInputPort.global_inhibition], model.dt, True,
-            model.keyspaces.filter_routing_tag
+            model.keyspaces.filter_routing_tag, width=1
         )
         self.mod_filters, self.mod_filter_routing = make_filter_regions(
             {}, model.dt, True, model.keyspaces.filter_routing_tag

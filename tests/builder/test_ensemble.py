@@ -1,3 +1,4 @@
+import mock
 import nengo
 import numpy as np
 import pytest
@@ -195,10 +196,22 @@ class TestNeuronSinks(object):
         b_ens = operators.EnsembleLIF(b)
         model.object_operators[b] = b_ens
 
+        decs = mock.Mock()
+        evals = mock.Mock()
+        si = mock.Mock()
+        model.params[a_b] = builder.BuiltConnection(decs, evals, a_b.transform,
+                                                    si)
+
         # Get the sink, check that an appropriate target is return
         sink = ensemble.get_neurons_sink(model, a_b)
         assert sink.target.obj is b_ens
         assert sink.target.port is ensemble.EnsembleInputPort.global_inhibition
+
+        assert model.params[a_b].decoders is decs
+        assert model.params[a_b].eval_points is evals
+        assert model.params[a_b].solver_info is si
+        assert np.all(model.params[a_b].transform == np.array([[1.0, 0.5]]))
+        assert model.params[a_b].transform.shape == (1, 2)
 
     def test_arbitrary_neuron_sink(self):
         """We have no plan to support arbitrary connections to neurons."""

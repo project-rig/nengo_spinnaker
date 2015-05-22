@@ -61,6 +61,15 @@ def get_neurons_sink(model, connection):
         # Connections from non-neurons to Neurons where the transform delivers
         # the same value to all neurons are treated as global inhibition
         # connection.
+        # Modify the connection parameters
+        model.params[connection] = BuiltConnection(
+            model.params[connection].decoders,
+            model.params[connection].eval_points,
+            model.params[connection].transform[0, np.newaxis],
+            model.params[connection].solver_info
+        )
+
+        # Return a signal to the correct port.
         return spec(ObjectPort(ens, EnsembleInputPort.global_inhibition))
     else:
         # We don't support arbitrary connections into neurons
