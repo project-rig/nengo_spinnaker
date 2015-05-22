@@ -6,7 +6,7 @@ uint* keys;               // Output keys
 system_parameters_t pars; // Global system parameters
 uint n_blocks;            // Number of blocks (in total)
 uint current_block;       // Current block
-void* blocks;             // Location of blocks in DRAM
+value_t* blocks;             // Location of blocks in DRAM
 
 void valsource_tick(uint ticks, uint arg1) {
   use(arg1);
@@ -27,8 +27,8 @@ void valsource_tick(uint ticks, uint arg1) {
   if (slots.current->current_pos == 0) {
     if (n_blocks > 1) {
       // More than one block, need to copy in subsequent block
-      void *s_addr = &blocks[(current_block + 1) * pars.block_length *
-                              pars.n_dims * sizeof(value_t)];
+      value_t *s_addr = &blocks[(current_block + 1) * pars.block_length *
+                                pars.n_dims * sizeof(value_t)];
 
       if (current_block == pars.n_blocks - 1) {
         // Subsequent block is the LAST block
@@ -90,7 +90,7 @@ void c_main(void) {
   spin1_memcpy(&pars, region_start(1, address), sizeof(system_parameters_t));
   n_blocks = pars.n_blocks + (pars.partial_block > 0 ? 1 : 0);
   current_block = 0;
-  blocks = (void *) region_start(3, address);
+  blocks = (value_t *) region_start(3, address);
 
   io_printf(IO_BUF, "[Value Source] %d dimensions, %d full blocks of %d FRAMES"
                     ", PLUS %d FRAMES = %d blocks\n",

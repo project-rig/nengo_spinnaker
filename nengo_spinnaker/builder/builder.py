@@ -127,6 +127,7 @@ class Model(object):
         self.seeds = dict()
         self.rng = None
 
+        self.config = None
         self.object_operators = dict()
         self.extra_operators = list()
         self.connections_signals = dict()
@@ -182,6 +183,9 @@ class Model(object):
         # Get the seed and random number generator
         self.seeds[network] = get_seed(network, np.random)
         self.rng = np.random.RandomState(self.seeds[network])
+
+        # Store the network config
+        self.config = network.config
 
         # Get all objects and connections and remove all passthrough Nodes
         objs, conns = remove_passthrough_nodes(*objs_and_connections(network))

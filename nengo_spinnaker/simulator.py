@@ -33,6 +33,7 @@ class SpiNNakerSimulator(object):
         self.io_controller = io_cls(**io_kwargs)
 
         # Create a model from the network, using the IO controller
+        logger.debug("Building model")
         self.model = Model(dt)
         self.model.build(network, **self.io_controller.builder_kwargs)
         self.dt = self.model.dt

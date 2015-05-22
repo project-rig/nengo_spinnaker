@@ -4,6 +4,9 @@ import numpy as np
 import pytest
 import threading
 
+from nengo_spinnaker import add_spinnaker_params
+from nengo_spinnaker.builder import Model
+from nengo_spinnaker.builder.builder import OutputPort
 from nengo_spinnaker.builder.node import (
     NodeIOController, InputNode, OutputNode
 )
@@ -46,14 +49,52 @@ class TestNodeIOController(object):
         }
 
     def test_build_node(self):
-        """Test that building a Node does nothing, at the moment.  Function of
-        time Nodes may do something here later.
+        """Test that building a Node does nothing.
         """
-        with nengo.Network():
+        with nengo.Network() as net:
             a = nengo.Node(lambda t, x: x**2, size_in=3, size_out=3)
 
+        # Create the model
+        model = Model()
+        model.config = net.config
+
+        # Build the Node
         nioc = NodeIOController()
-        nioc.build_node(None, a)
+        nioc.build_node(model, a)
+
+        # Assert that no new operators were created
+        assert model.object_operators == dict()
+        assert model.extra_operators == list()
+
+    @pytest.mark.parametrize("period", [None, 23.0])
+    def test_build_node_function_of_time(self, period):
+        """Test that building a function of time Node creates a new operator.
+        """
+        with nengo.Network() as net:
+            a = nengo.Node(lambda t: [t, t**2], size_in=0)
+
+        # Mark the Node as a function of time
+        add_spinnaker_params(net.config)
+        net.config[a].function_of_time = True
+        if period is not None:
+            net.config[a].function_of_time_period = period
+
+        # Create the model
+        model = Model()
+        model.config = net.config
+
+        # Build the Node
+        nioc = NodeIOController()
+        nioc.build_node(model, a)
+
+        # Assert that this added a new operator to the model
+        assert model.object_operators[a].function is a.output
+        if period is not None:
+            assert model.object_operators[a].period == period
+        else:
+            assert model.object_operators[a].period is None
+
+        assert model.extra_operators == list()
 
     def test_build_node_probe(self):
         """Test that building a Probe of a Node results in adding a new object
@@ -162,8 +203,8 @@ class TestNodeIOController(object):
             else:
                 assert node is a
 
-        # Check that there is a connection from a to the output node
-        assert len(nioc.host_network.all_connections) == 2
+        # Check that there is ONLY ONE connection from a to the output node
+        assert len(nioc.host_network.all_connections) == 1
         for conn in nioc.host_network.all_connections:
             assert conn.pre_obj is a
             assert conn.post_obj is out_node
@@ -195,6 +236,39 @@ class TestNodeIOController(object):
         # connection.
         assert nioc.host_network.all_nodes == [a, b]
         assert nioc.host_network.all_connections == [a_b]
+
+    def test_get_node_source_f_of_t(self):
+        """Test that calling the NodeIOController for a f_of_t->xx connection
+        doesn't ask for a SpiNNaker sorce and instead returns the value source
+        that was associated with the Node.
+        """
+        with nengo.Network() as net:
+            a = nengo.Node(lambda t: t)
+            b = nengo.Ensemble(100, 1)
+            a_b = nengo.Connection(a, b)
+
+        # Mark the Node as being a function of time
+        add_spinnaker_params(net.config)
+        net.config[a].function_of_time = True
+
+        # Create a model and build the Node
+        model = Model()
+        model.config = net.config
+        nioc = NodeIOController()
+        nioc.build_node(model, a)
+
+        # Get the source and ensure that the appropriate object is returned
+        with mock.patch.object(nioc, "get_spinnaker_source_for_node") as gssfn:
+            spec = nioc.get_node_source(model, a_b)
+            assert spec.target.obj is model.object_operators[a]
+            assert spec.target.port is OutputPort.standard
+
+            # Assert this _didn't_ call `get_spinnaker_source_for_node`
+            assert not gssfn.called
+
+        # There should be nothing in the host network
+        assert nioc.host_network.all_nodes == list()
+        assert nioc.host_network.all_connections == list()
 
     def test_get_node_sink_standard(self):
         """Test that calling a NodeIOController to get the sink for a

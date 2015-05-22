@@ -101,6 +101,7 @@ class TestBuild(object):
         network.nodes = [b]
         network.networks = []
         network.all_probes = []
+        network.config = mock.Mock(name="config")
 
         if not use_make_object:
             # Patch the default builders
@@ -108,6 +109,9 @@ class TestBuild(object):
                 # Create a model and build the mock network
                 model = Model()
                 model.build(network, extra_builders=extra_builders)
+
+            # Assert that the config was stored in the model
+            assert model.config is network.config
         else:
             # Create the model
             model = Model()
