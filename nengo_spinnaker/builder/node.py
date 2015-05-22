@@ -140,15 +140,14 @@ class NodeIOController(object):
                 # start of the given connection, then add both it and the Node
                 # to the host network, with a joining connection.
                 with self.host_network:
-                    self._add_node(cn.pre_obj)
-
                     # Create the output Node if necessary
                     if cn.pre_obj not in self._output_nodes:
+                        self._add_node(cn.pre_obj)
                         self._output_nodes[cn.pre_obj] = \
                             OutputNode(cn.pre_obj, self)
 
-                    output_node = self._output_nodes[cn.pre_obj]
-                    nengo.Connection(cn.pre_obj, output_node, synapse=None)
+                        output_node = self._output_nodes[cn.pre_obj]
+                        nengo.Connection(cn.pre_obj, output_node, synapse=None)
 
                 # Return a specification that describes how the signal should
                 # be represented on SpiNNaker.

@@ -203,8 +203,8 @@ class TestNodeIOController(object):
             else:
                 assert node is a
 
-        # Check that there is a connection from a to the output node
-        assert len(nioc.host_network.all_connections) == 2
+        # Check that there is ONLY ONE connection from a to the output node
+        assert len(nioc.host_network.all_connections) == 1
         for conn in nioc.host_network.all_connections:
             assert conn.pre_obj is a
             assert conn.post_obj is out_node
