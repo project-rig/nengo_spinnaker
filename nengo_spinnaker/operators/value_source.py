@@ -145,7 +145,7 @@ class SystemRegion(regions.Region):
         # Determine the size out, frames per block, number of blocks and last
         # block length.
         size_out = vertex_slice.stop - vertex_slice.start
-        frames_per_block = int(math.floor(50 * 1024 / (size_out * 4.0)))
+        frames_per_block = int(math.floor(20 * 1024 / (size_out * 4.0)))
         n_blocks = int(math.floor(self.n_steps / frames_per_block))
         last_block_length = self.n_steps % frames_per_block
 

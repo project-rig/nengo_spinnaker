@@ -16,8 +16,8 @@ class TestSystemRegion(object):
     @pytest.mark.parametrize(
         "timestep, periodic, n_steps, vertex_slice, n_blocks, block_length, "
         "last_block_length",
-        [(1000, True, 2000, slice(0, 10), 1, 1280, 720),
-         (1000, False, 8000, slice(0, 10), 6, 1280, 320),
+        [(1000, True, 2000, slice(0, 10), 3, 512, 464),
+         (1000, False, 8000, slice(0, 10), 15, 512, 320),
          ]
     )
     def test_write_subregion_to_file(self, timestep, periodic, n_steps,
