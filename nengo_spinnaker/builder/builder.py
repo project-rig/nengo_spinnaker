@@ -4,7 +4,6 @@ import enum
 import itertools
 import nengo
 from nengo.cache import NoDecoderCache
-from nengo.utils.builder import objs_and_connections, remove_passthrough_nodes
 from nengo.utils import numpy as npext
 import numpy as np
 from six import iteritems, itervalues
