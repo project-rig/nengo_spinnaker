@@ -6,7 +6,7 @@ import threading
 
 from nengo_spinnaker import add_spinnaker_params
 from nengo_spinnaker.builder import Model
-from nengo_spinnaker.builder.builder import OutputPort
+from nengo_spinnaker.builder.builder import OutputPort, InputPort
 from nengo_spinnaker.builder.node import (
     NodeIOController, InputNode, OutputNode
 )
@@ -93,6 +93,27 @@ class TestNodeIOController(object):
             assert model.object_operators[a].period == period
         else:
             assert model.object_operators[a].period is None
+
+        assert model.extra_operators == list()
+
+    def test_build_node_constant_value_is_function_of_time(self):
+        """Test that building a Node with a constant value is equivalent to
+        building a function of time Node.
+        """
+        with nengo.Network() as net:
+            a = nengo.Node(np.array([0.5, 0.1]))
+
+        # Create the model
+        model = Model()
+        model.config = net.config
+
+        # Build the Node
+        nioc = NodeIOController()
+        nioc.build_node(model, a)
+
+        # Assert that this added a new operator to the model
+        assert model.object_operators[a].function is a.output
+        assert model.object_operators[a].period is None
 
         assert model.extra_operators == list()
 
@@ -269,6 +290,86 @@ class TestNodeIOController(object):
         # There should be nothing in the host network
         assert nioc.host_network.all_nodes == list()
         assert nioc.host_network.all_connections == list()
+
+    @pytest.mark.parametrize("width", [1, 3])
+    def test_passthrough_nodes(self, width):
+        """Test the handling of passthrough Nodes."""
+        with nengo.Network() as net:
+            a = nengo.Ensemble(100, width)
+            b = nengo.Node(None, size_in=width, label="Passthrough Node")
+            c = nengo.Ensemble(100, width)
+
+            a_b = nengo.Connection(a, b)
+            b_c = nengo.Connection(b, c)
+
+        # Create a model and build the Node
+        model = Model()
+        model.config = net.config
+        nioc = NodeIOController()
+        nioc.build_node(model, b)
+
+        # Check the passthrough Node resulted in a new operator
+        assert model.object_operators[b].size_in == b.size_in
+        assert model.object_operators[b].transmission_delay == 1
+        assert model.object_operators[b].interpacket_pause == 1
+
+        # Get the source and ensure that the appropriate object is returned
+        with mock.patch.object(nioc, "get_spinnaker_source_for_node") as gssfn:
+            spec = nioc.get_node_source(model, b_c)
+            assert spec.target.obj is model.object_operators[b]
+            assert spec.target.port is OutputPort.standard
+
+            # Assert this _didn't_ call `get_spinnaker_source_for_node`
+            assert not gssfn.called
+
+        # Get the sink and ensure that the appropriate object is returned
+        with mock.patch.object(nioc, "get_spinnaker_sink_for_node") as gssfn:
+            spec = nioc.get_node_sink(model, a_b)
+            assert spec.target.obj is model.object_operators[b]
+            assert spec.target.port is InputPort.standard
+
+            # Assert this _didn't_ call `get_spinnaker_sink_for_node`
+            assert not gssfn.called
+
+        # There should be nothing in the host network
+        assert nioc.host_network.all_nodes == list()
+        assert nioc.host_network.all_connections == list()
+
+    def test_passthrough_nodes_with_other_nodes(self):
+        """Test the handling of passthrough when other Nodes are present."""
+        with nengo.Network() as net:
+            a = nengo.Node(lambda t: t, size_in=0, size_out=1)
+            b = nengo.Node(None, size_in=1, label="Passthrough Node")
+            c = nengo.Node(lambda t, x: None, size_in=1, size_out=0)
+
+            a_b = nengo.Connection(a, b)
+            b_c = nengo.Connection(b, c)
+
+        # Create a model and build the Nodes
+        model = Model()
+        model.config = net.config
+        nioc = NodeIOController()
+        nioc.build_node(model, a)
+        nioc.build_node(model, b)
+        nioc.build_node(model, c)
+
+        # Check the passthrough Node resulted in a new operator but that the
+        # others didn't
+        assert a not in model.object_operators
+        assert b in model.object_operators
+        assert c not in model.object_operators
+
+        # Get the source and ensure that the appropriate object is returned
+        with mock.patch.object(nioc, "get_spinnaker_source_for_node") as gssfn:
+            spec = nioc.get_node_source(model, b_c)
+            assert spec.target.obj is model.object_operators[b]
+            assert spec.target.port is OutputPort.standard
+
+        # Get the sink and ensure that the appropriate object is returned
+        with mock.patch.object(nioc, "get_spinnaker_sink_for_node") as gssfn:
+            spec = nioc.get_node_sink(model, a_b)
+            assert spec.target.obj is model.object_operators[b]
+            assert spec.target.port is InputPort.standard
 
     def test_get_node_sink_standard(self):
         """Test that calling a NodeIOController to get the sink for a

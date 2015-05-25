@@ -33,7 +33,8 @@ def get_ensemble_sink(model, connection):
     ens = model.object_operators[connection.post_obj]
 
     if (isinstance(connection.pre_obj, nengo.Node) and
-            not callable(connection.pre_obj.output)):
+            not callable(connection.pre_obj.output) and
+            connection.pre_obj.output is not None):
         # Connections from constant valued Nodes are optimised out.
         # Build the value that will be added to the direct input for the
         # ensemble.
@@ -157,7 +158,7 @@ def build_from_ensemble_connection(model, conn):
 
     # Use cached solver
     solver = model.decoder_cache.wrap_solver(conn.solver)
-    if solver.weights:
+    if conn.solver.weights:
         raise NotImplementedError(
             "SpiNNaker does not currently support neuron to neuron connections"
         )

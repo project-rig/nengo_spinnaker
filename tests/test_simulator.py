@@ -48,7 +48,8 @@ def test_init(dt):
     # Create a mock Model class and instance
     Model = mock.Mock(name="Model", spec_set=[])
     model = Model.return_value = mock.Mock(name="model",
-                                           spec_set=['build', 'dt'])
+                                           spec_set=['build', 'dt',
+                                                     'decoder_cache'])
     model.dt = dt
 
     # Create a mock Controller class and instance
@@ -84,6 +85,6 @@ def test_init(dt):
     assert rc.getint.call_count == 2
     assert test_and_boot.call_count == 1
 
-    Model.assert_called_once_with(dt)
+    assert Model.call_count == 1
     NodeIOController.assert_called_once_with(arthur="King")
     model.build.assert_called_once_with(network, spam="a lot")
