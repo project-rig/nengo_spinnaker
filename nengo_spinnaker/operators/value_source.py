@@ -36,7 +36,10 @@ class ValueSource(object):
             max_n = n_steps
 
         ts = np.arange(max_n) * model.dt
-        values = np.array([self.function(t) for t in ts])
+        if callable(self.function):
+            values = np.array([self.function(t) for t in ts])
+        else:
+            values = np.array([self.function for t in ts])
 
         # Create the system region
         self.system_region = SystemRegion(model.machine_timestep,
@@ -47,6 +50,10 @@ class ValueSource(object):
         keys = list()
 
         sigs_conns = model.get_signals_connections_from_object(self)
+
+        if len(sigs_conns) == 0:
+            return netlistspec([])
+
         outputs = []
         for sig, conns in iteritems(sigs_conns[OutputPort.standard]):
             assert len(conns) == 1, "Expected a 1:1 mapping"

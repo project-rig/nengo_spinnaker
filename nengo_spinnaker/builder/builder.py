@@ -125,6 +125,7 @@ class Model(object):
 
         self.params = dict()
         self.seeds = dict()
+        self.rngs = dict()
         self.rng = None
 
         self.config = None
@@ -180,15 +181,8 @@ class Model(object):
         extra_probe_builders : {type: fn, ...}
             Extra probe builder methods.
         """
-        # Get the seed and random number generator
-        self.seeds[network] = get_seed(network, np.random)
-        self.rng = np.random.RandomState(self.seeds[network])
-
         # Store the network config
         self.config = network.config
-
-        # Get all objects and connections and remove all passthrough Nodes
-        objs, conns = remove_passthrough_nodes(*objs_and_connections(network))
 
         # Get a clean set of builders and getters
         self._builders = collections_ext.mrolookupdict()
@@ -215,16 +209,31 @@ class Model(object):
         self._probe_builders.update(self.probe_builders)
         self._probe_builders.update(extra_probe_builders)
 
+        # Build
+        self._build_network(network)
+
+    def _build_network(self, network):
+        # Get the seed for the network
+        self.seeds[network] = get_seed(network, np.random)
+
+        # Build all subnets
+        for subnet in network.networks:
+            self._build_network(subnet)
+
+        # Get the random number generator for the network
+        self.rngs[network] = np.random.RandomState(self.seeds[network])
+        self.rng = self.rngs[network]
+
         # Build all objects
-        for obj in objs:
+        for obj in itertools.chain(network.ensembles, network.nodes):
             self.make_object(obj)
 
         # Build all the connections
-        for connection in conns:
+        for connection in network.connections:
             self.make_connection(connection)
 
         # Build all the probes
-        for probe in network.all_probes:
+        for probe in network.probes:
             self.make_probe(probe)
 
     def make_object(self, obj):
