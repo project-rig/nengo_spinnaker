@@ -15,7 +15,7 @@ void filter_update(uint ticks, uint arg1) {
 
   // Apply the transform to the input to get the output
   for (uint j = 0; j < g_filter.size_out; j++) {
-    g_filter.output[j] = 0;
+    g_filter.output[j] = 0.0k;
 
     for (uint k = 0; k < g_filter.size_in; k++) {
       g_filter.output[j] += g_filter.transform[j*g_filter.size_in + k] *
@@ -51,6 +51,8 @@ bool data_system(address_t addr) {
 
   if (g_filter.input == NULL)
     return false;
+
+  MALLOC_FAIL_FALSE(g_filter.output, g_filter.size_out * sizeof(value_t));
   return true;
 }
 
