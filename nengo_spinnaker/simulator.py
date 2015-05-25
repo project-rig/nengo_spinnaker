@@ -1,5 +1,6 @@
 import logging
 import nengo
+from nengo.cache import get_default_decoder_cache
 import numpy as np
 from rig.machine_control import MachineController
 import time
@@ -34,8 +35,13 @@ class SpiNNakerSimulator(object):
 
         # Create a model from the network, using the IO controller
         logger.debug("Building model")
-        self.model = Model(dt)
+        start_build = time.time()
+        self.model = Model(dt, decoder_cache=get_default_decoder_cache())
         self.model.build(network, **self.io_controller.builder_kwargs)
+        logger.info("Build took {:.3f} seconds".format(time.time() -
+                                                       start_build))
+
+        self.model.decoder_cache.shrink()
         self.dt = self.model.dt
 
         # Build the host simulator
@@ -60,6 +66,7 @@ class SpiNNakerSimulator(object):
 
         # Convert the model into a netlist
         logger.info("Building netlist")
+        start = time.time()
         netlist = self.model.make_netlist(steps)  # TODO remove steps!
 
         # Get a machine object to place & route against
@@ -91,6 +98,10 @@ class SpiNNakerSimulator(object):
             # TODO: Find the failed cores
             raise Exception("Unexpected core failures.")
 
+        logger.info("Preparing and loading machine took {:3f} seconds".format(
+            time.time() - start
+        ))
+
         try:
             # Prep
             exp_time = steps * self.dt
@@ -98,6 +109,7 @@ class SpiNNakerSimulator(object):
 
             # TODO: Wait for all cores to hit SYNC0
             logger.info("Running simulation...")
+            time.sleep(1.0)
             self.controller.send_signal("sync0")
 
             # Execute the local model
@@ -117,9 +129,23 @@ class SpiNNakerSimulator(object):
             # Stop the IO thread whatever occurs
             io_thread.stop()
 
+        # Check if any cores are in bad states
+        failed_cores = (
+            self.controller.count_cores_in_state("runtime_exception") +
+            self.controller.count_cores_in_state("watchdog") +
+            self.controller.count_cores_in_state("dead")
+        )
+        if failed_cores:
+            # TODO: Find the failed cores
+            raise Exception("Unexpected core failures.")
+
         # Retrieve simulation data
+        start = time.time()
         logger.info("Retrieving simulation data")
         netlist.after_simulation(self, steps)
+        logger.info("Retrieving data took {:3f} seconds".format(
+            time.time() - start
+        ))
 
         # Stop the application
         self.controller.send_signal("stop")
