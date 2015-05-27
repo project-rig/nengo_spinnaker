@@ -100,4 +100,4 @@ class MatrixRegion(Region):
                 fp.write(struct.pack('I', 1))
 
         # Format the data and then write to file
-        fp.write(data.tobytes())
+        fp.write(data.tostring())
