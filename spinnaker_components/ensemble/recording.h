@@ -35,17 +35,6 @@ typedef struct _recording_buffer_t {
 bool record_buffer_initialise(recording_buffer_t *buffer, address_t region,
                               uint n_frames, uint n_neurons);
 
-/*!\brief Prepare buffer for writing.
- *
- * If recording is in use the pointer to the current address in SDRAM will be
- * advanced by one recording frame.
- */
-static inline void record_buffer_prepare(recording_buffer_t *buffer) {
-  if (buffer->record) {
-    buffer->_sdram_current += buffer->frame_length;
-  }
-}
-
 /*!\brief Flush the current buffer.
  *
  * The contents of the buffer will be appended to the recording region in
@@ -62,6 +51,9 @@ static inline void record_buffer_flush(recording_buffer_t *buffer) {
   for (uint i = 0; i < buffer->frame_length; i++) {
     buffer->buffer[i] = 0;
   }
+
+  // Progress the pointer
+  buffer->_sdram_current += buffer->frame_length;
 }
 
 /*!\brief Record a spike for the given neuron.

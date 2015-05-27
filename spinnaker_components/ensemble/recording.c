@@ -8,7 +8,7 @@ bool record_buffer_initialise(recording_buffer_t *buffer, address_t region,
   buffer->_sdram_start = (uint *) region;
   buffer->_sdram_current = (uint *) region;
 
-  buffer->current_frame = UINT32_MAX;  // To cause overflow on first tick
+  buffer->current_frame = 0;
 
   // Create the local buffer
   MALLOC_FAIL_FALSE(buffer->buffer, buffer->frame_length * sizeof(uint));
