@@ -88,13 +88,8 @@ class SpiNNakerSimulator(object):
 
         # TODO: Implement a better simulation protocol
         # Check if any cores are in bad states
-        failed_cores = (
-            self.controller.count_cores_in_state("runtime_exception") +
-            self.controller.count_cores_in_state("watchdog") +
-            self.controller.count_cores_in_state("dead") +
-            self.controller.count_cores_in_state("exit")
-        )
-        if failed_cores:
+        if self.controller.count_cores_in_state(["exit", "dead", "watchdog",
+                                                 "runtime_exception"]):
             # TODO: Find the failed cores
             raise Exception("Unexpected core failures.")
 
@@ -130,12 +125,8 @@ class SpiNNakerSimulator(object):
             io_thread.stop()
 
         # Check if any cores are in bad states
-        failed_cores = (
-            self.controller.count_cores_in_state("runtime_exception") +
-            self.controller.count_cores_in_state("watchdog") +
-            self.controller.count_cores_in_state("dead")
-        )
-        if failed_cores:
+        if self.controller.count_cores_in_state(["dead", "watchdog",
+                                                 "runtime_exception"]):
             # TODO: Find the failed cores
             raise Exception("Unexpected core failures.")
 
