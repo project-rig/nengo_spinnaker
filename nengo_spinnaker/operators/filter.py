@@ -54,8 +54,8 @@ class Filter(object):
 
         # Create a combined output transform and set of keys
         outgoing = model.get_signals_connections_from_object(self)
-        transform, output_keys = \
-            get_transforms_and_keys(model, outgoing[OutputPort.standard])
+        transform, output_keys = get_transforms_and_keys(
+            outgoing[OutputPort.standard])
 
         size_out = len(output_keys)
 
@@ -101,7 +101,7 @@ class Filter(object):
                 region.write_subregion_to_file(mem, slice(None), cluster=0)
 
 
-def get_transforms_and_keys(model, signals_connections):
+def get_transforms_and_keys(signals_connections):
     """Get a combined transform matrix and a list of keys to use to transmit
     elements transformed with the matrix.
     """
@@ -117,7 +117,8 @@ def get_transforms_and_keys(model, signals_connections):
             raise NotImplementedError
         else:
             # Can't do this
-            raise NotImplementedError
+            raise NotImplementedError("Filters cannot transmit multiple "
+                                      "Connections using the same signal.")
 
         transforms.append(transform)
         for i in range(transform.shape[0]):
