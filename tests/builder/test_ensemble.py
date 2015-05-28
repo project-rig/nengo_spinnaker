@@ -451,6 +451,21 @@ class TestProbeNeurons(object):
         assert len(model.object_operators) == 1
         assert len(model.connections_signals) == 0
 
+    def test_probe_spike_slice(self):
+        with nengo.Network() as net:
+            a = nengo.Ensemble(300, 1)
+            p = nengo.Probe(a.neurons[:100], "spikes")
+
+        # Create an empty model to build the probe into
+        model = builder.Model()
+        model.build(net)
+
+        # Assert that we added the probe to the list of local probes and
+        # nothing else
+        assert model.object_operators[a].local_probes == [p]
+        assert len(model.object_operators) == 1
+        assert len(model.connections_signals) == 0
+
     @pytest.mark.xfail(reason="Unimplemented functionality")
     def test_probe_voltage(self):
         """Check that probing voltage modifies the local_probes list on the

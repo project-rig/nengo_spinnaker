@@ -210,10 +210,14 @@ def build_ensemble_probe(model, probe):
 def build_neurons_probe(model, probe):
     """Build a probe which has Neurons as its target."""
     if probe.attr in ("output", "spikes"):
+        # Get the real target if the target is an ObjView
+        if isinstance(probe.target, nengo.base.ObjView):
+            ens = probe.target.obj.ensemble
+        else:
+            ens = probe.target.ensemble
+
         # Add this probe to the list of probes attached to the ensemble object.
-        model.object_operators[probe.target.ensemble].local_probes.append(
-            probe
-        )
+        model.object_operators[ens].local_probes.append(probe)
     else:
         raise NotImplementedError(
             "SpiNNaker does not currently support probing '{}' on '{}' "
