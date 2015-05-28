@@ -19,6 +19,8 @@ def test_probe_ensemble_spikes():
         nengo.Connection(a, b, synapse=None)
 
         # Probe the spikes
+        p_n0 = nengo.Probe(b.neurons[0])
+        p_n1 = nengo.Probe(b.neurons[1], sample_every=0.002)
         p_spikes = nengo.Probe(b.neurons)
 
     # Mark the input Node as a function of time
@@ -30,11 +32,10 @@ def test_probe_ensemble_spikes():
     sim.run(2.0)
 
     # Check that the neurons spiked as expected
-    data = sim.data[p_spikes]
-    assert not np.any(data[:1.0/sim.dt, 0])  # Neuron 0 didn't spike at all
-    assert np.any(data[:1.0/sim.dt, 1])  # Neuron 1 did spike
-    assert np.any(data[1.0/sim.dt:, 0])  # Neuron 0 did spike
-    assert not np.any(data[1.0/sim.dt:, 1])  # Neuron 1 didn't spike at all
+    assert not np.any(sim.data[p_n0][:1.0/sim.dt])  # Neuron 0
+    assert np.any(sim.data[p_n1][:1.0/p_n1.sample_every])  # Neuron 1
+    assert np.any(sim.data[p_n0][1.0/sim.dt:])
+    assert not np.any(sim.data[p_n1][1.0/p_n1.sample_every:])
 
 
 if __name__ == "__main__":

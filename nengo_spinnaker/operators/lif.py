@@ -8,6 +8,7 @@ appropriate sized slices.
 
 from bitarray import bitarray
 import collections
+from nengo.base import ObjView
 import numpy as np
 from rig.machine import Cores, SDRAM
 from six import iteritems
@@ -205,8 +206,20 @@ class EnsembleLIF(object):
                     np.array([[1./simulator.dt if s else 0.0 for s in ss]
                               for ss in spikes])
 
+            # Store the data associated with every probe, applying the sampling
+            # and slicing specified for the probe.
             for p in self.local_probes:
-                simulator.data[p] = probed_spikes
+                if p.sample_every is None:
+                    sample_every = 1
+                else:
+                    sample_every = p.sample_every / simulator.dt
+
+                if not isinstance(p.target, ObjView):
+                    neuron_slice = slice(None)
+                else:
+                    neuron_slice = p.target.slice
+
+                simulator.data[p] = probed_spikes[::sample_every, neuron_slice]
 
 
 class SystemRegion(collections.namedtuple(
