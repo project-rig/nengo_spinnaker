@@ -111,6 +111,7 @@ class NodeIOController(object):
             # it.
             vs = ValueSource(
                 node.output,
+                node.size_out,
                 getconfig(model.config, node, "function_of_time_period")
             )
             self._f_of_t_nodes[node] = vs

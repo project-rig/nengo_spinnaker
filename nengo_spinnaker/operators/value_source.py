@@ -4,6 +4,8 @@ from six import iteritems
 from rig.machine import Cores, SDRAM
 import struct
 
+from nengo.processes import Process
+
 from nengo_spinnaker.builder.builder import OutputPort, netlistspec
 from nengo_spinnaker.netlist import VertexSlice
 from nengo_spinnaker import partition_and_cluster as partition
@@ -15,11 +17,12 @@ from nengo_spinnaker.utils.type_casts import np_to_fix
 
 class ValueSource(object):
     """Operator which transmits values from a buffer."""
-    def __init__(self, function, period):
+    def __init__(self, function, size_out, period):
         """Create a new source which evaluates the given function over a period
         of time.
         """
         self.function = function
+        self.size_out = size_out
         self.period = period
 
         # Vertices
@@ -38,9 +41,11 @@ class ValueSource(object):
         ts = np.arange(max_n) * model.dt
         if callable(self.function):
             values = np.array([self.function(t) for t in ts])
+        elif isinstance(self.function, Process):
+            values = self.function.run_steps(max_n, d=self.size_out, dt=model.dt)
         else:
             values = np.array([self.function for t in ts])
-
+        
         # Create the system region
         self.system_region = SystemRegion(model.machine_timestep,
                                           self.period, n_steps)
