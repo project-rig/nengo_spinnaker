@@ -156,6 +156,27 @@ class TestEnsembleSink(object):
         assert sink.target.obj is b_ens
         assert sink.target.port is builder.InputPort.standard
 
+    def test_normal_sink_for_process_node(self):
+        """Test that sinks for most connections into Ensembles do nothing
+        special.
+        """
+        # Create a network and standard model
+        with nengo.Network():
+            a = nengo.Node(nengo.processes.WhiteNoise(), size_out=4)
+            b = nengo.Ensemble(200, 4)
+
+            a_b = nengo.Connection(a, b)
+
+        # Create a model with the Ensemble for b in it
+        model = builder.Model()
+        b_ens = operators.EnsembleLIF(b)
+        model.object_operators[b] = b_ens
+
+        # Get the sink, check that an appropriate target is return
+        sink = ensemble.get_ensemble_sink(model, a_b)
+        assert sink.target.obj is b_ens
+        assert sink.target.port is builder.InputPort.standard
+
     def test_constant_node_sink_with_slice(self):
         """Test that connections from constant valued Nodes to Ensembles are
         optimised out correctly.
