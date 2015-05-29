@@ -42,7 +42,8 @@ class ValueSource(object):
         if callable(self.function):
             values = np.array([self.function(t) for t in ts])
         elif isinstance(self.function, Process):
-            values = self.function.run_steps(max_n, d=self.size_out, dt=model.dt)
+            values = self.function.run_steps(max_n, d=self.size_out, 
+                                             dt=model.dt)
         else:
             values = np.array([self.function for t in ts])
         
