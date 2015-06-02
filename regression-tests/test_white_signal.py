@@ -14,10 +14,10 @@ with model:
     pre = nengo.Ensemble(60, dimensions=2)
     post = nengo.Ensemble(60, dimensions=2)
     nengo.Connection(pre, post)
-    
+
     inp = nengo.Node(WhiteSignal(60, high=5), size_out=2)
     nengo.Connection(inp, pre)
-    
+
     # Probe signal and ensemble at end of channel
     inp_p = nengo.Probe(pre, synapse=0.01)
     post_p = nengo.Probe(post, synapse=0.01)
@@ -25,7 +25,7 @@ with model:
 nengo_spinnaker.add_spinnaker_params(model.config)
 model.config[inp].function_of_time = True
 
-sim = nengo_spinnaker.SpiNNakerSimulator(model)
+sim = nengo_spinnaker.Simulator(model)
 sim.run(2.0)
 
 # Read data

@@ -14,7 +14,7 @@ from .utils.machine_control import test_and_boot
 logger = logging.getLogger(__name__)
 
 
-class SpiNNakerSimulator(object):
+class Simulator(object):
     """SpiNNaker simulator for Nengo models."""
     def __init__(self, network, dt=0.001):
         """Create a new Simulator with the given network."""
@@ -27,10 +27,9 @@ class SpiNNakerSimulator(object):
         test_and_boot(self.controller, hostname, machine_width, machine_height)
 
         # Create the IO controller
-        io_cls = getconfig(network.config, SpiNNakerSimulator,
-                           "node_io", Ethernet)
-        io_kwargs = getconfig(network.config, SpiNNakerSimulator,
-                              "node_io_kwargs", dict())
+        io_cls = getconfig(network.config, Simulator, "node_io", Ethernet)
+        io_kwargs = getconfig(network.config, Simulator, "node_io_kwargs",
+                              dict())
         self.io_controller = io_cls(**io_kwargs)
 
         # Create a model from the network, using the IO controller

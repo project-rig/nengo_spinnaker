@@ -27,7 +27,7 @@ def test_global_inhibition():
     network.config[gate_control].function_of_time = True
 
     # Create the simulate and simulate
-    sim = nengo_spinnaker.SpiNNakerSimulator(network)
+    sim = nengo_spinnaker.Simulator(network)
 
     # Run the simulation for long enough to ensure that the decoded value is
     # with +/-20% of the input value.

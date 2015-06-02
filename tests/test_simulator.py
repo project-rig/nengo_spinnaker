@@ -3,7 +3,7 @@ from mock import patch
 import nengo
 import pytest
 
-from nengo_spinnaker import SpiNNakerSimulator
+from nengo_spinnaker import Simulator
 
 
 @pytest.mark.parametrize("dt", [0.001, 0.002])
@@ -15,12 +15,12 @@ def test_init(dt):
     # Create a mock network and mock config
     network = mock.Mock(name="network")
     config = network.config = dict()
-    config[SpiNNakerSimulator] = mock.Mock()
+    config[Simulator] = mock.Mock()
 
     # Create a NodeIOController
-    config[SpiNNakerSimulator].node_io = NodeIOController = \
+    config[Simulator].node_io = NodeIOController = \
         mock.Mock(name="NodeIOController")
-    config[SpiNNakerSimulator].node_io_kwargs = {"arthur": "King"}
+    config[Simulator].node_io_kwargs = {"arthur": "King"}
     nioc = NodeIOController.return_value = mock.Mock("nioc")
     nioc.builder_kwargs = {"spam": "a lot"}
     nioc.host_network = nengo.Network()
@@ -73,7 +73,7 @@ def test_init(dt):
             patch("nengo_spinnaker.simulator.test_and_boot",
                   test_and_boot), \
             patch("nengo_spinnaker.simulator.Model", Model):
-        sim = SpiNNakerSimulator(network, dt)
+        sim = Simulator(network, dt)
 
     # Check the simulator is sane
     assert sim.dt == dt

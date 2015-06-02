@@ -85,13 +85,13 @@ Using `nengo_spinnaker`
 -----------------------
 
 To use SpiNNaker to simulate your Nengo model first construct the model as
-normal. Then use `nengo_spinnaker.SpiNNakerSimulator` to simulate your model.::
+normal. Then use `nengo_spinnaker.Simulator` to simulate your model.::
 
     import nengo_spinnaker
 
     # Build model as normal
 
-    sim = nengo_spinnaker.SpiNNakerSimulator(network)
+    sim = nengo_spinnaker.Simulator(network)
     sim.run(10.0)
 
 Some specific configuration options are available for SpiNNaker. To use these::

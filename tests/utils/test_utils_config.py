@@ -1,7 +1,7 @@
 import mock
 import nengo
 
-from nengo_spinnaker import SpiNNakerSimulator, add_spinnaker_params
+from nengo_spinnaker import Simulator, add_spinnaker_params
 from nengo_spinnaker.utils.config import getconfig
 
 
@@ -12,9 +12,7 @@ def test_getconfig():
 
     # Use getconfig to get configuration options that don't exist get
     placer = mock.Mock()
-    assert (
-        getconfig(net.config, SpiNNakerSimulator, "placer", placer) is placer
-    )
+    assert getconfig(net.config, Simulator, "placer", placer) is placer
     assert not getconfig(net.config, n, "function_of_time", False)
 
     # Now add the config
@@ -22,6 +20,5 @@ def test_getconfig():
     net.config[n].function_of_time = True
 
     # Use getconfig to get configuration options from the config
-    assert (getconfig(net.config, SpiNNakerSimulator, "placer", placer) is
-            not placer)
+    assert getconfig(net.config, Simulator, "placer", placer) is not placer
     assert getconfig(net.config, n, "function_of_time", False)

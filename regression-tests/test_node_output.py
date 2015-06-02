@@ -14,7 +14,7 @@ def test_node_output_transmitted_to_board():
         p = nengo.Probe(b, synapse=0.05)
 
     # Create the simulate and simulate
-    sim = nengo_spinnaker.SpiNNakerSimulator(network)
+    sim = nengo_spinnaker.Simulator(network)
 
     # Run the simulation for long enough to ensure that the decoded value is
     # with +/-20% of the input value.
