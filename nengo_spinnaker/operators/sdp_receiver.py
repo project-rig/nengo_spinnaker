@@ -40,8 +40,7 @@ class SDPReceiver(object):
             # Create the regions for the system
             sys_region = SystemRegion(model.machine_timestep, conn.size_out)
             keys_region = KeyspacesRegion(
-                list(get_derived_keyspaces(signal.keyspace,
-                                           slice(0, conn.size_out))),
+                list(get_derived_keyspaces(signal.keyspace, conn.post_slice)),
                 [KeyField({"cluster": "cluster"})]
             )
 
