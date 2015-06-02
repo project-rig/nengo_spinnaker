@@ -60,6 +60,11 @@ class Net(rig.netlist.Net):
         super(Net, self).__init__(source, sinks, weight)
         self.keyspace = keyspace
 
+    @property
+    def as_rig_primitive(self):
+        """Return a new :py:class:`rig.netlist.Net` representing this Net."""
+        return rig.netlist.Net(self.source, self.sinks, self.weight)
+
 
 class Vertex(object):
     """Represents a nominal unit of computation (a single instance or many
@@ -171,6 +176,18 @@ class Netlist(object):
         self.routes = dict()
         self.vertices_memory = dict()
 
+    def as_rig_arguments(self):
+        """Construct arguments for Rig from the Netlist."""
+        vertices_resources = {v: v.resources for v in self.vertices}
+        nets = [net.as_rig_primitive for net in self.nets]
+        constraints = list(flatten(v.constraints for v in self.vertices))
+        constraints.append(ReserveResourceConstraint(Cores, slice(0, 1)))
+
+        return {"vertices_resources": vertices_resources,
+                "nets": nets,
+                "constraints": constraints
+                }
+
     def place_and_route(self, machine,
                         place=place_and_route.place,
                         place_kwargs={},
@@ -203,9 +220,9 @@ class Netlist(object):
         """
         # Build a map of vertices to the resources they require, get a list of
         # constraints.
-        vertices_resources = {v: v.resources for v in self.vertices}
-        constraints = list(flatten(v.constraints for v in self.vertices))
-        constraints.append(ReserveResourceConstraint(Cores, slice(0, 1)))
+        args = self.as_rig_arguments()
+        vertices_resources = args["vertices_resources"]
+        constraints = args["constraints"]
 
         # Perform placement and allocation
         self.placements = place(vertices_resources, self.nets,
