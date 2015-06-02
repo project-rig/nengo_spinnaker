@@ -116,6 +116,9 @@ class NodeIOController(object):
             )
             self._f_of_t_nodes[node] = vs
             model.object_operators[node] = vs
+        else:
+            with self.host_network:
+                self._add_node(node)
 
     def build_node_probe(self, model, probe):
         """Modify the model to build the Probe."""
