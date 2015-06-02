@@ -66,7 +66,7 @@ class ValueSource(object):
 
             # Add the keys for this connection
             conn = conns[0]
-            so = conns[0].post_obj.size_in
+            so = conns[0].size_out
             keys.extend(list(
                 get_derived_keyspaces(sig.keyspace, slice(0, so))
             ))
