@@ -19,12 +19,10 @@
 
 typedef struct _recording_buffer_t {
   uint *buffer;         //!< The buffer to write to
-  uint frame_length;    //!< Size of 1 frame of the buffer (in words)
-  uint n_frames;        //!< Length of the buffer in frames (= n_ticks)
+  uint block_length;    //!< Size of 1 block of the buffer (in words)
+  uint n_blocks;        //!< Length of the buffer in blocks (= n_ticks)
 
   bool record;          //!< Whether or not to record the data in the buffer
-
-  uint current_frame;   //!< Current frame number
 
   uint *_sdram_start;   //!< Start of the buffer in SDRAM
   uint *_sdram_current; //!< Current location in the SDRAM buffer
@@ -33,18 +31,7 @@ typedef struct _recording_buffer_t {
 /*!\brief Initialise a new recording buffer.
  */
 bool record_buffer_initialise(recording_buffer_t *buffer, address_t region,
-                              uint n_frames, uint n_neurons);
-
-/*!\brief Prepare buffer for writing.
- *
- * If recording is in use the pointer to the current address in SDRAM will be
- * advanced by one recording frame.
- */
-static inline void record_buffer_prepare(recording_buffer_t *buffer) {
-  if (buffer->record) {
-    buffer->_sdram_current += buffer->frame_length;
-  }
-}
+                              uint n_blocks, uint n_neurons);
 
 /*!\brief Flush the current buffer.
  *
@@ -55,13 +42,16 @@ static inline void record_buffer_flush(recording_buffer_t *buffer) {
   // Copy the current buffer into SDRAM
   if (buffer->record) {
     spin1_memcpy(buffer->_sdram_current, buffer->buffer,
-                 buffer->frame_length * sizeof(uint));
+                 buffer->block_length * sizeof(uint));
   }
 
   // Empty the buffer
-  for (uint i = 0; i < buffer->frame_length; i++) {
+  for (uint i = 0; i < buffer->block_length; i++) {
     buffer->buffer[i] = 0;
   }
+
+  // Progress the pointer
+  buffer->_sdram_current += buffer->block_length;
 }
 
 /*!\brief Record a spike for the given neuron.

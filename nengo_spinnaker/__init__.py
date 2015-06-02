@@ -8,4 +8,4 @@ nengo_spinnaker provides a means of running models built using Nengo
 """
 
 from .config import add_spinnaker_params
-from .simulator import SpiNNakerSimulator
+from .simulator import Simulator

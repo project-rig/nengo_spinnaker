@@ -5,6 +5,7 @@ python:
         - 3.4
 install:
         - python setup.py install
+        - pip install -r requirements.txt --upgrade --no-deps
         - pip install -r requirements-test.txt
         - pip install python-coveralls
 script :

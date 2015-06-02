@@ -22,9 +22,6 @@ void ensemble_update(uint ticks, uint arg1) {
     spin1_exit(0);
   }
 
-  // Prepare the recorder
-  record_buffer_prepare(&g_ensemble.recd);
-
   // Values used below
   current_t i_membrane;
   voltage_t v_delta, v_voltage;

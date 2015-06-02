@@ -3,7 +3,7 @@ from mock import patch
 import nengo
 import pytest
 
-from nengo_spinnaker import SpiNNakerSimulator
+from nengo_spinnaker import Simulator
 
 
 @pytest.mark.parametrize("dt", [0.001, 0.002])
@@ -15,12 +15,12 @@ def test_init(dt):
     # Create a mock network and mock config
     network = mock.Mock(name="network")
     config = network.config = dict()
-    config[SpiNNakerSimulator] = mock.Mock()
+    config[Simulator] = mock.Mock()
 
     # Create a NodeIOController
-    config[SpiNNakerSimulator].node_io = NodeIOController = \
+    config[Simulator].node_io = NodeIOController = \
         mock.Mock(name="NodeIOController")
-    config[SpiNNakerSimulator].node_io_kwargs = {"arthur": "King"}
+    config[Simulator].node_io_kwargs = {"arthur": "King"}
     nioc = NodeIOController.return_value = mock.Mock("nioc")
     nioc.builder_kwargs = {"spam": "a lot"}
     nioc.host_network = nengo.Network()
@@ -48,7 +48,8 @@ def test_init(dt):
     # Create a mock Model class and instance
     Model = mock.Mock(name="Model", spec_set=[])
     model = Model.return_value = mock.Mock(name="model",
-                                           spec_set=['build', 'dt'])
+                                           spec_set=['build', 'dt',
+                                                     'decoder_cache'])
     model.dt = dt
 
     # Create a mock Controller class and instance
@@ -72,7 +73,7 @@ def test_init(dt):
             patch("nengo_spinnaker.simulator.test_and_boot",
                   test_and_boot), \
             patch("nengo_spinnaker.simulator.Model", Model):
-        sim = SpiNNakerSimulator(network, dt)
+        sim = Simulator(network, dt)
 
     # Check the simulator is sane
     assert sim.dt == dt
@@ -84,6 +85,6 @@ def test_init(dt):
     assert rc.getint.call_count == 2
     assert test_and_boot.call_count == 1
 
-    Model.assert_called_once_with(dt)
+    assert Model.call_count == 1
     NodeIOController.assert_called_once_with(arthur="King")
     model.build.assert_called_once_with(network, spam="a lot")

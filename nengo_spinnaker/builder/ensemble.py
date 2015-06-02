@@ -3,6 +3,7 @@ import nengo
 from nengo.builder import connection as connection_b
 from nengo.builder import ensemble
 from nengo.dists import Distribution
+from nengo.processes import Process
 from nengo.utils.builder import full_transform
 from nengo.utils import numpy as npext
 import numpy as np
@@ -33,7 +34,9 @@ def get_ensemble_sink(model, connection):
     ens = model.object_operators[connection.post_obj]
 
     if (isinstance(connection.pre_obj, nengo.Node) and
-            not callable(connection.pre_obj.output)):
+            not callable(connection.pre_obj.output) and
+            not isinstance(connection.pre_obj.output, Process) and
+            connection.pre_obj.output is not None):
         # Connections from constant valued Nodes are optimised out.
         # Build the value that will be added to the direct input for the
         # ensemble.
@@ -61,6 +64,15 @@ def get_neurons_sink(model, connection):
         # Connections from non-neurons to Neurons where the transform delivers
         # the same value to all neurons are treated as global inhibition
         # connection.
+        # Modify the connection parameters
+        model.params[connection] = BuiltConnection(
+            model.params[connection].decoders,
+            model.params[connection].eval_points,
+            model.params[connection].transform[0, np.newaxis],
+            model.params[connection].solver_info
+        )
+
+        # Return a signal to the correct port.
         return spec(ObjectPort(ens, EnsembleInputPort.global_inhibition))
     else:
         # We don't support arbitrary connections into neurons
@@ -148,7 +160,7 @@ def build_from_ensemble_connection(model, conn):
 
     # Use cached solver
     solver = model.decoder_cache.wrap_solver(conn.solver)
-    if solver.weights:
+    if conn.solver.weights:
         raise NotImplementedError(
             "SpiNNaker does not currently support neuron to neuron connections"
         )
@@ -198,10 +210,14 @@ def build_ensemble_probe(model, probe):
 def build_neurons_probe(model, probe):
     """Build a probe which has Neurons as its target."""
     if probe.attr in ("output", "spikes"):
+        # Get the real target if the target is an ObjView
+        if isinstance(probe.target, nengo.base.ObjView):
+            ens = probe.target.obj.ensemble
+        else:
+            ens = probe.target.ensemble
+
         # Add this probe to the list of probes attached to the ensemble object.
-        model.object_operators[probe.target.ensemble].local_probes.append(
-            probe
-        )
+        model.object_operators[ens].local_probes.append(probe)
     else:
         raise NotImplementedError(
             "SpiNNaker does not currently support probing '{}' on '{}' "

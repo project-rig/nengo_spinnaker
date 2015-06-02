@@ -100,7 +100,7 @@ class TestBuild(object):
         network.ensembles = [a]
         network.nodes = [b]
         network.networks = []
-        network.all_probes = []
+        network.probes = []
         network.config = mock.Mock(name="config")
 
         if not use_make_object:
@@ -134,51 +134,64 @@ class TestBuild(object):
         builders[A].assert_called_once_with(model, a)
         extra_builders[B].assert_called_once_with(model, b)
 
-    def test_passthrough_nodes_removed(self):
-        """Test that passthrough Nodes are removed."""
-        with nengo.Network() as network:
-            a = nengo.Ensemble(100, 3)
-            b = nengo.Node(None, size_in=3, size_out=3)
-            c = nengo.Ensemble(100, 3)
+    def test_builds_hierarchy(self):
+        """Test that networks are built hierarchically.
+        """
+        class A(object):
+            seed = 101
 
-            a_b = nengo.Connection(a, b, synapse=None)
-            b_c = nengo.Connection(b, c)
+        class B(object):
+            pass
 
-        # Create a generic builder which just ensures that it is NEVER passed
-        # `b`
-        def generic_builder_fn(model, obj):
-            assert obj is not b
+        builders = {A: mock.Mock()}
+        extra_builders = {B: mock.Mock()}
 
-        def generic_connection_builder_fn(model, conn):
-            assert conn not in [a_b, b_c]
+        a = A()
+        b = B()
 
-        def generic_getter_fn(model, conn):
-            assert conn not in [a_b, b_c]
+        network_a = mock.Mock()
+        network_a.seed = None
+        network_a.connections = []
+        network_a.ensembles = [a]
+        network_a.nodes = []
+        network_a.networks = []
+        network_a.probes = []
+        network_a.config = mock.Mock(name="config")
 
-        generic_builder = mock.Mock(wraps=generic_builder_fn)
-        generic_getter = mock.Mock(wraps=generic_getter_fn)
-        generic_connection_builder = mock.Mock(
-            wraps=generic_connection_builder_fn
-        )
+        network_b = mock.Mock()
+        network_b.seed = None
+        network_b.connections = []
+        network_b.ensembles = []
+        network_b.nodes = [b]
+        network_b.networks = []
+        network_b.probes = []
+        network_b.config = mock.Mock(name="config")
 
-        builders = {nengo.base.NengoObject: generic_builder}
-        getters = {nengo.base.NengoObject: generic_getter}
-        connection_builders = {
-            nengo.base.NengoObject: generic_connection_builder
-        }
+        network = mock.Mock()
+        network.seed = None
+        network.connections = []
+        network.ensembles = []
+        network.nodes = []
+        network.networks = [network_a, network_b]
+        network.probes = []
+        network.config = mock.Mock(name="config")
 
-        # Build the model
-        with patch.object(Model, "builders", new=builders),\
-                patch.object(Model, "source_getters", new=getters),\
-                patch.object(Model, "sink_getters", new=getters),\
-                patch.object(Model, "connection_parameter_builders",
-                             new=connection_builders):
+        # Patch the default builders
+        with patch.object(Model, "builders", new=builders):
+            # Create a model and build the mock network
             model = Model()
-            model.build(network)
+            model.build(network, extra_builders=extra_builders)
 
-            assert generic_builder.call_count == 2
-            assert generic_getter.call_count == 2
-            assert generic_connection_builder.call_count == 1
+        # Assert that the config was stored in the model
+        assert model.config is network.config
+
+        # Assert that seeds were supplied
+        assert model.seeds[a] == a.seed
+        assert model.seeds[b] is not None
+
+        # Assert the builders got called
+        builders[A].assert_called_once_with(model, a)
+        extra_builders[B].assert_called_once_with(model, b)
 
 
 class TestMakeConnection(object):
@@ -243,7 +256,7 @@ class TestMakeConnection(object):
         network.ensembles = []
         network.nodes = []
         network.networks = []
-        network.all_probes = []
+        network.probes = []
 
         if use_registered_dicts:
             # Patch the getters, add a null builder
@@ -310,7 +323,7 @@ class TestMakeConnection(object):
         network.ensembles = []
         network.nodes = []
         network.networks = []
-        network.all_probes = []
+        network.probes = []
 
         # Patch the getters, add a null builder
         with patch.object(model, "source_getters", {A: source_getter}), \

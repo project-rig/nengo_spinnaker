@@ -28,7 +28,7 @@ void valsource_tick(uint ticks, uint arg1) {
     if (n_blocks > 1) {
       // More than one block, need to copy in subsequent block
       value_t *s_addr = &blocks[(current_block + 1) * pars.block_length *
-                                pars.n_dims * sizeof(value_t)];
+                                pars.n_dims];
 
       if (current_block == pars.n_blocks - 1) {
         // Subsequent block is the LAST block

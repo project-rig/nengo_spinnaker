@@ -88,3 +88,22 @@ class TestPESRegion(object):
         region.write_subregion_to_file(fp, slice(None))
         fp.seek(0)
         assert fp.read() == b'\x00' * 4
+
+
+class TestSpikeRegion(object):
+    """Spike regions use 1 bit per neuron per timestep but pad each frame to a
+    multiple of words.
+    """
+    @pytest.mark.parametrize(
+        "n_steps, vertex_slice, words_per_frame",
+        [(1, slice(0, 2), 1),
+         (100, slice(0, 32), 1),
+         (1000, slice(0, 33), 2),
+         ]
+    )
+    def test_sizeof(self, n_steps, vertex_slice, words_per_frame):
+        # Create the region
+        sr = lif.SpikeRegion(n_steps)
+
+        # Check that the size is reported correctly
+        assert sr.sizeof(vertex_slice) == 4 * words_per_frame * n_steps

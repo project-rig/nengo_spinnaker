@@ -1,2 +1,2 @@
-nengo>=2.0.0
+git+https://github.com/nengo/nengo#egg=nengo
 git+https://github.com/project-rig/rig#egg=rig

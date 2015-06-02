@@ -2,7 +2,7 @@ import nengo
 import pytest
 from rig import place_and_route as par
 
-from nengo_spinnaker import SpiNNakerSimulator, add_spinnaker_params
+from nengo_spinnaker import Simulator, add_spinnaker_params
 from nengo_spinnaker.config import CallableParameter
 from nengo_spinnaker import node_io
 
@@ -22,8 +22,7 @@ def test_add_spinnaker_params():
             ]:
         with pytest.raises(AttributeError) as excinfo:
             setattr(net.config[n_ft], param, value)
-        assert ("Unknown config parameter '{}'".format(param) in
-                str(excinfo.value))
+        assert param in str(excinfo.value)
 
     for param, value in [
             ("placer", lambda r, n, m, c: None),
@@ -36,8 +35,8 @@ def test_add_spinnaker_params():
             ("node_io_kwargs", {}),
             ]:
         with pytest.raises(KeyError) as excinfo:
-            setattr(net.config[SpiNNakerSimulator], param, value)
-        assert "SpiNNakerSimulator" in str(excinfo.value)
+            setattr(net.config[Simulator], param, value)
+        assert "Simulator" in str(excinfo.value)
 
     # Adding the SpiNNaker parameters should allow all of these to pass
     add_spinnaker_params(net.config)
@@ -45,15 +44,15 @@ def test_add_spinnaker_params():
     assert net.config[nengo.Node].function_of_time is False
     assert net.config[nengo.Node].function_of_time_period is None
 
-    assert net.config[SpiNNakerSimulator].placer is par.place
-    assert net.config[SpiNNakerSimulator].placer_kwargs == {}
-    assert net.config[SpiNNakerSimulator].allocater is par.allocate
-    assert net.config[SpiNNakerSimulator].allocater_kwargs == {}
-    assert net.config[SpiNNakerSimulator].router is par.route
-    assert net.config[SpiNNakerSimulator].router_kwargs == {}
+    assert net.config[Simulator].placer is par.place
+    assert net.config[Simulator].placer_kwargs == {}
+    assert net.config[Simulator].allocater is par.allocate
+    assert net.config[Simulator].allocater_kwargs == {}
+    assert net.config[Simulator].router is par.route
+    assert net.config[Simulator].router_kwargs == {}
 
-    assert net.config[SpiNNakerSimulator].node_io is node_io.Ethernet
-    assert net.config[SpiNNakerSimulator].node_io_kwargs == {}
+    assert net.config[Simulator].node_io is node_io.Ethernet
+    assert net.config[Simulator].node_io_kwargs == {}
 
 
 def test_callable_parameter_validate():

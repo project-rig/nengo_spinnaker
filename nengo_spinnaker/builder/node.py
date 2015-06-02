@@ -2,8 +2,9 @@ import nengo
 import numpy as np
 import threading
 
-from nengo_spinnaker.builder.builder import ObjectPort, OutputPort, spec
-from nengo_spinnaker.operators import ValueSink, ValueSource
+from nengo_spinnaker.builder.builder import (
+    InputPort, ObjectPort, OutputPort, spec)
+from nengo_spinnaker.operators import Filter, ValueSink, ValueSource
 from nengo_spinnaker.utils.config import getconfig
 
 
@@ -59,6 +60,7 @@ class NodeIOController(object):
 
         # Store objects that we've added
         self._f_of_t_nodes = dict()
+        self._passthrough_nodes = dict()
         self._added_nodes = set()
         self._added_conns = set()
         self._input_nodes = dict()
@@ -93,12 +95,24 @@ class NodeIOController(object):
 
     def build_node(self, model, node):
         """Modify the model to build the Node."""
-        # If the Node is a function of time then add a new value source for it.
-        if (node.size_in == 0 and callable(node.output) and
-                getconfig(model.config, node, "function_of_time", False)):
-            # Create the value sink
+        f_of_t = node.size_in == 0 and (
+            not callable(node.output) or
+            getconfig(model.config, node, "function_of_time", False)
+        )
+
+        if node.output is None:
+            # If the Node is a passthrough Node then create a new filter object
+            # for it.
+            op = Filter(node.size_in)
+            self._passthrough_nodes[node] = op
+            model.object_operators[node] = op
+        elif f_of_t:
+            # If the Node is a function of time then add a new value source for
+            # it.
             vs = ValueSource(
-                node.output, model.config[node].function_of_time_period
+                node.output,
+                node.size_out,
+                getconfig(model.config, node, "function_of_time_period")
             )
             self._f_of_t_nodes[node] = vs
             model.object_operators[node] = vs
@@ -117,7 +131,17 @@ class NodeIOController(object):
 
     def get_node_source(self, model, cn):
         """Get the source for a connection originating from a Node."""
-        if type(cn.post_obj) is nengo.Node:
+        if cn.pre_obj in self._passthrough_nodes:
+            # If the Node is a passthrough Node then we return a reference
+            # to the Filter operator we created earlier regardless.
+            return spec(ObjectPort(self._passthrough_nodes[cn.pre_obj],
+                                   OutputPort.standard))
+        elif cn.pre_obj in self._f_of_t_nodes:
+            # If the Node is a function of time Node then we return a
+            # reference to the value source we created earlier.
+            return spec(ObjectPort(self._f_of_t_nodes[cn.pre_obj],
+                                   OutputPort.standard))
+        elif type(cn.post_obj) is nengo.Node:
             # If this connection goes from a Node to another Node (exactly, not
             # any subclasses) then we just add both nodes and the connection to
             # the host model.
@@ -130,28 +154,22 @@ class NodeIOController(object):
             # represented by a signal on SpiNNaker.
             return None
         else:
-            # If the Node is a function of time Node then we return a reference
-            # to the value source we created earlier.
-            if cn.pre_obj in self._f_of_t_nodes:
-                return spec(ObjectPort(self._f_of_t_nodes[cn.pre_obj],
-                                       OutputPort.standard))
-            else:
-                # Otherwise, we create a new OutputNode for the Node at the
-                # start of the given connection, then add both it and the Node
-                # to the host network, with a joining connection.
-                with self.host_network:
-                    # Create the output Node if necessary
-                    if cn.pre_obj not in self._output_nodes:
-                        self._add_node(cn.pre_obj)
-                        self._output_nodes[cn.pre_obj] = \
-                            OutputNode(cn.pre_obj, self)
+            # Otherwise, we create a new OutputNode for the Node at the
+            # start of the given connection, then add both it and the Node
+            # to the host network, with a joining connection.
+            with self.host_network:
+                # Create the output Node if necessary
+                if cn.pre_obj not in self._output_nodes:
+                    self._add_node(cn.pre_obj)
+                    self._output_nodes[cn.pre_obj] = \
+                        OutputNode(cn.pre_obj, self)
 
-                        output_node = self._output_nodes[cn.pre_obj]
-                        nengo.Connection(cn.pre_obj, output_node, synapse=None)
+                    output_node = self._output_nodes[cn.pre_obj]
+                    nengo.Connection(cn.pre_obj, output_node, synapse=None)
 
-                # Return a specification that describes how the signal should
-                # be represented on SpiNNaker.
-                return self.get_spinnaker_source_for_node(model, cn)
+            # Return a specification that describes how the signal should
+            # be represented on SpiNNaker.
+            return self.get_spinnaker_source_for_node(model, cn)
 
     def get_spinnaker_source_for_node(self, model, cn):  # pragma: no cover
         """Get the source for a connection originating from a Node.
@@ -164,7 +182,12 @@ class NodeIOController(object):
 
     def get_node_sink(self, model, cn):
         """Get the sink for a connection terminating at a Node."""
-        if type(cn.pre_obj) is nengo.Node:
+        if cn.post_obj in self._passthrough_nodes:
+            # If the Node is a passthrough Node then we return a reference
+            # to the Filter operator we created earlier regardless.
+            return spec(ObjectPort(self._passthrough_nodes[cn.post_obj],
+                                   InputPort.standard))
+        elif type(cn.pre_obj) is nengo.Node:
             # If this connection goes from a Node to another Node (exactly, not
             # any subclasses) then we just add both nodes and the connection to
             # the host model.
@@ -177,9 +200,9 @@ class NodeIOController(object):
             # represented by a signal on SpiNNaker.
             return None
         else:
-            # Otherwise we create a new InputNode for the Node at the end of
-            # the given connection, then add both it and the Node to the host
-            # network with a joining connection.
+            # Otherwise we create a new InputNode for the Node at the end
+            # of the given connection, then add both it and the Node to the
+            # host network with a joining connection.
             with self.host_network:
                 self._add_node(cn.post_obj)
 
@@ -191,8 +214,8 @@ class NodeIOController(object):
                     input_node = self._input_nodes[cn.post_obj]
                     nengo.Connection(input_node, cn.post_obj, synapse=None)
 
-            # Return a specification that describes how the signal should be
-            # represented on SpiNNaker.
+            # Return a specification that describes how the signal should
+            # be represented on SpiNNaker.
             return self.get_spinnaker_sink_for_node(model, cn)
 
     def get_spinnaker_sink_for_node(self, model, cn):  # pragma: no cover

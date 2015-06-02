@@ -59,6 +59,21 @@ class TestNoneFilter(object):
         nf = NoneFilter.from_signal_and_connection(signal, connection)
         assert NoneFilter(2, latching) == nf
 
+    @pytest.mark.parametrize("width, latching", [(5, True)])
+    def test_from_signal_and_connection_force_width(self, latching, width):
+        # Create the mock signal and connection
+        signal = mock.Mock(name="signal", spec_set=["latching"])
+        signal.latching = latching
+
+        with nengo.Network():
+            a = nengo.Ensemble(100, width)
+            b = nengo.Ensemble(100, width)
+            connection = nengo.Connection(a, b, synapse=None)
+
+        # Build the filter
+        nf = NoneFilter.from_signal_and_connection(signal, connection, width=1)
+        assert NoneFilter(1, latching) == nf
+
 
 class TestLowpassFilter(object):
     @pytest.mark.parametrize("width, latching, dt, tc",
@@ -94,6 +109,22 @@ class TestLowpassFilter(object):
         # Create the filter
         lpf = LowpassFilter.from_signal_and_connection(signal, connection)
         assert lpf == LowpassFilter(width, latching, tc)
+
+    @pytest.mark.parametrize("width, latching, tc", [(3, False, 0.01)])
+    def test_from_signal_and_connection_force_width(self, width, latching, tc):
+        # Create the mock signal and connection
+        signal = mock.Mock(name="signal", spec_set=["latching"])
+        signal.latching = latching
+
+        with nengo.Network():
+            a = nengo.Ensemble(100, width)
+            b = nengo.Ensemble(100, width)
+            connection = nengo.Connection(a, b, synapse=nengo.Lowpass(tc))
+
+        # Create the filter
+        lpf = LowpassFilter.from_signal_and_connection(signal, connection,
+                                                       width=2)
+        assert lpf == LowpassFilter(2, latching, tc)
 
     @pytest.mark.parametrize("latching, tc", [(False, 0.01), (True, 0.2)])
     def test_from_signal_and_connection_with_slice(self, latching, tc):
@@ -308,3 +339,39 @@ class TestMakeFilterRegions(object):
             assert (ks_b, 1) in routing_region.keyspace_routes
         else:
             assert (ks_b, 0) in routing_region.keyspace_routes
+
+    def test_forced_filter_width(self):
+        """Test construction of filter regions from signals and keyspaces."""
+        # Create two keyspaces, two signals and two connections with equivalent
+        # synapses.
+        ks_a = mock.Mock(name="Keyspace[A]")
+        signal_a = mock.Mock(name="Signal[A]")
+        signal_a.keyspace, signal_a.latching = ks_a, False
+
+        ks_b = mock.Mock(name="Keyspace[B]")
+        signal_b = mock.Mock(name="Signal[B]")
+        signal_b.keyspace, signal_b.latching = ks_b, False
+
+        conn_a = mock.Mock(name="Connection[A]")
+        conn_a.post_obj.size_in = 3
+        conn_a.synapse = nengo.Lowpass(0.01)
+
+        conn_b = mock.Mock(name="Connection[B]")
+        conn_b.post_obj.size_in = 5
+        conn_b.synapse = None
+
+        # Create the type of dictionary that is expected as input
+        signals_connections = {
+            signal_a: [conn_a],
+            signal_b: [conn_b],
+        }
+
+        # Create the regions, with minimisation
+        filter_region, routing_region = make_filter_regions(
+            signals_connections, 0.001, width=1
+        )
+
+        # Check that the filter region is as expected
+        for f in filter_region.filters:
+            assert (f == LowpassFilter(1, False, 0.01) or
+                    f == NoneFilter(1, False))  # noqa: E711

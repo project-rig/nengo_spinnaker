@@ -1,5 +1,6 @@
 import logging
 import nengo
+from nengo.cache import get_default_decoder_cache
 import numpy as np
 from rig.machine_control import MachineController
 import time
@@ -13,7 +14,7 @@ from .utils.machine_control import test_and_boot
 logger = logging.getLogger(__name__)
 
 
-class SpiNNakerSimulator(object):
+class Simulator(object):
     """SpiNNaker simulator for Nengo models."""
     def __init__(self, network, dt=0.001):
         """Create a new Simulator with the given network."""
@@ -26,16 +27,20 @@ class SpiNNakerSimulator(object):
         test_and_boot(self.controller, hostname, machine_width, machine_height)
 
         # Create the IO controller
-        io_cls = getconfig(network.config, SpiNNakerSimulator,
-                           "node_io", Ethernet)
-        io_kwargs = getconfig(network.config, SpiNNakerSimulator,
-                              "node_io_kwargs", dict())
+        io_cls = getconfig(network.config, Simulator, "node_io", Ethernet)
+        io_kwargs = getconfig(network.config, Simulator, "node_io_kwargs",
+                              dict())
         self.io_controller = io_cls(**io_kwargs)
 
         # Create a model from the network, using the IO controller
         logger.debug("Building model")
-        self.model = Model(dt)
+        start_build = time.time()
+        self.model = Model(dt, decoder_cache=get_default_decoder_cache())
         self.model.build(network, **self.io_controller.builder_kwargs)
+        logger.info("Build took {:.3f} seconds".format(time.time() -
+                                                       start_build))
+
+        self.model.decoder_cache.shrink()
         self.dt = self.model.dt
 
         # Build the host simulator
@@ -60,6 +65,7 @@ class SpiNNakerSimulator(object):
 
         # Convert the model into a netlist
         logger.info("Building netlist")
+        start = time.time()
         netlist = self.model.make_netlist(steps)  # TODO remove steps!
 
         # Get a machine object to place & route against
@@ -81,15 +87,14 @@ class SpiNNakerSimulator(object):
 
         # TODO: Implement a better simulation protocol
         # Check if any cores are in bad states
-        failed_cores = (
-            self.controller.count_cores_in_state("runtime_exception") +
-            self.controller.count_cores_in_state("watchdog") +
-            self.controller.count_cores_in_state("dead") +
-            self.controller.count_cores_in_state("exit")
-        )
-        if failed_cores:
+        if self.controller.count_cores_in_state(["exit", "dead", "watchdog",
+                                                 "runtime_exception"]):
             # TODO: Find the failed cores
             raise Exception("Unexpected core failures.")
+
+        logger.info("Preparing and loading machine took {:3f} seconds".format(
+            time.time() - start
+        ))
 
         try:
             # Prep
@@ -98,6 +103,7 @@ class SpiNNakerSimulator(object):
 
             # TODO: Wait for all cores to hit SYNC0
             logger.info("Running simulation...")
+            time.sleep(1.0)
             self.controller.send_signal("sync0")
 
             # Execute the local model
@@ -117,9 +123,19 @@ class SpiNNakerSimulator(object):
             # Stop the IO thread whatever occurs
             io_thread.stop()
 
+        # Check if any cores are in bad states
+        if self.controller.count_cores_in_state(["dead", "watchdog",
+                                                 "runtime_exception"]):
+            # TODO: Find the failed cores
+            raise Exception("Unexpected core failures.")
+
         # Retrieve simulation data
+        start = time.time()
         logger.info("Retrieving simulation data")
         netlist.after_simulation(self, steps)
+        logger.info("Retrieving data took {:3f} seconds".format(
+            time.time() - start
+        ))
 
         # Stop the application
         self.controller.send_signal("stop")

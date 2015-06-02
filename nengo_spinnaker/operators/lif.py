@@ -6,7 +6,9 @@ SpiNNaker.  The build method also manages the partitioning of the ensemble into
 appropriate sized slices.
 """
 
+from bitarray import bitarray
 import collections
+from nengo.base import ObjView
 import numpy as np
 from rig.machine import Cores, SDRAM
 from six import iteritems
@@ -66,11 +68,11 @@ class EnsembleLIF(object):
 
         self.input_filters, self.input_filter_routing = make_filter_regions(
             incoming[InputPort.standard], model.dt, True,
-            model.keyspaces.filter_routing_tag
+            model.keyspaces.filter_routing_tag, width=self.ensemble.size_in
         )
         self.inhib_filters, self.inhib_filter_routing = make_filter_regions(
             incoming[EnsembleInputPort.global_inhibition], model.dt, True,
-            model.keyspaces.filter_routing_tag
+            model.keyspaces.filter_routing_tag, width=1
         )
         self.mod_filters, self.mod_filter_routing = make_filter_regions(
             {}, model.dt, True, model.keyspaces.filter_routing_tag
@@ -94,6 +96,14 @@ class EnsembleLIF(object):
             output_keys, fields=[regions.KeyField({'cluster': 'cluster'})]
         )
 
+        # Create the spike region if necessary
+        if self.local_probes:
+            self.spike_region = SpikeRegion(n_steps)
+            self.probe_spikes = True
+        else:
+            self.spike_region = None
+            self.probe_spikes = False
+
         # Create the regions list
         self.regions = [
             SystemRegion(self.ensemble.size_in,
@@ -102,7 +112,7 @@ class EnsembleLIF(object):
                          self.ensemble.neuron_type.tau_ref,
                          self.ensemble.neuron_type.tau_rc,
                          model.dt,
-                         False  # Base this on whether we have a probe attached
+                         self.probe_spikes
                          ),
             self.bias_region,
             self.encoders_region,
@@ -117,7 +127,7 @@ class EnsembleLIF(object):
             self.mod_filter_routing,
             self.pes_region,
             None,
-            None  # Will be the spike recording region
+            self.spike_region,
         ]
 
         # Partition the ensemble and get a list of vertices to load to the
@@ -144,11 +154,13 @@ class EnsembleLIF(object):
             self.vertices.append(vsl)
 
         # Return the vertices and callback methods
-        return netlistspec(self.vertices, self.load_to_machine)
+        return netlistspec(self.vertices, self.load_to_machine,
+                           after_simulation_function=self.after_simulation)
 
     def load_to_machine(self, netlist, controller):
         """Load the ensemble data into memory."""
         # For each slice
+        self.spike_mem = dict()
         for vertex in self.vertices:
             # Layout the slice of SDRAM we have been given
             region_memory = regions.utils.create_app_ptr_and_region_files(
@@ -161,6 +173,8 @@ class EnsembleLIF(object):
                 elif region is self.output_keys_region:
                     self.output_keys_region.write_subregion_to_file(
                         mem, vertex.slice, cluster=vertex.cluster)
+                elif region is self.spike_region and self.probe_spikes:
+                    self.spike_mem[vertex] = mem
                 else:
                     region.write_subregion_to_file(mem, vertex.slice)
 
@@ -169,11 +183,43 @@ class EnsembleLIF(object):
         # TODO When supported by executables
         raise NotImplementedError
 
-    def after_simulation(self, netlist, controller, simulator, n_steps):
+    def after_simulation(self, netlist, simulator, n_steps):
         """Retrieve data from a simulation and ensure."""
-        raise NotImplementedError
         # If we have probed the spikes then retrieve the spike data and store
         # it in the simulator data.
+        if self.probe_spikes:
+            probed_spikes = np.zeros((n_steps, self.ensemble.n_neurons))
+
+            for vertex in self.vertices:
+                mem = self.spike_mem[vertex]
+                mem.seek(0)
+
+                spike_data = bitarray(endian="little")
+                spike_data.frombytes(mem.read())
+                n_neurons = vertex.slice.stop - vertex.slice.start
+
+                bpf = self.spike_region.bytes_per_frame(vertex.slice)*8
+                spikes = (spike_data[n*bpf:n*bpf + n_neurons] for n in
+                          range(n_steps))
+
+                probed_spikes[:, vertex.slice] = \
+                    np.array([[1./simulator.dt if s else 0.0 for s in ss]
+                              for ss in spikes])
+
+            # Store the data associated with every probe, applying the sampling
+            # and slicing specified for the probe.
+            for p in self.local_probes:
+                if p.sample_every is None:
+                    sample_every = 1
+                else:
+                    sample_every = p.sample_every / simulator.dt
+
+                if not isinstance(p.target, ObjView):
+                    neuron_slice = slice(None)
+                else:
+                    neuron_slice = p.target.slice
+
+                simulator.data[p] = probed_spikes[::sample_every, neuron_slice]
 
 
 class SystemRegion(collections.namedtuple(
@@ -248,3 +294,21 @@ def get_decoders_and_keys(model, signals_connections):
         decoders = np.array([[]])
 
     return decoders, keys
+
+
+class SpikeRegion(regions.Region):
+    """Region used to record spikes."""
+    def __init__(self, n_steps):
+        self.n_steps = n_steps
+
+    def sizeof(self, vertex_slice):
+        # Get the number of words per frame
+        return self.bytes_per_frame(vertex_slice) * self.n_steps
+
+    def bytes_per_frame(self, vertex_slice):
+        n_neurons = vertex_slice.stop - vertex_slice.start
+        words_per_frame = n_neurons//32 + (1 if n_neurons % 32 else 0)
+        return 4 * words_per_frame
+
+    def write_subregion_to_file(self, *args, **kwargs):  # pragma: no cover
+        pass  # Nothing to do
