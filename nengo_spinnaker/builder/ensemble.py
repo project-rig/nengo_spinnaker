@@ -3,6 +3,7 @@ import nengo
 from nengo.builder import connection as connection_b
 from nengo.builder import ensemble
 from nengo.dists import Distribution
+from nengo.processes import Process
 from nengo.utils.builder import full_transform
 from nengo.utils import numpy as npext
 import numpy as np
@@ -34,6 +35,7 @@ def get_ensemble_sink(model, connection):
 
     if (isinstance(connection.pre_obj, nengo.Node) and
             not callable(connection.pre_obj.output) and
+            not isinstance(connection.pre_obj.output, Process) and
             connection.pre_obj.output is not None):
         # Connections from constant valued Nodes are optimised out.
         # Build the value that will be added to the direct input for the

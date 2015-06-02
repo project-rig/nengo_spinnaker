@@ -22,8 +22,7 @@ def test_add_spinnaker_params():
             ]:
         with pytest.raises(AttributeError) as excinfo:
             setattr(net.config[n_ft], param, value)
-        assert ("Unknown config parameter '{}'".format(param) in
-                str(excinfo.value))
+        assert param in str(excinfo.value)
 
     for param, value in [
             ("placer", lambda r, n, m, c: None),
