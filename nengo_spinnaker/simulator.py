@@ -182,18 +182,18 @@ class Simulator(object):
             self.controller.send_signal("sync1")
 
             # Execute the local model
-            while exp_time > 0:
+            host_steps = 0
+            start_time = time.time()
+            run_time = 0.0
+            while run_time < exp_time:
                 # Run a step
-                start = time.time()
                 self.host_sim.step()
-                run_time = time.time() - start
+                run_time = time.time() - start_time
 
                 # If that step took less than timestep then spin
-                time.sleep(0.0001)
-                while run_time < self.dt:
-                    run_time = time.time() - start
-
-                exp_time -= run_time
+                while run_time < host_steps * self.dt:
+                    time.sleep(0.0001)
+                    run_time = time.time() - start_time
         finally:
             # Stop the IO thread whatever occurs
             io_thread.stop()
