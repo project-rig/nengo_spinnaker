@@ -1,3 +1,4 @@
+import collections
 import math
 import numpy as np
 from six import iteritems
@@ -32,35 +33,18 @@ class ValueSource(object):
 
     def make_vertices(self, model, n_steps):
         """Create the vertices to be simulated on the machine."""
-        # Evaluate the node for this period of time
-        if self.period is not None:
-            max_n = min(n_steps, self.period / model.dt)
-        else:
-            max_n = n_steps
-
-        ts = np.arange(max_n) * model.dt
-        if callable(self.function):
-            values = np.array([self.function(t) for t in ts])
-        elif isinstance(self.function, Process):
-            values = self.function.run_steps(max_n, d=self.size_out,
-                                             dt=model.dt)
-        else:
-            values = np.array([self.function for t in ts])
-
         # Create the system region
         self.system_region = SystemRegion(model.machine_timestep,
                                           self.period, n_steps)
 
         # Get all the outgoing signals to determine how big the size out is and
         # to build a list of keys.
-        keys = list()
-
         sigs_conns = model.get_signals_connections_from_object(self)
-
         if len(sigs_conns) == 0:
             return netlistspec([])
 
-        outputs = []
+        keys = list()
+        self.conns = list()
         for sig, conns in iteritems(sigs_conns[OutputPort.standard]):
             assert len(conns) == 1, "Expected a 1:1 mapping"
 
@@ -70,18 +54,8 @@ class ValueSource(object):
             keys.extend(list(
                 get_derived_keyspaces(sig.keyspace, slice(0, so))
             ))
-
-            # Compute the output for this connection
-            output = []
-            for v in values:
-                if conn.function is not None:
-                    v = conn.function(v)
-                output.append(np.dot(conn.transform, v.T))
-            outputs.append(np.array(output).reshape(n_steps, so))
-
+            self.conns.append(conn)
         size_out = len(keys)
-        output_matrix = np.hstack(outputs)
-        assert output_matrix.shape == (n_steps, size_out), output_matrix.shape
 
         # Build the keys region
         self.keys_region = regions.KeyspacesRegion(
@@ -91,7 +65,7 @@ class ValueSource(object):
 
         # Create the output region
         self.output_region = regions.MatrixRegion(
-            np_to_fix(output_matrix),
+            np.zeros((n_steps, size_out)),
             sliced_dimension=regions.MatrixPartitioning.columns
         )
 
@@ -116,23 +90,87 @@ class ValueSource(object):
             self.vertices.append(vsl)
 
         # Return the vertices and callback methods
-        return netlistspec(self.vertices, self.load_to_machine)
+        return netlistspec(self.vertices, self.load_to_machine,
+                           self.before_simulation)
 
     def load_to_machine(self, netlist, controller):
         """Load the values into memory."""
         # For each slice
+        self.vertices_region_memory = collections.defaultdict(dict)
+
         for vertex in self.vertices:
             # Layout the slice of SDRAM we have been given
             region_memory = regions.utils.create_app_ptr_and_region_files(
                 netlist.vertices_memory[vertex], self.regions, vertex.slice)
 
-            # Write in each region
+            # Store the location of each region in memory
             for region, mem in zip(self.regions, region_memory):
-                if region is self.keys_region:
-                    self.keys_region.write_subregion_to_file(
-                        mem, vertex.slice, cluster=vertex.cluster)
-                else:
-                    region.write_subregion_to_file(mem, vertex.slice)
+                self.vertices_region_memory[vertex][region] = mem
+
+            # Write in some of the regions
+            self.vertices_region_memory[vertex][self.system_region].seek(0)
+            self.system_region.write_subregion_to_file(
+                self.vertices_region_memory[vertex][self.system_region],
+                vertex.slice
+            )
+            self.vertices_region_memory[vertex][self.keys_region].seek(0)
+            self.keys_region.write_subregion_to_file(
+                self.vertices_region_memory[vertex][self.keys_region],
+                vertex.slice, cluster=vertex.cluster
+            )
+
+    def before_simulation(self, netlist, simulator, n_steps):
+        """Generate the values to output for the next set of simulation steps.
+        """
+        # Write out the system region to deal with the current run-time
+        self.system_region.n_steps = n_steps
+
+        # Evaluate the node for this period of time
+        if self.period is not None:
+            max_n = min(n_steps, self.period / simulator.dt)
+        else:
+            max_n = n_steps
+
+        ts = np.arange(simulator.steps, simulator.steps + max_n) * simulator.dt
+        if callable(self.function):
+            values = np.array([self.function(t) for t in ts])
+        elif isinstance(self.function, Process):
+            values = self.function.run_steps(max_n, d=self.size_out,
+                                             dt=simulator.dt)
+        else:
+            values = np.array([self.function for t in ts])
+
+        # Compute the output for each connection
+        outputs = []
+        for conn in self.conns:
+            output = []
+            for v in values:
+                if conn.function is not None:
+                    v = conn.function(v)
+                output.append(np.dot(conn.transform, v.T))
+            outputs.append(np.array(output).reshape(n_steps, conn.size_out))
+
+        output_matrix = np.hstack(outputs)
+
+        new_output_region = regions.MatrixRegion(
+            np_to_fix(output_matrix),
+            sliced_dimension=regions.MatrixPartitioning.columns
+        )
+
+        # Write the simulation values into memory
+        for vertex in self.vertices:
+            self.vertices_region_memory[vertex][self.system_region].seek(0)
+            self.system_region.write_subregion_to_file(
+                self.vertices_region_memory[vertex][self.system_region],
+                vertex.slice
+            )
+
+            self.vertices_region_memory[vertex][self.output_region].seek(0)
+            new_output_region.write_subregion_to_file(
+                self.vertices_region_memory[vertex][self.output_region],
+                vertex.slice
+            )
+            print(np_to_fix(output_matrix)[:, vertex.slice])
 
 
 class SystemRegion(regions.Region):

@@ -487,20 +487,27 @@ def test_load_application():
 
 
 def test_before_simulation():
-    """Test that all methods are called when asked to prepare a simulation."""
+    """Test that all methods are called when asked to prepare a simulation and
+    that the simulation duration is written in correctly.
+    """
     # Create some "before_simulation" functions
     before_a = mock.Mock()
     before_b = mock.Mock()
 
+    # Create a vertex
+    vertex = mock.Mock()
+
     # Create a netlist
     model = netlist.Netlist(
         nets=[],
-        vertices=[],
+        vertices=[vertex],
         keyspaces={},
         groups={},
         load_functions=[],
         before_simulation_functions=[before_a, before_b]
     )
+    model.placements[vertex] = (1, 2)
+    model.allocations[vertex] = {Cores: slice(5, 7)}
 
     # Call the before_simulation_functions
     simulator = mock.Mock(name="Simulator")
@@ -508,6 +515,11 @@ def test_before_simulation():
 
     before_a.assert_called_once_with(model, simulator, 100)
     before_b.assert_called_once_with(model, simulator, 100)
+
+    # Check we wrote in the run time
+    simulator.controller.write_vcpu_struct_field.assert_called_once_with(
+        "user1", 100, 1, 2, 5
+    )
 
 
 def test_after_simulation():

@@ -12,7 +12,6 @@ address_t system_load_sram()
   // simulation ticks from user1.
   vcpu_t vcpu = ((vcpu_t*)SV_VCPU)[spin1_get_core_id()];
   address_t address = (address_t) vcpu.user0;
-  simulation_ticks = vcpu.user1;
 
   return address;
 }
@@ -21,4 +20,12 @@ address_t system_load_sram()
 address_t region_start(uint32_t n, address_t address)
 {
   return (& address[address[n] >> 2]);
+}
+
+
+void config_get_n_ticks()
+{
+  // Read the number of ticks from VCPU->User1
+  vcpu_t vcpu = ((vcpu_t*)SV_VCPU)[spin1_get_core_id()];
+  simulation_ticks = vcpu.user1;
 }

@@ -17,6 +17,14 @@ logger = logging.getLogger(__name__)
 class Simulator(object):
     """SpiNNaker simulator for Nengo models.
 
+    The simulator period determines how much data will be stored on SpiNNaker
+    and is the maximum length of simulation allowed before data is transferred
+    between the machine and the host PC. If the period is set to `None`
+    function of time Nodes will not be optimised and probes will be disabled.
+    For any other value simulation lengths of less than or equal to the period
+    will be in real-time, longer simulations will be possible but will include
+    short gaps when data is transferred between SpiNNaker and the host.
+
     :py:meth:`~.close` should be called when the simulator will no longer be
     used. This will close all sockets used to communicate with the SpiNNaker
     machine and will leave the machine in a clean state. Failure to call
@@ -26,8 +34,15 @@ class Simulator(object):
         with sim:
             sim.run(10.0)
     """
-    def __init__(self, network, dt=0.001):
-        """Create a new Simulator with the given network."""
+    def __init__(self, network, dt=0.001, period=10.0):
+        """Create a new Simulator with the given network.
+
+        Parameters
+        ----------
+        period : float or None
+            Duration of one period of the simulator. This determines how much
+            memory will be allocated to store precomputed and probed data.
+        """
         # Create a controller for the machine and boot if necessary
         hostname = rc.get("spinnaker_machine", "hostname")
         machine_width = rc.getint("spinnaker_machine", "width")
@@ -42,11 +57,23 @@ class Simulator(object):
                               dict())
         self.io_controller = io_cls(**io_kwargs)
 
+        # Determine the maximum run-time
+        self.max_steps = None if period is None else int(period / dt)
+
+        self.steps = 0  # Steps simulated
+
+        # If the simulator is in "run indefinite" mode (i.e., max_steps=None)
+        # then we modify the builders to ignore function of time Nodes and
+        # probes.
+        builder_kwargs = self.io_controller.builder_kwargs
+        if self.max_steps is None:
+            raise NotImplementedError
+
         # Create a model from the network, using the IO controller
         logger.debug("Building model")
         start_build = time.time()
         self.model = Model(dt, decoder_cache=get_default_decoder_cache())
-        self.model.build(network, **self.io_controller.builder_kwargs)
+        self.model.build(network, **builder_kwargs)
         logger.info("Build took {:.3f} seconds".format(time.time() -
                                                        start_build))
 
@@ -60,6 +87,37 @@ class Simulator(object):
 
         # Holder for probe data
         self.data = {}
+
+        # Convert the model into a netlist
+        logger.info("Building netlist")
+        start = time.time()
+        self.netlist = self.model.make_netlist(self.max_steps or 0)
+
+        # Get a machine object to place & route against
+        logger.info("Getting SpiNNaker machine specification")
+        machine = self.controller.get_machine()
+
+        # Place & Route
+        logger.info("Placing and routing")
+        self.netlist.place_and_route(machine)
+
+        # Prepare the simulator against the placed, allocated and routed
+        # netlist.
+        self.io_controller.prepare(self.controller, self.netlist)
+
+        # Load the application
+        logger.info("Loading application")
+        self.netlist.load_application(self.controller)
+
+        # Check if any cores are in bad states
+        if self.controller.count_cores_in_state(["exit", "dead", "watchdog",
+                                                 "runtime_exception"]):
+            # TODO: Find the failed cores
+            raise Exception("Unexpected core failures.")
+
+        logger.info("Preparing and loading machine took {:3f} seconds".format(
+            time.time() - start
+        ))
 
     def __enter__(self):
         """Enter a context which will close the simulator when exited."""
@@ -76,58 +134,52 @@ class Simulator(object):
         self.run_steps(steps)
 
     def run_steps(self, steps):
+        """Simulate a give number of steps."""
+        while steps > 0:
+            n_steps = min((steps, self.max_steps))
+            self._run_steps(n_steps)
+            steps -= n_steps
+
+    def _run_steps(self, steps):
         """Simulate for the given number of steps."""
         if self._closed:
             raise Exception("Simulator has been closed and can't be used to "
                             "run further simulations.")
 
-        # NOTE: constructing a netlist, placing, routing and loading should
-        # move into Simulator initialisation when the new simulation protocol
-        # is implemented.
-        self._n_steps_last = steps
+        if steps is None:
+            if self.max_steps is not None:
+                raise Exception(
+                    "Cannot run indefinitely if a simulator period was "
+                    "specified. Create a new simulator with Simulator(model, "
+                    "period=None) to perform indefinite time simulations."
+                )
+        else:
+            assert steps <= self.max_steps
 
-        # Convert the model into a netlist
-        logger.info("Building netlist")
-        start = time.time()
-        netlist = self.model.make_netlist(steps)  # TODO remove steps!
+        # Prepare the simulation
+        self.netlist.before_simulation(self, steps)
 
-        # Get a machine object to place & route against
-        logger.info("Getting SpiNNaker machine specification")
-        machine = self.controller.get_machine()
+        # Wait for all cores to hit SYNC0
+        self.controller.wait_for_cores_to_reach_state(
+            "sync0", len(self.netlist.vertices)
+        )
+        self.controller.send_signal("sync0")
 
-        # Place & Route
-        logger.info("Placing and routing")
-        netlist.place_and_route(machine)
-
-        # Prepare the simulator against the placed, allocated and routed
-        # netlist.
-        self.io_controller.prepare(self.controller, netlist)
+        # Get a new thread for the IO
         io_thread = self.io_controller.spawn()
 
-        # Load the application
-        logger.info("Loading application")
-        netlist.load_application(self.controller, steps)
-
-        # TODO: Implement a better simulation protocol
-        # Check if any cores are in bad states
-        if self.controller.count_cores_in_state(["exit", "dead", "watchdog",
-                                                 "runtime_exception"]):
-            # TODO: Find the failed cores
-            raise Exception("Unexpected core failures.")
-
-        logger.info("Preparing and loading machine took {:3f} seconds".format(
-            time.time() - start
-        ))
-
+        # Run the simulation
         try:
             # Prep
             exp_time = steps * self.dt
             io_thread.start()
 
-            # TODO: Wait for all cores to hit SYNC0
+            # Wait for all cores to hit SYNC1
+            self.controller.wait_for_cores_to_reach_state(
+                "sync1", len(self.netlist.vertices)
+            )
             logger.info("Running simulation...")
-            time.sleep(1.0)
-            self.controller.send_signal("sync0")
+            self.controller.send_signal("sync1")
 
             # Execute the local model
             while exp_time > 0:
@@ -155,10 +207,13 @@ class Simulator(object):
         # Retrieve simulation data
         start = time.time()
         logger.info("Retrieving simulation data")
-        netlist.after_simulation(self, steps)
+        self.netlist.after_simulation(self, steps)
         logger.info("Retrieving data took {:3f} seconds".format(
             time.time() - start
         ))
+
+        # Increase the steps count
+        self.steps += steps
 
     def close(self):
         """Clean the SpiNNaker board and prevent further simulation."""
@@ -168,4 +223,4 @@ class Simulator(object):
         self.controller.send_signal("stop")
 
     def trange(self, dt=None):
-        return np.arange(self._n_steps_last) * (self.dt or dt)
+        return np.arange(1, self.steps + 1) * (self.dt or dt)

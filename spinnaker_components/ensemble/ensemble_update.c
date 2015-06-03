@@ -18,6 +18,7 @@ uint lfsr = 1;                   //!< LFSR for spike perturbation
 
 void ensemble_update(uint ticks, uint arg1) {
   use(arg1);
+  io_printf(IO_BUF, "%d, ", ticks);
   if (simulation_ticks != UINT32_MAX && ticks >= simulation_ticks) {
     spin1_exit(0);
   }
@@ -106,14 +107,13 @@ void ensemble_update(uint ticks, uint arg1) {
   // Transmit decoded Ensemble representation
   for (uint output_index = 0; output_index < g_n_output_dimensions;
        output_index++) {
-    spin1_send_mc_packet(
-      gp_output_keys[output_index],
-      bitsk(gp_output_values[output_index]),
-      WITH_PAYLOAD
-    );
+    while(!spin1_send_mc_packet(gp_output_keys[output_index],
+                                bitsk(gp_output_values[output_index]),
+                                WITH_PAYLOAD))
+    {
+      spin1_delay_us(1);
+    }
     gp_output_values[output_index] = 0;
-
-    spin1_delay_us(1);
   }
 
   // Flush the recording buffer

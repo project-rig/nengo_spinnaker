@@ -57,5 +57,24 @@ void c_main(void) {
   // Setup timer tick, start
   io_printf(IO_BUF, "[Ensemble] C_MAIN Set timer and spin1_start.\n");
   spin1_set_timer_tick(g_ensemble.machine_timestep);
-  spin1_start(SYNC_WAIT);
+
+  while (true)
+  {
+    // Clear timer and packet events
+    spin1_flush_rx_packet_queue();
+    deschedule(TIMER_TICK);  // This shouldn't be necessary!
+
+    // Wait for data retrieval, etc.
+    event_wait();
+
+    // Determine how long to simulate for
+    config_get_n_ticks();
+
+    // Reset the spike recording region
+    record_buffer_reset(&g_ensemble.recd);
+
+    // Perform the simulation
+    io_printf(IO_BUF, ">>>>> Running for %d steps\n", simulation_ticks);
+    spin1_start(SYNC_WAIT);
+  }
 }

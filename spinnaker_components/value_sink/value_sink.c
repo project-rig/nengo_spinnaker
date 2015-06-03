@@ -41,11 +41,25 @@ void c_main(void)
     io_printf(IO_BUF, "[Value Sink] Failed to start.\n");
     return;
   }
-  rec_start = rec_curr = region_start(15, address);
+  rec_start = region_start(15, address);
 
   // Set up callbacks, start
   spin1_set_timer_tick(pars->timestep);
   spin1_callback_on(MCPL_PACKET_RECEIVED, mcpl_callback, -1);
   spin1_callback_on(TIMER_TICK, sink_update, 2);
-  spin1_start(SYNC_WAIT);
+
+  while(true)
+  {
+    // Wait for data loading, etc.
+    event_wait();
+
+    // Determine how long to simulate for
+    config_get_n_ticks();
+
+    // Reset the recording region location
+    rec_curr = rec_start;
+
+    // Perform the simulation
+    spin1_start(SYNC_WAIT);
+  }
 }

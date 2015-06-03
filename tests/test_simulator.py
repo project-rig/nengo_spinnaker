@@ -22,6 +22,7 @@ def test_init(dt):
         mock.Mock(name="NodeIOController")
     config[Simulator].node_io_kwargs = {"arthur": "King"}
     nioc = NodeIOController.return_value = mock.Mock("nioc")
+    nioc.prepare = mock.Mock()
     nioc.builder_kwargs = {"spam": "a lot"}
     nioc.host_network = nengo.Network()
 
@@ -49,12 +50,14 @@ def test_init(dt):
     Model = mock.Mock(name="Model", spec_set=[])
     model = Model.return_value = mock.Mock(name="model",
                                            spec_set=['build', 'dt',
-                                                     'decoder_cache'])
+                                                     'decoder_cache',
+                                                     'make_netlist'])
     model.dt = dt
 
     # Create a mock Controller class and instance
     MachineController = mock.Mock(name="MachineController")
     controller = MachineController.return_value = mock.Mock(name="controller")
+    controller.count_cores_in_state.return_value = 0
 
     # Create a test_and_boot patch
     def test_and_boot_fn(cn, hn, w, h):

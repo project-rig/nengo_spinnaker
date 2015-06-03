@@ -11,9 +11,10 @@ def test_function_of_time_node():
         a = nengo.Node(lambda t: 0.6 if t < 1.0 else -0.4)
 
         b = nengo.Ensemble(200, 1)
+        p_a = nengo.Probe(a, synapse=0.05)
         p_b = nengo.Probe(b, synapse=0.05)
 
-        c = nengo.Ensemble(500, 1)
+        c = nengo.Ensemble(200, 1)
         p_c = nengo.Probe(c, synapse=0.05)
 
         nengo.Connection(a, b)
@@ -24,7 +25,7 @@ def test_function_of_time_node():
     network.config[a].function_of_time = True
 
     # Create the simulate and simulate
-    sim = nengo_spinnaker.Simulator(network)
+    sim = nengo_spinnaker.Simulator(network, period=1.0)
 
     # Run the simulation for long enough to ensure that the decoded value is
     # with +/-20% of the input value.
