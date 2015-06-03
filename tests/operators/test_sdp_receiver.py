@@ -30,12 +30,16 @@ class TestSDPReceiver(object):
         model = Model()
 
         conn_a = mock.Mock(name="connection a")
-        conn_a.size_out = 3
+        conn_a.size_out = 1
+        conn_a.post_slice = slice(0, 1)
+        conn_a.post_obj.size_in = 3
         ks_a = model.keyspaces["nengo"](object=0, connection=0)
         sig_a = Signal(ObjectPort(sdp_rx, OutputPort.standard), None, ks_a)
 
         conn_b = mock.Mock(name="connection b")
         conn_b.size_out = 2
+        conn_b.post_slice = slice(None)
+        conn_b.post_obj.size_in = 2
         ks_b = model.keyspaces["nengo"](object=0, connection=1)
         sig_b = Signal(ObjectPort(sdp_rx, OutputPort.standard), None, ks_b)
 
