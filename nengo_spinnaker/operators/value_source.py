@@ -170,7 +170,6 @@ class ValueSource(object):
                 self.vertices_region_memory[vertex][self.output_region],
                 vertex.slice
             )
-            print(np_to_fix(output_matrix)[:, vertex.slice])
 
 
 class SystemRegion(regions.Region):
