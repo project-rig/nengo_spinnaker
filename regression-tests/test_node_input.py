@@ -37,7 +37,8 @@ def test_node_input_received_from_board():
 
     # Run the simulation for long enough to ensure that the decoded value is
     # with +/-20% of the input value.
-    sim.run(2.0)
+    with sim:
+        sim.run(2.0)
 
     # All we can really check is that the received values aren't all zero, that
     # the last few are within the expected range.

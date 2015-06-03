@@ -15,7 +15,17 @@ logger = logging.getLogger(__name__)
 
 
 class Simulator(object):
-    """SpiNNaker simulator for Nengo models."""
+    """SpiNNaker simulator for Nengo models.
+
+    :py:meth:`~.close` should be called when the simulator will no longer be
+    used. This will close all sockets used to communicate with the SpiNNaker
+    machine and will leave the machine in a clean state. Failure to call
+    `close` may result in later failures. Alternatively `with` may be used::
+
+        sim = nengo_spinnaker.Simulator(network)
+        with sim:
+            sim.run(10.0)
+    """
     def __init__(self, network, dt=0.001):
         """Create a new Simulator with the given network."""
         # Create a controller for the machine and boot if necessary
@@ -42,6 +52,7 @@ class Simulator(object):
 
         self.model.decoder_cache.shrink()
         self.dt = self.model.dt
+        self._closed = False  # Whether the simulator has been closed or not
 
         # Build the host simulator
         self.host_sim = nengo.Simulator(self.io_controller.host_network,
@@ -49,6 +60,14 @@ class Simulator(object):
 
         # Holder for probe data
         self.data = {}
+
+    def __enter__(self):
+        """Enter a context which will close the simulator when exited."""
+        pass
+
+    def __exit__(self, exception_type, exception_value, traceback):
+        """Exit a context and close the simulator."""
+        self.close()
 
     def run(self, time_in_seconds):
         """Simulate for the given length of time."""
@@ -58,6 +77,10 @@ class Simulator(object):
 
     def run_steps(self, steps):
         """Simulate for the given number of steps."""
+        if self._closed:
+            raise Exception("Simulator has been closed and can't be used to "
+                            "run further simulations.")
+
         # NOTE: constructing a netlist, placing, routing and loading should
         # move into Simulator initialisation when the new simulation protocol
         # is implemented.
@@ -137,9 +160,12 @@ class Simulator(object):
             time.time() - start
         ))
 
+    def close(self):
+        """Clean the SpiNNaker board and prevent further simulation."""
         # Stop the application
-        self.controller.send_signal("stop")
+        self._closed = True
         self.io_controller.close()
+        self.controller.send_signal("stop")
 
     def trange(self, dt=None):
         return np.arange(self._n_steps_last) * (self.dt or dt)

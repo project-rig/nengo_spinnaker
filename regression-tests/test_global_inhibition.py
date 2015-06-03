@@ -31,7 +31,8 @@ def test_global_inhibition():
 
     # Run the simulation for long enough to ensure that the decoded value is
     # with +/-20% of the input value.
-    sim.run(2.0)
+    with sim:
+        sim.run(2.0)
 
     # Check that the values are decoded as expected
     index10 = int(p_ens.synapse.tau * 3 / sim.dt)
