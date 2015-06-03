@@ -2,6 +2,7 @@ import mock
 from mock import patch
 import nengo
 import pytest
+import numpy as np
 
 from nengo_spinnaker import Simulator
 
@@ -88,3 +89,32 @@ def test_init(dt):
     assert Model.call_count == 1
     NodeIOController.assert_called_once_with(arthur="King")
     model.build.assert_called_once_with(network, spam="a lot")
+
+
+def test_realtime():
+    values1 = []
+    values2 = []
+    model = nengo.Network()
+    with model:
+        def f1(t):
+            if len(values1) > 0:
+                assert t > values1[-1]
+            values1.append(t)
+            return np.sin(t)
+        def f2(t, x):
+            if len(values2) > 0:
+                assert t > values2[-1]
+            values2.append(t)
+            return -x
+        node1 = nengo.Node(f1, size_out=1)
+        node2 = nengo.Node(f2, size_in=1, size_out=1)
+        nengo.Connection(node1, node2, synapse=None)
+        ens = nengo.Ensemble(n_neurons=50, dimensions=1)
+        nengo.Connection(node2, ens, synapse=0.01)
+        probe = nengo.Probe(ens, synapse=0.01)
+    sim = Simulator(model)
+    sim.run(5)
+
+    assert len(values1) == len(values2)
+    assert 4.9 < values1[-1] < 5
+    assert 4.9 < values2[-1] < 5
