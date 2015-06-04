@@ -192,7 +192,7 @@ class Simulator(object):
         # Run the simulation
         try:
             # Prep
-            exp_time = steps * self.dt
+            exp_time = steps * (self.model.machine_timestep / float(1e6))
             io_thread.start()
 
             # Wait for all cores to hit SYNC1
