@@ -120,9 +120,19 @@ def get_transforms_and_keys(signals_connections):
             raise NotImplementedError("Filters cannot transmit multiple "
                                       "Connections using the same signal.")
 
-        transforms.append(transform)
-        for i in range(transform.shape[0]):
-            keys.append(signal.keyspace(index=i))
+        if signal.latching:
+            # If the signal is latching then we use the transform exactly as it
+            # is.
+            keep = np.array([True for _ in range(transform.shape[0])])
+        else:
+            # If the signal isn't latching then we remove rows which would
+            # result in zero packets.
+            keep = np.any(transform != 0.0, axis=1)
+
+        transforms.append(transform[keep])
+        for i, k in zip(range(transform.shape[0]), keep):
+            if k:
+                keys.append(signal.keyspace(index=i))
 
     # Combine all the transforms
     if len(transforms) > 0:

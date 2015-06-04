@@ -82,7 +82,7 @@ class EnsembleLIF(object):
         # regions for the decoders and the regions for the output keys.
         outgoing = model.get_signals_connections_from_object(self)
         decoders, output_keys = \
-            get_decoders_and_keys(model, outgoing[OutputPort.standard])
+            get_decoders_and_keys(model, outgoing[OutputPort.standard], True)
         size_out = decoders.shape[1]
 
         # TODO: Include learnt decoders
@@ -267,7 +267,7 @@ class PESRegion(regions.Region):
         fp.write(b"\x00" * 4)
 
 
-def get_decoders_and_keys(model, signals_connections):
+def get_decoders_and_keys(model, signals_connections, minimise=False):
     """Get a combined decoder matrix and a list of keys to use to transmit
     elements decoded using the decoders.
     """
@@ -280,12 +280,20 @@ def get_decoders_and_keys(model, signals_connections):
         assert len(connections) == 1
         decoder = model.params[connections[0]].decoders
         transform = model.params[connections[0]].transform
+        decoder = np.dot(transform, decoder.T).T
 
-        decoder = np.dot(transform, decoder.T)
-        decoders.append(decoder.T)
+        if not minimise:
+            keep = np.array([True for _ in range(decoder.shape[1])])
+        else:
+            # We can reduce the number of packets sent and the memory
+            # requirements by removing columns from the decoder matrix which
+            # will always result in packets containing zeroes.
+            keep = np.any(decoder != 0, axis=0)
 
-        for i in range(decoder.shape[0]):
-            keys.append(signal.keyspace(index=i))
+        decoders.append(decoder[:, keep])
+        for i, k in zip(range(decoder.shape[1]), keep):
+            if k:
+                keys.append(signal.keyspace(index=i))
 
     # Stack the decoders
     if len(decoders) > 0:
