@@ -3,6 +3,9 @@ import nengo
 from nengo.cache import get_default_decoder_cache
 import numpy as np
 from rig.machine_control import MachineController
+from rig.machine_control.consts import AppState
+from rig.machine import Cores
+import six
 import time
 
 from .builder import Model
@@ -101,6 +104,10 @@ class Simulator(object):
         logger.info("Placing and routing")
         self.netlist.place_and_route(machine)
 
+        logger.info("{} cores in use".format(len(self.netlist.placements)))
+        chips = set(six.itervalues(self.netlist.placements))
+        logger.info("Using {}".format(chips))
+
         # Prepare the simulator against the placed, allocated and routed
         # netlist.
         self.io_controller.prepare(self.controller, self.netlist)
@@ -112,12 +119,26 @@ class Simulator(object):
         # Check if any cores are in bad states
         if self.controller.count_cores_in_state(["exit", "dead", "watchdog",
                                                  "runtime_exception"]):
-            # TODO: Find the failed cores
+            for vertex in self.netlist.vertices:
+                x, y = self.netlist.placements[vertex]
+                p = self.netlist.allocations[vertex][Cores].start
+                status = self.controller.get_processor_status(p, x, y)
+                if status.cpu_state is not AppState.sync0:
+                    print("Core ({}, {}, {}) in state {!s}".format(
+                        x, y, p, status.cpu_state))
             raise Exception("Unexpected core failures.")
 
         logger.info("Preparing and loading machine took {:3f} seconds".format(
             time.time() - start
         ))
+
+        logger.info("Setting router timeout to 16 cycles")
+        for x in range(machine_width):
+            for y in range(machine_height):
+                with self.controller(x=x, y=y):
+                    if (x, y) in machine:
+                        data = self.controller.read(0xf1000000, 4)
+                        self.controller.write(0xf1000000, data[:-1] + b'\x10')
 
     def __enter__(self):
         """Enter a context which will close the simulator when exited."""
@@ -202,7 +223,13 @@ class Simulator(object):
         # Check if any cores are in bad states
         if self.controller.count_cores_in_state(["dead", "watchdog",
                                                  "runtime_exception"]):
-            # TODO: Find the failed cores
+            for vertex in self.netlist.vertices:
+                x, y = self.netlist.placements[vertex]
+                p = self.netlist.allocations[vertex][Cores].start
+                status = self.controller.get_processor_status(p, x, y)
+                if status.cpu_state is not AppState.sync0:
+                    print("Core ({}, {}, {}) in state {!s}".format(
+                        x, y, p, status.cpu_state))
             raise Exception("Unexpected core failures.")
 
         # Retrieve simulation data
