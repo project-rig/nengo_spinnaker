@@ -96,7 +96,7 @@ normal. Then use `nengo_spinnaker.Simulator` to simulate your model.::
 
 After running your model you must call `close` to leave the SpiNNaker machine
 in a clean state. Alternatively a `with` block may be used to ensure the
-simulator is closed after use.
+simulator is closed after use::
 
     with sim:
         sim.run(10.0)
