@@ -39,9 +39,9 @@ class EnsembleLIF(object):
         # Build encoders, gain and bias regions
         params = model.params[self.ensemble]
 
-        # Combine the encoders with the gain and then convert to S1615 before
-        # creating the region.
-        encoders_with_gain = params.encoders * params.gain[:, np.newaxis]
+        # Convert the encoders combined with the gain to S1615 before creating
+        # the region.
+        encoders_with_gain = params.scaled_encoders
         self.encoders_region = regions.MatrixRegion(
             tp.np_to_fix(encoders_with_gain),
             sliced_dimension=regions.MatrixPartitioning.rows
