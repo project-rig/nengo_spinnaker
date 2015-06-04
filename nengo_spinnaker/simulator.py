@@ -191,6 +191,7 @@ class Simulator(object):
                 run_time = time.time() - start_time
 
                 # If that step took less than timestep then spin
+                time.sleep(0.0001)
                 while run_time < host_steps * self.dt:
                     time.sleep(0.0001)
                     run_time = time.time() - start_time
