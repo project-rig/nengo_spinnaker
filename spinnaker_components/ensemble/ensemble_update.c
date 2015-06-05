@@ -18,7 +18,6 @@ uint lfsr = 1;                   //!< LFSR for spike perturbation
 
 void ensemble_update(uint ticks, uint arg1) {
   use(arg1);
-  io_printf(IO_BUF, "%d, ", ticks);
   if (simulation_ticks != UINT32_MAX && ticks >= simulation_ticks) {
     spin1_exit(0);
   }
