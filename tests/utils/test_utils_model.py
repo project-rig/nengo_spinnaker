@@ -48,22 +48,26 @@ def test_remove_childless_filters():
     #          -S1---             F3
     #        /       \       S4  ^  \  S5
     #       /        v          /    v
-    #     F1         O1 -S3-> F2     F5
-    #      ^        /          \     ^
-    #      \       /        S4  v   /  S6
-    #       \-S2---              F4
+    #     F1         O1 +S3-> F2     F5
+    #      ^        /   |      \     ^
+    #      \       /    |   S4  v   /  S6
+    #       \-S2---     v        F4
+    #                  O2
     #
-    # F1 should remain, 01 should be untouched and F2..5 should be removed.
+    # F1 should remain, O1 and O2 should be untouched and F2..5 should be
+    # removed.  S1 and S2 should be unchanged, S3 should have F2 removed from
+    # its sinks and S4..6 should be removed entirely.
 
     # Create the filter operators
-    f1 = Filter(1)
-    f2 = Filter(1)
-    f3 = Filter(1)
-    f4 = Filter(1)
-    f5 = Filter(1)
+    f1 = mock.Mock(name="F1", spec=Filter)
+    f2 = mock.Mock(name="F2", spec=Filter)
+    f3 = mock.Mock(name="F3", spec=Filter)
+    f4 = mock.Mock(name="F4", spec=Filter)
+    f5 = mock.Mock(name="F5", spec=Filter)
 
     # The other operator
-    o1 = mock.Mock()
+    o1 = mock.Mock(name="O1")
+    o2 = mock.Mock(name="O2")
 
     # Create some objects which map to some of the operators
     oo1 = mock.Mock()
@@ -72,7 +76,8 @@ def test_remove_childless_filters():
     # Create the signals
     s1 = Signal(ObjectPort(f1, None), ObjectPort(o1, None), None)
     s2 = Signal(ObjectPort(o1, None), ObjectPort(f1, None), None)
-    s3 = Signal(ObjectPort(o1, None), ObjectPort(f2, None), None)
+    s3 = Signal(ObjectPort(o1, None), [ObjectPort(f2, None),
+                                       ObjectPort(o2, None)], None)
     s4 = Signal(ObjectPort(f2, None), [ObjectPort(f3, None),
                                        ObjectPort(f4, None)], None)
     s5 = Signal(ObjectPort(f3, None), ObjectPort(f5, None), None)
@@ -102,4 +107,5 @@ def test_remove_childless_filters():
     assert model.object_operators == {oo1: o1}
     assert model.extra_operators == [f1]
     assert model.connections_signals == {}
-    assert model.extra_signals == [s1, s2]
+    assert model.extra_signals == [s1, s2, s3]
+    assert [s.obj for s in s3.sinks] == [o2]
