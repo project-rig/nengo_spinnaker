@@ -55,29 +55,26 @@ class Simulator(object):
         self.controller = MachineController(hostname)
         test_and_boot(self.controller, hostname, machine_width, machine_height)
 
-        # Create the IO controller
+        # Determine the maximum run-time
+        self.max_steps = None if period is None else int(period / dt)
+        self.steps = 0  # Steps simulated
+
+        # Create the IO controller. Function of time nodes are only enabled if
+        # the simulator period is not None.
         io_cls = getconfig(network.config, Simulator, "node_io", Ethernet)
         io_kwargs = getconfig(network.config, Simulator, "node_io_kwargs",
                               dict())
-        self.io_controller = io_cls(**io_kwargs)
+        self.io_controller = io_cls(
+            function_of_time_nodes=self.max_steps is not None, **io_kwargs
+        )
 
-        # Determine the maximum run-time
-        self.max_steps = None if period is None else int(period / dt)
-
-        self.steps = 0  # Steps simulated
-
-        # If the simulator is in "run indefinite" mode (i.e., max_steps=None)
-        # then we modify the builders to ignore function of time Nodes and
-        # probes.
-        builder_kwargs = self.io_controller.builder_kwargs
-        if self.max_steps is None:
-            raise NotImplementedError
-
-        # Create a model from the network, using the IO controller
+        # Create a model from the network, using the IO controller. Probes are
+        # only built if the simulator period is not None.
         logger.debug("Building model")
         start_build = time.time()
         self.model = Model(dt, decoder_cache=get_default_decoder_cache())
-        self.model.build(network, **builder_kwargs)
+        self.model.build(network, build_probes=self.max_steps is not None,
+                         **self.io_controller.builder_kwargs)
         model_optimisations.remove_childless_filters(self.model)
         logger.info("Build took {:.3f} seconds".format(time.time() -
                                                        start_build))
@@ -150,16 +147,23 @@ class Simulator(object):
 
     def run(self, time_in_seconds):
         """Simulate for the given length of time."""
-        # Determine how many steps to simulate for
-        steps = int(np.round(float(time_in_seconds) / self.dt))
-        self.run_steps(steps)
+        if time_in_seconds is not None:
+            # Determine how many steps to simulate for
+            steps = int(np.round(float(time_in_seconds) / self.dt))
+            self.run_steps(steps)
+        else:
+            self._run_steps(None)
 
     def run_steps(self, steps):
         """Simulate a give number of steps."""
-        while steps > 0:
-            n_steps = min((steps, self.max_steps))
-            self._run_steps(n_steps)
-            steps -= n_steps
+        if steps is not None and self.max_steps is not None:
+            # Fixed time simulation in either fixed-period or indefinite mode
+            while steps > 0:
+                n_steps = min((steps, self.max_steps))
+                self._run_steps(n_steps)
+                steps -= n_steps
+        else:
+            self._run_steps(steps)
 
     def _run_steps(self, steps):
         """Simulate for the given number of steps."""
@@ -167,81 +171,131 @@ class Simulator(object):
             raise Exception("Simulator has been closed and can't be used to "
                             "run further simulations.")
 
-        if steps is None:
-            if self.max_steps is not None:
-                raise Exception(
-                    "Cannot run indefinitely if a simulator period was "
-                    "specified. Create a new simulator with Simulator(model, "
-                    "period=None) to perform indefinite time simulations."
-                )
-        else:
+        if self.max_steps is not None:
+            # The simulator is in "fixed-period, fixed-duration" mode.
             assert steps <= self.max_steps
 
-        # Prepare the simulation
-        self.netlist.before_simulation(self, steps)
+            # Prepare the simulation
+            self.netlist.before_simulation(self, steps)
 
-        # Wait for all cores to hit SYNC0
-        self.controller.wait_for_cores_to_reach_state(
-            "sync0", len(self.netlist.vertices)
-        )
-        self.controller.send_signal("sync0")
-
-        # Get a new thread for the IO
-        io_thread = self.io_controller.spawn()
-
-        # Run the simulation
-        try:
-            # Prep
-            exp_time = steps * (self.model.machine_timestep / float(1e6))
-            io_thread.start()
-
-            # Wait for all cores to hit SYNC1
+            # Wait for all cores to hit SYNC0
             self.controller.wait_for_cores_to_reach_state(
-                "sync1", len(self.netlist.vertices)
+                "sync0", len(self.netlist.vertices)
             )
-            logger.info("Running simulation...")
-            self.controller.send_signal("sync1")
+            self.controller.send_signal("sync0")
 
-            # Execute the local model
-            host_steps = 0
-            start_time = time.time()
-            run_time = 0.0
-            while run_time < exp_time:
-                # Run a step
-                self.host_sim.step()
-                run_time = time.time() - start_time
+            # Get a new thread for the IO
+            io_thread = self.io_controller.spawn()
 
-                # If that step took less than timestep then spin
-                time.sleep(0.0001)
-                while run_time < host_steps * self.dt:
-                    time.sleep(0.0001)
+            # Run the simulation
+            try:
+                # Prep
+                exp_time = steps * (self.model.machine_timestep / float(1e6))
+                io_thread.start()
+
+                # Wait for all cores to hit SYNC1
+                self.controller.wait_for_cores_to_reach_state(
+                    "sync1", len(self.netlist.vertices)
+                )
+                logger.info("Running simulation...")
+                self.controller.send_signal("sync1")
+
+                # Execute the local model
+                host_steps = 0
+                start_time = time.time()
+                run_time = 0.0
+                while run_time < exp_time:
+                    # Run a step
+                    self.host_sim.step()
                     run_time = time.time() - start_time
-        finally:
-            # Stop the IO thread whatever occurs
-            io_thread.stop()
 
-        # Check if any cores are in bad states
-        if self.controller.count_cores_in_state(["dead", "watchdog",
-                                                 "runtime_exception"]):
-            for vertex in self.netlist.vertices:
-                x, y = self.netlist.placements[vertex]
-                p = self.netlist.allocations[vertex][Cores].start
-                status = self.controller.get_processor_status(p, x, y)
-                if status.cpu_state is not AppState.sync0:
-                    print("Core ({}, {}, {}) in state {!s}".format(
-                        x, y, p, status.cpu_state))
-            raise Exception("Unexpected core failures.")
+                    # If that step took less than timestep then spin
+                    time.sleep(0.0001)
+                    while run_time < host_steps * self.dt:
+                        time.sleep(0.0001)
+                        run_time = time.time() - start_time
+            finally:
+                # Stop the IO thread whatever occurs
+                io_thread.stop()
 
-        # Retrieve simulation data
-        start = time.time()
-        logger.info("Retrieving simulation data")
-        self.netlist.after_simulation(self, steps)
-        logger.info("Retrieving data took {:3f} seconds".format(
-            time.time() - start
-        ))
+            # Check if any cores are in bad states
+            if self.controller.count_cores_in_state(["dead", "watchdog",
+                                                     "runtime_exception"]):
+                for vertex in self.netlist.vertices:
+                    x, y = self.netlist.placements[vertex]
+                    p = self.netlist.allocations[vertex][Cores].start
+                    status = self.controller.get_processor_status(p, x, y)
+                    if status.cpu_state is not AppState.sync0:
+                        print("Core ({}, {}, {}) in state {!s}".format(
+                            x, y, p, status.cpu_state))
+                raise Exception("Unexpected core failures.")
 
-        # Increase the steps count
-        self.steps += steps
+            # Retrieve simulation data
+            start = time.time()
+            logger.info("Retrieving simulation data")
+            self.netlist.after_simulation(self, steps)
+            logger.info("Retrieving data took {:3f} seconds".format(
+                time.time() - start
+            ))
+
+            # Increase the steps count
+            self.steps += steps
+        else:
+            # The simulator is in "indefinite duration" mode.
+            if steps is not None:
+                raise ValueError("Cannot run an indefinite duration simulator "
+                                 "for a fixed period of time.")
+
+            # Get a new thread for the IO
+            io_thread = self.io_controller.spawn()
+
+            if not self._running:
+                # If not already running then start things up
+                self.controller.wait_for_cores_to_reach_state(
+                    "sync0", len(self.netlist.vertices)
+                )
+                self.controller.send_signal("sync0")
+                self._running = True
+            else:
+                # Otherwise continue a running simulation
+                self.controller.send_signal("cont")
+
+            # Allow the local simulator to run
+            self._halt = True
+
+            # Run the simulation
+            try:
+                # Prep
+                io_thread.start()
+
+                # Wait for all cores to hit SYNC1
+                self.controller.wait_for_cores_to_reach_state(
+                    "sync1", len(self.netlist.vertices)
+                )
+                logger.info("Running simulation...")
+                self.controller.send_signal("sync1")
+
+                # Execute the local model
+                host_steps = 0
+                start_time = time.time()
+                run_time = 0.0
+                while not self._halt:
+                    # Run a step
+                    self.host_sim.step()
+                    run_time = time.time() - start_time
+
+                    # If that step took less than timestep then spin
+                    time.sleep(0.0001)
+                    while run_time < host_steps * self.dt:
+                        time.sleep(0.0001)
+                        run_time = time.time() - start_time
+            finally:
+                # Stop the IO thread whatever occurs
+                io_thread.stop()
+
+    def stop(self):
+        """Stop a continuously running simulation."""
+        self._halt = True
 
     def _create_host_sim(self):
         # change node_functions to reflect time

@@ -522,6 +522,42 @@ def test_before_simulation():
     )
 
 
+def test_before_simulation_indefinite():
+    """Test that the simulation time is written in as UINT32_MAX when the steps
+    are None.
+    """
+    # Create some "before_simulation" functions
+    before_a = mock.Mock()
+    before_b = mock.Mock()
+
+    # Create a vertex
+    vertex = mock.Mock()
+
+    # Create a netlist
+    model = netlist.Netlist(
+        nets=[],
+        vertices=[vertex],
+        keyspaces={},
+        groups={},
+        load_functions=[],
+        before_simulation_functions=[before_a, before_b]
+    )
+    model.placements[vertex] = (1, 2)
+    model.allocations[vertex] = {Cores: slice(5, 7)}
+
+    # Call the before_simulation_functions
+    simulator = mock.Mock(name="Simulator")
+    model.before_simulation(simulator, None)
+
+    before_a.assert_called_once_with(model, simulator, None)
+    before_b.assert_called_once_with(model, simulator, None)
+
+    # Check we wrote in the run time
+    simulator.controller.write_vcpu_struct_field.assert_called_once_with(
+        "user1", 0xffffffff, 1, 2, 5
+    )
+
+
 def test_after_simulation():
     """Test that all methods are called when asked to finish a simulation."""
     # Create some "before_simulation" functions

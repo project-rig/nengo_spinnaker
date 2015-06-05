@@ -284,12 +284,13 @@ class Netlist(object):
         """Prepare the objects in the netlist for a simulation of a given
         number of steps.
         """
-        # Write into memory the duration of the simulation
+        # Write into memory the duration of the simulation, this is UINT32_MAX
+        # if the simulation doesn't have a specified duration.
         for vertex in self.vertices:
             x, y = self.placements[vertex]
             p = self.allocations[vertex][Cores].start
-            simulator.controller.write_vcpu_struct_field("user1", n_steps,
-                                                         x, y, p)
+            simulator.controller.write_vcpu_struct_field(
+                "user1", n_steps or 0xffffffff, x, y, p)
 
         # Call all the "before simulation" functions
         for fn in self.before_simulation_functions:
