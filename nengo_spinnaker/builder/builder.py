@@ -278,10 +278,12 @@ class Model(object):
         originate from a given intermediate object.
         """
         ports_sigs_conns = collections.defaultdict(
-            lambda: collections.defaultdict(list)
+            lambda: collections.defaultdict(collections_ext.noneignoringlist)
         )
 
-        for (conn, signal) in iteritems(self.connections_signals):
+        for (conn, signal) in itertools.chain(
+                iteritems(self.connections_signals),
+                ((None, s) for s in self.extra_signals)):
             if signal.source.obj is obj:
                 ports_sigs_conns[signal.source.port][signal].append(conn)
 
@@ -292,10 +294,12 @@ class Model(object):
         terminate at a given intermediate object.
         """
         ports_sigs_conns = collections.defaultdict(
-            lambda: collections.defaultdict(list)
+            lambda: collections.defaultdict(collections_ext.noneignoringlist)
         )
 
-        for (conn, signal) in iteritems(self.connections_signals):
+        for (conn, signal) in itertools.chain(
+                iteritems(self.connections_signals),
+                ((None, s) for s in self.extra_signals)):
             for sink in signal.sinks:
                 if sink.obj is obj:
                     ports_sigs_conns[sink.port][signal].append(conn)
