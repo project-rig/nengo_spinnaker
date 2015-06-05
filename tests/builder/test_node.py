@@ -66,6 +66,35 @@ class TestNodeIOController(object):
         assert model.object_operators == dict()
         assert model.extra_operators == list()
 
+    def test_build_node_function_of_time_off(self, recwarn):
+        """Test that building a function of time Node is exactly the same as
+        building a regular Node if function of time Nodes are disabled (but
+        that a warning is raised).
+        """
+        with nengo.Network() as net:
+            a = nengo.Node(lambda t: t, size_in=0, size_out=1, label="Stim")
+
+        # Mark the Node as a function of time
+        add_spinnaker_params(net.config)
+        net.config[a].function_of_time = True
+
+        # Create the model
+        model = Model()
+        model.config = net.config
+
+        # Build the Node
+        nioc = NodeIOController(function_of_time_nodes=False)
+        nioc.build_node(model, a)
+
+        # Assert that no new operators were created
+        assert model.object_operators == dict()
+        assert model.extra_operators == list()
+
+        # This should have raised a warning
+        w = recwarn.pop()
+        assert "disabled" in str(w.message)
+        assert "Stim" in str(w.message)
+
     @pytest.mark.parametrize("period", [None, 23.0])
     def test_build_node_function_of_time(self, period):
         """Test that building a function of time Node creates a new operator.

@@ -1,6 +1,7 @@
 import nengo
 import numpy as np
 import threading
+import warnings
 
 from nengo_spinnaker.builder.builder import (
     InputPort, ObjectPort, OutputPort, spec)
@@ -53,10 +54,21 @@ class NodeIOController(object):
     example.
     """
 
-    def __init__(self):
+    def __init__(self, function_of_time_nodes=True):
+        """Create a new Node IO controller and builder.
+
+        Parameters
+        ----------
+        function_of_time_nodes : bool
+            Whether function of time nodes are enabled (True, the default) or
+            not.
+        """
         # Create a network which will contain everything that is to be
         # simulated on the host computer.
         self.host_network = nengo.Network()
+
+        # Other parameters
+        self.allow_f_of_t_nodes = function_of_time_nodes
 
         # Store objects that we've added
         self._f_of_t_nodes = dict()
@@ -106,7 +118,7 @@ class NodeIOController(object):
             op = Filter(node.size_in)
             self._passthrough_nodes[node] = op
             model.object_operators[node] = op
-        elif f_of_t:
+        elif f_of_t and self.allow_f_of_t_nodes:
             # If the Node is a function of time then add a new value source for
             # it.
             vs = ValueSource(
@@ -117,6 +129,9 @@ class NodeIOController(object):
             self._f_of_t_nodes[node] = vs
             model.object_operators[node] = vs
         else:
+            if f_of_t:
+                warnings.warn("{} will not be precomputed as function of time "
+                              "Nodes are currently disabled.".format(node))
             with self.host_network:
                 self._add_node(node)
 

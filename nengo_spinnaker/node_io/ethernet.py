@@ -15,7 +15,7 @@ from ..utils import type_casts as tp
 class Ethernet(NodeIOController):
     """Ethernet implementation of SpiNNaker to host node communication."""
 
-    def __init__(self, transmission_period=0.01):
+    def __init__(self, transmission_period=0.01, function_of_time_nodes=True):
         """Create a new Ethernet based Node communicator.
 
         Parameters
@@ -23,8 +23,13 @@ class Ethernet(NodeIOController):
         transmission_period : float
             Period between transmitting SDP packets from SpiNNaker to the host
             in seconds.
+        function_of_time_nodes : bool
+            Whether function of time nodes are enabled (True, the default) or
+            not.
         """
-        super(Ethernet, self).__init__()
+        super(Ethernet, self).__init__(
+            function_of_time_nodes=function_of_time_nodes
+        )
 
         # Store ethernet specific parameters
         self.transmission_period = transmission_period
