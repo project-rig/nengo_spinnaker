@@ -3,9 +3,31 @@
 from __future__ import absolute_import
 
 import itertools
-import six
+from six import iteritems, itervalues
 
 from nengo_spinnaker.operators import Filter
+
+
+def remove_sinkless_signals(model):
+    """Remove all Signals which do not have any sinks from a
+    :py:class:`~nengo_spinnaker.builder.Model`.
+    """
+    # Create a list of signals to remove by iterating through the signals which
+    # are related to connections and finding any with no sinks.
+    sinkless_signals = [(c, s) for c, s in iteritems(model.connections_signals)
+                        if len(s.sinks) == 0]
+
+    # Now remove all sinkless signals
+    for conn, sig in sinkless_signals:
+        model.connections_signals.pop(conn)
+
+    # Create a list of signals to remove by finding signals which are not
+    # related to connections and which have no sinks.
+    sinkless_signals = [s for s in model.extra_signals if len(s.sinks) == 0]
+
+    # Now remove all sinkless signals
+    for sig in sinkless_signals:
+        model.extra_signals.remove(sig)
 
 
 def remove_childless_filters(model):

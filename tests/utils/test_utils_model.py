@@ -2,7 +2,39 @@ import mock
 
 from nengo_spinnaker.builder.builder import Model, ObjectPort, Signal
 from nengo_spinnaker.operators import Filter
-from nengo_spinnaker.utils.model import remove_childless_filters
+from nengo_spinnaker.utils.model import (remove_childless_filters,
+                                         remove_sinkless_signals)
+
+
+def test_remove_sinkless_signals():
+    """Signals with no sink should be removed."""
+    # Create a netlist including some signals with no sinks, these signals
+    # should be removed.
+    o1 = mock.Mock(name="O1")
+    o2 = mock.Mock(name="O2")
+
+    # Create 4 signals (2 associated with connections, 2 not)
+    cs1 = Signal(ObjectPort(o1, None), ObjectPort(o2, None), None)
+    cs2 = Signal(ObjectPort(o1, None), [], None)
+    ss1 = Signal(ObjectPort(o1, None), ObjectPort(o2, None), None)
+    ss2 = Signal(ObjectPort(o1, None), [], None)
+
+    # Create two mock connections
+    c1 = mock.Mock(name="Connection 1")
+    c2 = mock.Mock(name="Connection 2")
+
+    # Create the model
+    model = Model()
+    model.extra_operators = [o1, o2]
+    model.connections_signals = {c1: cs1, c2: cs2}
+    model.extra_signals = [ss1, ss2]
+
+    # Remove sinkless signals
+    remove_sinkless_signals(model)
+
+    # Check that signals were removed as necessary
+    assert model.connections_signals == {c1: cs1}
+    assert model.extra_signals == [ss1]
 
 
 def test_remove_childless_filters():
