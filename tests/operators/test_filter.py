@@ -101,6 +101,61 @@ def test_get_transforms_and_keys():
             np.all(transforms[2] == transform_b))
 
 
+@pytest.mark.parametrize("latching", [False, True])
+def test_get_transforms_and_keys_removes_zeroed_rows(latching):
+    """Check that zeroed rows (those that would always result in zero valued
+    packets) are removed, and the keys miss this value as well.
+    """
+    ks = mock.Mock()
+    transform = np.ones((10, 5))
+    transform[1, :] = 0.0
+    transform[4:7, :] = 0.0
+    transform[:, 1] = 0.0
+
+    # Create a signal and keyspace
+    sig = mock.Mock()
+    sig.keyspace = ks
+    sig.latching = latching
+
+    # Create a mock connection
+    conn = mock.Mock()
+
+    signals_connections = {sig: [conn]}
+
+    # Get the transform and keys
+    with mock.patch("nengo_spinnaker.operators.filter.full_transform") as ft:
+        ft.return_value = transform
+        t, keys = get_transforms_and_keys(signals_connections)
+
+    if not latching:
+        # Check the transform is correct
+        assert np.all(t ==
+                      np.vstack((transform[0], transform[2:4], transform[7:])))
+
+        # Check the keys were called for correctly
+        ks.assert_has_calls([mock.call(index=0),
+                             mock.call(index=2),
+                             mock.call(index=3),
+                             mock.call(index=7),
+                             mock.call(index=8),
+                             mock.call(index=9)])
+    else:
+        # Check the transform is correct
+        assert np.all(t == t)
+
+        # Check the keys were called for correctly
+        ks.assert_has_calls([mock.call(index=0),
+                             mock.call(index=1),
+                             mock.call(index=2),
+                             mock.call(index=3),
+                             mock.call(index=4),
+                             mock.call(index=5),
+                             mock.call(index=6),
+                             mock.call(index=7),
+                             mock.call(index=8),
+                             mock.call(index=9)])
+
+
 @pytest.mark.xfail
 def test_get_transforms_and_keys_no_connection():
     """Test that an identity matrix of the size of the signal is used when the
