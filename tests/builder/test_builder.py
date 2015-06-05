@@ -391,6 +391,39 @@ class TestBuildProbe(object):
         assert build_ens_probe.call_count == 1
         assert build_neurons_probe.call_count == 1
 
+    def test_probe_building_disabled(self, recwarn):
+        """Test that build methods are not called and that a warning is raised
+        if probe building is disabled.
+        """
+        # Create test network
+        with nengo.Network() as network:
+            a = nengo.Ensemble(100, 2)
+            p_a = nengo.Probe(a, label="Output")
+
+        # Create a model
+        model = Model()
+
+        # Dummy neurons builder
+        ens_build = mock.Mock(name="ensemble builder")
+
+        # Define a probe build function
+        build_ens_probe = mock.Mock()
+
+        # Build the model
+        probe_builders = {nengo.Ensemble: build_ens_probe}
+        with patch.object(model, "builders", new={nengo.Ensemble: ens_build}),\
+                patch.object(model, "probe_builders", new=probe_builders):
+            model.build(network, build_probes=False)
+
+        # Assert the probes were NOT built
+        assert p_a not in model.seeds
+        assert build_ens_probe.call_count == 0
+
+        # And that a warning was raised
+        w = recwarn.pop()
+        assert "Probes" in str(w.message)
+        assert "disabled" in str(w.message)
+
 
 def test_get_object_and_connection_id():
     """Test retrieving an object and a connection ID."""

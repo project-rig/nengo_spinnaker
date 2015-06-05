@@ -7,6 +7,7 @@ from nengo.cache import NoDecoderCache
 from nengo.utils import numpy as npext
 import numpy as np
 from six import iteritems, itervalues
+import warnings
 
 from nengo_spinnaker.netlist import Net, Netlist
 from nengo_spinnaker.utils import collections as collections_ext
@@ -162,23 +163,16 @@ class Model(object):
     def build(self, network, extra_builders={},
               extra_source_getters={}, extra_sink_getters={},
               extra_connection_parameter_builders={},
-              extra_probe_builders={}):
+              extra_probe_builders={}, build_probes=True):
         """Build a Network into this model.
 
         Parameters
         ----------
         network : :py:class:`~nengo.Network`
             Nengo network to build.  Passthrough Nodes will be removed.
-        extra_builders : {type: fn, ...}
-            Extra builder methods.
-        extra_source_getters : {type: fn, ...}
-            Extra source getter methods.
-        extra_sink_getters : {type: fn, ...}
-            Extra sink getter methods.
-        extra_connection_parameter_builder : {type: fn, ...}
-            Extra connection parameter builders.
-        extra_probe_builders : {type: fn, ...}
-            Extra probe builder methods.
+        build_probes : bool
+            If True then Probes will be built, otherwise they won't and a
+            warning will be raised.
         """
         # Store the network config
         self.config = network.config
@@ -209,15 +203,15 @@ class Model(object):
         self._probe_builders.update(extra_probe_builders)
 
         # Build
-        self._build_network(network)
+        self._build_network(network, build_probes)
 
-    def _build_network(self, network):
+    def _build_network(self, network, build_probes):
         # Get the seed for the network
         self.seeds[network] = get_seed(network, np.random)
 
         # Build all subnets
         for subnet in network.networks:
-            self._build_network(subnet)
+            self._build_network(subnet, build_probes)
 
         # Get the random number generator for the network
         self.rngs[network] = np.random.RandomState(self.seeds[network])
@@ -232,8 +226,13 @@ class Model(object):
             self.make_connection(connection)
 
         # Build all the probes
-        for probe in network.probes:
-            self.make_probe(probe)
+        if build_probes:
+            for probe in network.probes:
+                self.make_probe(probe)
+        else:
+            if network.probes:
+                warnings.warn("Probes will not be built as they have been "
+                              "disabled.")
 
     def make_object(self, obj):
         """Call an appropriate build function for the given object.
