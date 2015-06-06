@@ -85,7 +85,7 @@ void ensemble_update(uint ticks, uint arg1) {
       if(kbits(lfsr & 0x00007fff) * v_delta < v_voltage - 1.0k) {
         decrement_neuron_refractory( n );
       }
-      lfsr = ((lfsr >> 1) ^ (~lfsr & 0xB400));
+      lfsr = (lfsr >> 1) ^ ((-(lfsr & 0x1)) & 0xB400);
 
       // Update the output values
       for( uint d = 0; d < g_n_output_dimensions; d++ ) {
