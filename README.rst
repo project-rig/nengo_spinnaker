@@ -8,28 +8,29 @@ SpiNNaker based Nengo simulator
    :alt: Coverage Status
    :target: https://coveralls.io/r/project-rig/nengo_spinnaker?branch=master
 
-`nengo_spinnaker` is a SpiNNaker-based simulator for models built using 
+``nengo_spinnaker`` is a SpiNNaker-based simulator for models built using
 `Nengo <https://github.com/nengo/nengo>`_. It allows real-time simulation of
 large-scale models.
 
 Quick Start
 ===========
 
-.. warning::
-    `nengo_spinnaker` is not currently available from Pip.
+Install using ``pip``::
+
+    pip install nengo_spinnaker
 
 Settings File
 -------------
 
-To use SpiNNaker with Nengo you must create a `nengo_spinnaker.conf` file in
+To use SpiNNaker with Nengo you must create a ``nengo_spinnaker.conf`` file in
 either the directory you will be running your code from or, more usefully, a
 centralised location. The centralised location varies based on your operating
 system:
 
-- Windows: `%userprofile%\nengo\nengo_spinnaker.conf`
-- Other: `~/.config/nengo/nengo_spinnaker.conf`
+- Windows: ``%userprofile%\nengo\nengo_spinnaker.conf``
+- Other: ``~/.config/nengo/nengo_spinnaker.conf``
 
-This file exists to inform `nengo_spinnaker` of the nature of the SpiNNaker
+This file exists to inform ``nengo_spinnaker`` of the nature of the SpiNNaker
 machine you wish to simulate with and how to communicate with it. This file may
 look like::
 
@@ -71,21 +72,21 @@ look like::
     # hardware_version: 3
     # led_config: 0x00000502
     #
-    # For a Spin5 board connected to 192.168.240.1 this section would look
+    # For a Spin5 board connected to 192.168.1.1 this section would look
     # like:
     # 
-    # hostname: 192.168.240.253
+    # hostname: 192.168.1.1
     # width: 8
     # height: 8
     # hardware_version: 5
     # led_config: 0x00000001
 
 
-Using `nengo_spinnaker`
------------------------
+Using ``nengo_spinnaker``
+-------------------------
 
 To use SpiNNaker to simulate your Nengo model first construct the model as
-normal. Then use `nengo_spinnaker.Simulator` to simulate your model.::
+normal. Then use ``nengo_spinnaker.Simulator`` to simulate your model.::
 
     import nengo_spinnaker
 
@@ -94,8 +95,11 @@ normal. Then use `nengo_spinnaker.Simulator` to simulate your model.::
     sim = nengo_spinnaker.Simulator(network)
     sim.run(10.0)
 
-After running your model you must call `close` to leave the SpiNNaker machine
-in a clean state. Alternatively a `with` block may be used to ensure the
+    # When done
+    sim.close()
+
+After running your model you must call ``close`` to leave the SpiNNaker machine
+in a clean state. Alternatively a ``with`` block may be used to ensure the
 simulator is closed after use::
 
     with sim:
@@ -108,12 +112,23 @@ Some specific configuration options are available for SpiNNaker. To use these::
 
 Current settings are:
 
-* `function_of_time` - Mark a Node as being a function of time only.
-* `function_of_time_period` - Provide the period of the Node.
+* ``function_of_time`` - Mark a Node as being a function of time only.
+* ``function_of_time_period`` - Provide the period of the Node.
+
+For example::
+
+    with model:
+        signal = nengo.Node(lambda t: np.sin(t))
+
+    nengo_spinnaker.add_params(model.config)
+    model.config[signal].function_of_time = True
+
 
 Developers
 ==========
 
-See `DEVELOP.md <./DEVELOP.md>`_ for information on how to get involved in
-`nengo_spinnaker` development and how to install and build the latest copy of
-`nengo_spinnaker`.
+See `DEVELOP.md`__ for information on how to get involved in
+``nengo_spinnaker`` development and how to install and build the latest copy of
+``nengo_spinnaker``.
+
+__ ./DEVELOP.md
