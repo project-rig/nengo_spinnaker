@@ -29,7 +29,8 @@ def test_probe_ensemble_spikes():
 
     # Create the simulator and run for 2 s
     sim = nengo_spinnaker.Simulator(network)
-    sim.run(2.0)
+    with sim:
+        sim.run(2.0)
 
     # Check that the neurons spiked as expected
     assert not np.any(sim.data[p_n0][:1.0/sim.dt])  # Neuron 0

@@ -64,13 +64,22 @@ void c_main(void) {
     return;
   }
 
-  // Transmit all packets assigned to be sent prior to the start of the
-  // simulation
-  transmit_packet_region(start_packets);
-
   spin1_set_timer_tick(1000);
   spin1_callback_on(TIMER_TICK, tick, 2);
 
-  // Synchronise with the simulation
-  spin1_start(SYNC_WAIT);
+  while(true)
+  {
+    // Wait for data loading, etc.
+    event_wait();
+
+    // Determine how long to simulate for
+    config_get_n_ticks();
+
+    // Transmit all packets assigned to be sent prior to the start of the
+    // simulation
+    transmit_packet_region(start_packets);
+
+    // Synchronise with the simulation
+    spin1_start(SYNC_WAIT);
+  }
 }

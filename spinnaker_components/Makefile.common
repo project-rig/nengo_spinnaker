@@ -67,7 +67,7 @@ endif
 ifeq ($(GNU),1)
   AS := $(GP)-as --defsym GNU=1 -mthumb-interwork -march=armv5te
 
-  CA := $(GP)-gcc -c -Os -mthumb-interwork -march=armv5te -std=gnu99 \
+  CA := $(GP)-gcc -c -Ofast -mthumb-interwork -march=armv5te -std=gnu99 \
 	-I $(INC_DIR)
 
   CT := $(CA) -mthumb -DTHUMB

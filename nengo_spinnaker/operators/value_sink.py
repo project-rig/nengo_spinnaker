@@ -87,9 +87,9 @@ class ValueSink(object):
     def after_simulation(self, netlist, simulator, n_steps):
         """Retrieve data from a simulation."""
         self.recording_region_mem.seek(0)
-        recorded_data = fix_to_np(
-            np.frombuffer(self.recording_region_mem.read(), dtype=np.int32)
-        ).reshape(n_steps, self.size_in)
+        recorded_data = fix_to_np(np.frombuffer(
+            self.recording_region_mem.read(n_steps * self.size_in * 4),
+            dtype=np.int32)).reshape(n_steps, self.size_in)
 
         if self.probe not in simulator.data:
             simulator.data[self.probe] = recorded_data

@@ -107,5 +107,16 @@ void c_main(void) {
   spin1_set_timer_tick(g_filter.machine_timestep);
   spin1_callback_on(MCPL_PACKET_RECEIVED, mcpl_callback, -1);
   spin1_callback_on(TIMER_TICK, filter_update, 2);
-  spin1_start(SYNC_WAIT);
+
+  while (true)
+  {
+    // Wait for data loading, etc.
+    event_wait();
+
+    // Determine how long to simulate for
+    config_get_n_ticks();
+
+    // Perform the simulation
+    spin1_start(SYNC_WAIT);
+  }
 }

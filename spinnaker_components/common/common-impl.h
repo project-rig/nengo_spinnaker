@@ -13,4 +13,8 @@ extern uint32_t simulation_ticks;
 address_t system_load_sram();
 address_t region_start(uint32_t n, address_t sdram_base);
 
+/** Get the number of ticks for the next simulation.
+ */
+void config_get_n_ticks();
+
 #endif

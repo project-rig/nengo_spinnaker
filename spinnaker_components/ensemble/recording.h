@@ -33,6 +33,10 @@ typedef struct _recording_buffer_t {
 bool record_buffer_initialise(recording_buffer_t *buffer, address_t region,
                               uint n_blocks, uint n_neurons);
 
+/*!\brief Reset the recording region for a new period of simulation.
+ */
+void record_buffer_reset();
+
 /*!\brief Flush the current buffer.
  *
  * The contents of the buffer will be appended to the recording region in

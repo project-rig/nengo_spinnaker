@@ -94,6 +94,13 @@ normal. Then use `nengo_spinnaker.Simulator` to simulate your model.::
     sim = nengo_spinnaker.Simulator(network)
     sim.run(10.0)
 
+After running your model you must call `close` to leave the SpiNNaker machine
+in a clean state. Alternatively a `with` block may be used to ensure the
+simulator is closed after use::
+
+    with sim:
+        sim.run(10.0)
+
 Some specific configuration options are available for SpiNNaker. To use these::
 
     # Modify config to use SpiNNaker parameters

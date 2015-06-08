@@ -16,11 +16,13 @@ void valsource_tick(uint ticks, uint arg1) {
 
   // Transmit a MC packet for each value in the current frame
   for (uint d = 0; d < pars.n_dims; d++) {
-    spin1_send_mc_packet(
+    while(!spin1_send_mc_packet(
         keys[d],
         slots.current->data[slots.current->current_pos*pars.n_dims + d],
-        WITH_PAYLOAD
-    );
+        WITH_PAYLOAD))
+    {
+      spin1_delay_us(1);
+    }
   }
 
   // Copy in the next block
@@ -92,11 +94,6 @@ void c_main(void) {
   current_block = 0;
   blocks = (value_t *) region_start(3, address);
 
-  io_printf(IO_BUF, "[Value Source] %d dimensions, %d full blocks of %d FRAMES"
-                    ", PLUS %d FRAMES = %d blocks\n",
-            pars.n_dims, pars.n_blocks, pars.block_length, pars.partial_block,
-            n_blocks);
-
   // Make space for keys
   keys = spin1_malloc(pars.n_dims * sizeof(uint));
   if (keys == NULL) {
@@ -110,19 +107,39 @@ void c_main(void) {
     return;
   }
 
-  // Copy in the first block of data
-  if (n_blocks > 1) {
-    spin1_memcpy(slots.current->data, region_start(3, address),
-                 pars.n_dims * pars.block_length * sizeof(value_t));
-    slots.current->length = pars.block_length;
-  } else {
-    spin1_memcpy(slots.current->data, region_start(3, address),
-                 pars.n_dims * pars.partial_block * sizeof(value_t));
-    slots.current->length = pars.partial_block;
-  }
-
   // Set up callbacks, wait for synchronisation
   spin1_set_timer_tick(pars.time_step);
   spin1_callback_on(TIMER_TICK, valsource_tick, 0);
-  spin1_start(SYNC_WAIT);
+
+  while (true)
+  {
+    // Wait for data loading, etc.
+    event_wait();
+
+    // Determine how long to simulate for
+    config_get_n_ticks();
+
+    // Update the system region
+    spin1_memcpy(&pars, region_start(1, address), sizeof(system_parameters_t));
+    n_blocks = pars.n_blocks + (pars.partial_block > 0 ? 1 : 0);
+    current_block = 0;
+
+    // Copy in the first block of data
+    slots_progress(&slots);
+    if(n_blocks > 1)
+    {
+      spin1_memcpy(slots.current->data, region_start(3, address),
+                   pars.n_dims * pars.block_length * sizeof(value_t));
+      slots.current->length = pars.block_length;
+    }
+    else
+    {
+      spin1_memcpy(slots.current->data, region_start(3, address),
+                   pars.n_dims * pars.partial_block * sizeof(value_t));
+      slots.current->length = pars.partial_block;
+    }
+
+    // Perform the simulation
+    spin1_start(SYNC_WAIT);
+  }
 }

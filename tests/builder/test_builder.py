@@ -642,6 +642,13 @@ class TestGetSignalsAndConnections(object):
                          ObjectPort(obj_b, InputPort.standard),
                          None)
 
+        sig_ab3 = Signal(ObjectPort(obj_a, OutputPort.standard),
+                         ObjectPort(obj_b, InputPort.standard),
+                         None)
+        sig_ab4 = Signal(ObjectPort(obj_a, OutputPort.standard),
+                         ObjectPort(obj_b, InputPort.standard),
+                         None)
+
         conn_ba1 = mock.Mock()
         port_b1 = mock.Mock(name="port B1")
         sig_ba1 = Signal(ObjectPort(obj_b, port_b1),
@@ -654,6 +661,11 @@ class TestGetSignalsAndConnections(object):
                          ObjectPort(obj_a, InputPort.standard),
                          None)
 
+        port_b3 = mock.Mock(name="port B3")
+        sig_ba3 = Signal(ObjectPort(obj_b, port_b3),
+                         ObjectPort(obj_a, InputPort.standard),
+                         None)
+
         # Create a model holding all of these items
         model = Model()
         model.connections_signals = {
@@ -663,12 +675,15 @@ class TestGetSignalsAndConnections(object):
             conn_ba2: sig_ba2,
             conn_ba3: sig_ba2,
         }
+        model.extra_signals = [sig_ab3, sig_ab4, sig_ba3]
 
         # Query it for connections starting from different objects
         assert model.get_signals_connections_from_object(obj_a) == {
             OutputPort.standard: {
                 sig_ab1: [conn_ab1],
                 sig_ab2: [conn_ab2],
+                sig_ab3: [],
+                sig_ab4: [],
             },
         }
 
@@ -683,6 +698,8 @@ class TestGetSignalsAndConnections(object):
                     assert sig is sig_ba2
                     for conn in conns:
                         assert conn is conn_ba2 or conn is conn_ba3
+            elif port is port_b3:
+                assert sigs_conns == {sig_ba3: []}
             else:
                 assert False, "Unexpected signal"
 
@@ -705,6 +722,10 @@ class TestGetSignalsAndConnections(object):
                          ObjectPort(obj_b, port_b2),
                          None)
 
+        sig_ab3 = Signal(ObjectPort(obj_a, OutputPort.standard),
+                         ObjectPort(obj_b, port_b2),
+                         None)
+
         conn_ba1 = mock.Mock()
         sig_ba1 = Signal(ObjectPort(obj_b, OutputPort.standard),
                          ObjectPort(obj_a, InputPort.standard),
@@ -724,6 +745,7 @@ class TestGetSignalsAndConnections(object):
             conn_ba2: sig_ba2,
             conn_ba3: sig_ba2,
         }
+        model.extra_signals = [sig_ab3]
 
         # Query it for connections terminating at different objects
         for port, sigs_conns in iteritems(
@@ -736,6 +758,8 @@ class TestGetSignalsAndConnections(object):
                 elif sig is sig_ba2:
                     for conn in conns:
                         assert conn in [conn_ba2, conn_ba3]
+                elif sig is sig_ba3:
+                    assert len(conns) == 0
                 else:
                     assert False, "Unexpected signal"
 
@@ -745,6 +769,7 @@ class TestGetSignalsAndConnections(object):
             },
             port_b2: {
                 sig_ab2: [conn_ab2],
+                sig_ab3: [],
             },
         }
 

@@ -87,5 +87,16 @@ void c_main(void) {
   spin1_set_timer_tick(g_sdp_rx.transmission_period);
   spin1_callback_on(SDP_PACKET_RX, sdp_received, -1);
   spin1_callback_on(TIMER_TICK, sdp_rx_tick, 0);
-  spin1_start(SYNC_WAIT);
+
+  while (true)
+  {
+    // Wait for data loading, etc.
+    event_wait();
+
+    // Determine how long to simulate for
+    config_get_n_ticks();
+
+    // Perform the simulation
+    spin1_start(SYNC_WAIT);
+  }
 }

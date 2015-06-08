@@ -18,7 +18,8 @@ def test_constant_node_ensemble_and_value_probe():
 
     # Run the simulation for long enough to ensure that the decoded value is
     # with +/-20% of the input value.
-    sim.run(2.0)
+    with sim:
+        sim.run(2.0)
 
     # Check that the value was decoded as expected
     index = int(p.synapse.tau * 2.5 / sim.dt)
