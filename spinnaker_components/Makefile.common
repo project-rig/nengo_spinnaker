@@ -37,7 +37,7 @@ API := 1
 
 # Set to 1 to make Thumb code (0 for ARM)
 
-THUMB := 1
+THUMB := 0
 
 # Prefix for GNU tool binaries
 
