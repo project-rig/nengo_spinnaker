@@ -134,15 +134,28 @@ class EnsembleLIF(object):
         # machine.  We can expect to be DTCM or CPU bound, so the SDRAM bound
         # can be quite lax to allow for lots of data probing.
         # TODO: Include other DTCM usage
-        # TODO: Include CPU usage constraint
+        def cpu_usage(sl):
+            """Calculate the CPU usage (in cycles) based on the number of
+            neurons and the size_in and size_out of the ensemble.
+
+            The equation and coefficients are taken from: "An Efficient
+            SpiNNaker Implementation of the NEF", Mundy, Knight, Stewart and
+            Furber [IJCNN 2015]
+            """
+            n_neurons = (sl.stop - sl.start)
+            return (245 + 43*self.ensemble.size_in + 100 + 702*size_out +
+                    188 + 69*n_neurons + 13*n_neurons*self.ensemble.size_in)
+
         self.vertices = list()
         sdram_constraint = partition.Constraint(8*2**20)  # Max 8MiB
         dtcm_constraint = partition.Constraint(64*2**10, .75)  # 75% of 64KiB
+        cpu_constraint = partition.Constraint(200000, .8)  # 80% of 200k cycles
         constraints = {
             sdram_constraint: lambda s: regions.utils.sizeof_regions(
                 self.regions, s),
             dtcm_constraint: lambda s: regions.utils.sizeof_regions(
                 self.regions, s),
+            cpu_constraint: cpu_usage,
         }
         for sl in partition.partition(slice(0, self.ensemble.n_neurons),
                                       constraints):
