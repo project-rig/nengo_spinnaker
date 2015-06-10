@@ -58,7 +58,7 @@ def replace_local_hyperlinks(
 
 setup(
     name="nengo_spinnaker",
-    version="0.2.0",
+    version="0.2.1",
     packages=find_packages(),
     package_data={'nengo_spinnaker': ['binaries/*.aplx']},
 
