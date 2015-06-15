@@ -27,7 +27,7 @@ either the directory you will be running your code from or, more usefully, a
 centralised location. The centralised location varies based on your operating
 system:
 
-- Windows: ``%userprofile%\nengo\nengo_spinnaker.conf``
+- Windows: ``%userprofile%\.nengo\nengo_spinnaker.conf``
 - Other: ``~/.config/nengo/nengo_spinnaker.conf``
 
 This file exists to inform ``nengo_spinnaker`` of the nature of the SpiNNaker
