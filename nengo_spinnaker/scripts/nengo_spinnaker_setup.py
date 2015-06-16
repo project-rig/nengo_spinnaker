@@ -43,9 +43,6 @@ def main(args=None):
                     "config file.")
 
     file_group = parser.add_mutually_exclusive_group()
-    file_group.add_argument("--system", "-s", dest="file",
-                            const="system", action="store_const",
-                            help="Create a system-wide config file.")
     file_group.add_argument("--user", "-u", dest="file",
                             const="user", action="store_const",
                             help="Create a user-specific config file "

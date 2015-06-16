@@ -19,7 +19,7 @@ from rig import wizard
 def test_bad_args():
     # Should fail if more than one config file is specified
     with pytest.raises(SystemExit):
-        main("--system --user".split())
+        main("--project --user".split())
 
 
 def test_generate_config_file():
