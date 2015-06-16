@@ -1,12 +1,12 @@
 import collections
 import math
-import numbers
 import numpy as np
 from six import iteritems
 from rig.machine import Cores, SDRAM
 import struct
 
 from nengo.processes import Process
+from nengo.utils import numpy as npext
 
 from nengo_spinnaker.builder.builder import OutputPort, netlistspec
 from nengo_spinnaker.netlist import VertexSlice
@@ -141,6 +141,10 @@ class ValueSource(object):
         else:
             values = np.array([self.function for t in ts])
 
+        # Ensure that the values can be sliced, regardless of how they were
+        # generated.
+        values = npext.array(values, min_dims=2)
+
         # Compute the output for each connection
         outputs = []
         for conn in self.conns:
@@ -150,9 +154,8 @@ class ValueSource(object):
             # output at the end of the connection.  To do this we first apply
             # the pre-slice, then the function and then the post-slice.
             for v in values:
-                # If the value is not just a number we apply the pre-slice.
-                if not isinstance(v, numbers.Number):
-                    v = v[conn.pre_slice]
+                # Apply the pre-slice
+                v = v[conn.pre_slice]
 
                 # Apply the function on the connection, if there is one.
                 if conn.function is not None:
