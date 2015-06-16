@@ -38,8 +38,6 @@ class Net(rig.netlist.Net):
         32-bit bitfield instance that can be used to derive the routing key and
         mask for the net.
     """
-    __slots__ = ['keyspace']  # Only add keyspace to the list of slots
-
     def __init__(self, source, sinks, weight, keyspace):
         """Create a new net.
 
@@ -85,8 +83,6 @@ class Vertex(object):
     cluster : int or None
         Index of the cluster the vertex is a part of.
     """
-    __slots__ = ["application", "constraints", "resources", "cluster"]
-
     def __init__(self, application=None, resources=dict(), constraints=list()):
         """Create a new Vertex.
         """
@@ -114,8 +110,6 @@ class VertexSlice(Vertex):
         Slice of the unit of computation which is represented by this vertex
         slice.
     """
-    __slots__ = ["slice"]
-
     def __init__(self, slice, application=None, resources=dict(),
                  constraints=list()):
         super(VertexSlice, self).__init__(application, resources, constraints)
