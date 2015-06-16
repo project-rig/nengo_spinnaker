@@ -366,10 +366,20 @@ class TestNodeIOController(object):
             assert spec.target.port is OutputPort.standard
 
         # Get the sink and ensure that the appropriate object is returned
+        with mock.patch.object(nioc, "get_spinnaker_sink_for_node"):
+            assert nioc.get_node_sink(model, b_c) is not None
+            assert c in nioc._input_nodes
+
+        # Get the sink and ensure that the appropriate object is returned
         with mock.patch.object(nioc, "get_spinnaker_sink_for_node") as gssfn:
             spec = nioc.get_node_sink(model, a_b)
             assert spec.target.obj is model.object_operators[b]
             assert spec.target.port is InputPort.standard
+
+        # Get the source and ensure that the appropriate object is returned
+        with mock.patch.object(nioc, "get_spinnaker_source_for_node") as gssfn:
+            assert nioc.get_node_source(model, a_b) is not None
+            assert a in nioc._output_nodes
 
     def test_get_node_sink_standard(self):
         """Test that calling a NodeIOController to get the sink for a
