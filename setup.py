@@ -90,7 +90,14 @@ setup(
     keywords="spinnaker nengo neural cognitive simulation",
 
     # Requirements
-    install_requires=["nengo>=2.0.0, <3.0.0", "rig>=0.4.0, <1.0.0",
+    install_requires=["nengo>=2.0.0, <3.0.0", "rig>=0.5.3, <1.0.0",
                       "bitarray>=0.8.1, <1.0.0"],
     zip_safe=False,  # Partly for performance reasons
+
+    # Scripts
+    entry_points={
+        "console_scripts": [
+            "nengo_spinnaker_setup = nengo_spinnaker.scripts.nengo_spinnaker_setup:main",
+        ],
+    }
 )
