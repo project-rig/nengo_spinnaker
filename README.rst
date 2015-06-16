@@ -120,7 +120,7 @@ For example::
     with model:
         signal = nengo.Node(lambda t: np.sin(t))
 
-    nengo_spinnaker.add_params(model.config)
+    nengo_spinnaker.add_spinnaker_params(model.config)
     model.config[signal].function_of_time = True
 
 
