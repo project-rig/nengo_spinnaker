@@ -66,6 +66,6 @@ def test_build_standard_connection_params():
     # Build the connection parameters
     params = build_generic_connection_params(None, a_b)
     assert params.decoders is None
-    assert np.all(params.transform == [[1.0, 0.0]])
+    assert params.transform == 1.0
     assert params.eval_points is None
     assert params.solver_info is None

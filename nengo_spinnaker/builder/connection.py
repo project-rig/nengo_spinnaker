@@ -20,10 +20,9 @@ def generic_sink_getter(model, conn):
 
 @Model.connection_parameter_builders.register(nengo.base.NengoObject)
 def build_generic_connection_params(model, conn):
-    transform = full_transform(conn)
     return BuiltConnection(
         decoders=None,
-        transform=transform,
+        transform=full_transform(conn, slice_pre=False),
         eval_points=None,
         solver_info=None
     )

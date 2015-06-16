@@ -111,8 +111,8 @@ class Ethernet(NodeIOController):
         # Build an SDP packet to transmit for each outgoing connection for the
         # node
         for connection, (x, y, p) in self._node_outgoing[node]:
-            # Perform connection function and transform
-            c_value = value[:]
+            # Apply the pre-slice, the connection function and the transform.
+            c_value = value[connection.pre_slice]
             if connection.function is not None:
                 c_value = connection.function(c_value)
             c_value = np.dot(connection.transform, c_value)
