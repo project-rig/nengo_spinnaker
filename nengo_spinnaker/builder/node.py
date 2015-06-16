@@ -144,7 +144,8 @@ class NodeIOController(object):
             # reference to the value source we created earlier.
             return spec(ObjectPort(self._f_of_t_nodes[cn.pre_obj],
                                    OutputPort.standard))
-        elif type(cn.post_obj) is nengo.Node:
+        elif (type(cn.post_obj) is nengo.Node and
+                cn.post_obj not in self._passthrough_nodes):
             # If this connection goes from a Node to another Node (exactly, not
             # any subclasses) then we just add both nodes and the connection to
             # the host model.
@@ -190,7 +191,8 @@ class NodeIOController(object):
             # to the Filter operator we created earlier regardless.
             return spec(ObjectPort(self._passthrough_nodes[cn.post_obj],
                                    InputPort.standard))
-        elif type(cn.pre_obj) is nengo.Node:
+        elif (type(cn.pre_obj) is nengo.Node and
+                cn.pre_obj not in self._passthrough_nodes):
             # If this connection goes from a Node to another Node (exactly, not
             # any subclasses) then we just add both nodes and the connection to
             # the host model.
