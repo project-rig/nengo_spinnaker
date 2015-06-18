@@ -265,7 +265,7 @@ class SystemRegion(collections.namedtuple(
             n_neurons,
             self.machine_timestep,
             int(self.t_ref // self.dt),  # tau_ref expressed as in ticks
-            tp.value_to_fix(-np.expm1(-self.dt / self.t_rc) * (1.0 - 2**-17)),
+            tp.value_to_fix(-np.expm1(-self.dt / self.t_rc) * (1.0 - 2**-11)),
             (0x1 if self.probe_spikes else 0x0),
             1
         )
