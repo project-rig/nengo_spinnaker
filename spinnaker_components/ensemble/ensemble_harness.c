@@ -42,16 +42,16 @@ bool initialise_ensemble(region_system_t *pars) {
   g_ensemble.n_neurons = pars->n_neurons;
   g_ensemble.machine_timestep = pars->machine_timestep;
   g_ensemble.t_ref = pars->t_ref;
-  g_ensemble.dt_over_t_rc = pars->dt_over_t_rc;
+  g_ensemble.exp_dt_over_t_rc = pars->exp_dt_over_t_rc;
   g_ensemble.recd.record = pars->record_spikes;
   g_ensemble.n_inhib_dims = pars->n_inhibitory_dimensions;
 
   io_printf(IO_BUF, "[Ensemble] INITIALISE_ENSEMBLE n_neurons = %d," \
-            "timestep = %d, t_ref = %d, dt_over_t_rc = 0x%08x\n",
+            "timestep = %d, t_ref = %d, exp_dt_over_t_rc = 0x%08x\n",
             g_ensemble.n_neurons,
             g_ensemble.machine_timestep,
             g_ensemble.t_ref,
-            g_ensemble.dt_over_t_rc
+            g_ensemble.exp_dt_over_t_rc
   );
 
   // Holder for bias currents
@@ -59,12 +59,14 @@ bool initialise_ensemble(region_system_t *pars) {
                     g_ensemble.n_neurons * sizeof(current_t));
 
   // Holder for refractory period and voltages
-  MALLOC_FAIL_FALSE(g_ensemble.status,
-                    g_ensemble.n_neurons * sizeof(neuron_status_t));
+  MALLOC_FAIL_FALSE(g_ensemble.neuron_voltage,
+                    g_ensemble.n_neurons * sizeof(value_t));
+  MALLOC_FAIL_FALSE(g_ensemble.neuron_refractory,
+                    g_ensemble.n_neurons * sizeof(uint8_t));
 
   for (uint n = 0; n < g_ensemble.n_neurons; n++) {
-    g_ensemble.status[n].refractory_time = 0;
-    g_ensemble.status[n].voltage = 0;
+    g_ensemble.neuron_refractory[n] = 0;
+    g_ensemble.neuron_voltage[n] = 0.0k;
   }
 
   // Initialise some buffers

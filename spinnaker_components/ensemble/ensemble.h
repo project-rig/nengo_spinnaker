@@ -46,17 +46,10 @@ typedef struct region_system
   uint n_neurons;
   uint machine_timestep;
   uint t_ref;
-  value_t dt_over_t_rc;
+  value_t exp_dt_over_t_rc;
   bool record_spikes;
   uint n_inhibitory_dimensions;
 } region_system_t;
-
-/** \brief Persistent neuron variables.
-  */
-typedef struct neuron_status {
-  unsigned char refractory_time : 4;  //!< 4 bits of refractory state
-  unsigned int  voltage : 28;           //!< 28 bits stored voltage
-} neuron_status_t;
 
 /** \brief Shared ensemble parameters.
   */
@@ -65,10 +58,11 @@ typedef struct ensemble_parameters {
   uint machine_timestep;   //!< Machine time step  / useconds
 
   uint t_ref;              //!< Refractory period \f$\tau_{ref} - 1\f$ / steps
-  value_t dt_over_t_rc;    //!< \f$\frac{dt}{\tau_{rc}}\$
+  value_t exp_dt_over_t_rc;    //!< \f$-\exp{\frac{dt}{\tau_{rc}}}\$
 
   current_t *i_bias;        //!< Population biases \f$1 \times N\f$
-  neuron_status_t *status;  //!< Neuron status
+  value_t *neuron_voltage;  //!< Neuron voltages
+  uint8_t *neuron_refractory;  //!< Refractory states
 
   uint n_inhib_dims;        //!< Number of dimensions in inhibitory connection
   value_t *inhib_gain;      //!< Gain of inhibitory connection (value of transform)
@@ -129,23 +123,23 @@ static inline value_t *neuron_decoder_vector(uint n)
 // -- Voltages and refractory periods
 //! Get the membrane voltage for the given neuron
 static inline voltage_t neuron_voltage( uint n )
-  { return kbits( g_ensemble.status[n].voltage ); };
+  {return g_ensemble.neuron_voltage[n];};
 
 //! Set the membrane voltage for the given neuron
-static inline void set_neuron_voltage( uint n, voltage_t v )
-  { g_ensemble.status[n].voltage = ( bitsk( v ) & 0x0fffffff ); };
+static inline void set_neuron_voltage(uint n, voltage_t v)
+  {g_ensemble.neuron_voltage[n] = v;}
 
 //! Get the refractory status of a given neuron
-static inline uint neuron_refractory( uint n )
-  { return g_ensemble.status[n].refractory_time; };
+static inline uint8_t neuron_refractory(uint n)
+  {return g_ensemble.neuron_refractory[n];};
 
 //! Put the given neuron in a refractory state (zero voltage, set timer)
 static inline void set_neuron_refractory( uint n )
-  { g_ensemble.status[n].refractory_time = g_ensemble.t_ref; };
+  {g_ensemble.neuron_refractory[n] = g_ensemble.t_ref;};
 
 //! Decrement the refractory time for the given neuron
 static inline void decrement_neuron_refractory( uint n )
-  { g_ensemble.status[n].refractory_time--; };
+  {g_ensemble.neuron_refractory[n]--;};
 
 #endif
 
