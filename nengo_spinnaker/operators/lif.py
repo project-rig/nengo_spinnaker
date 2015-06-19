@@ -154,7 +154,7 @@ class EnsembleLIF(object):
             sdram_constraint: lambda s: regions.utils.sizeof_regions(
                 self.regions, s),
             dtcm_constraint: lambda s: regions.utils.sizeof_regions(
-                self.regions, s),
+                self.regions, s) + 5*(s.stop - s.start),  # +5 bytes per neuron
             cpu_constraint: cpu_usage,
         }
         for sl in partition.partition(slice(0, self.ensemble.n_neurons),
