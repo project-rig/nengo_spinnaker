@@ -7,7 +7,6 @@ from nengo_spinnaker.netlist import Vertex
 from nengo_spinnaker.regions import KeyspacesRegion, KeyField, Region
 from nengo_spinnaker.regions import utils as region_utils
 from nengo_spinnaker.utils.application import get_application
-from nengo_spinnaker.utils.keyspaces import get_derived_keyspaces
 
 
 class SDPReceiver(object):
@@ -33,17 +32,23 @@ class SDPReceiver(object):
             assert len(connections) == 1, "Expecting a 1:1 mapping"
             conn = connections[0]
 
+            # Get the transform, and from this the keys
+            transform = model.params[conn].transform
+            keys = [signal.keyspace(index=i) for i in
+                    range(transform.shape[0])]
+
             # Create a vertex for this connection (assuming its size out <= 64)
-            if conn.size_out > 64:
-                raise NotImplementedError
+            if len(keys) > 64:
+                raise NotImplementedError(
+                    "Connection {!s} is too wide to transmit to SpiNNaker. "
+                    "Consider breaking the connection up or making the "
+                    "originating node a function of time Node.".format(conn)
+                )
 
             # Create the regions for the system
-            sys_region = SystemRegion(model.machine_timestep, conn.size_out)
-            keys_region = KeyspacesRegion(
-                list(get_derived_keyspaces(signal.keyspace, conn.post_slice,
-                                           max_v=conn.post_obj.size_in)),
-                [KeyField({"cluster": "cluster"})]
-            )
+            sys_region = SystemRegion(model.machine_timestep, len(keys))
+            keys_region = KeyspacesRegion(keys,
+                                          [KeyField({"cluster": "cluster"})])
 
             # Get the resources
             resources = {

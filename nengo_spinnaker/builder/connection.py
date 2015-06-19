@@ -22,7 +22,7 @@ def generic_sink_getter(model, conn):
 def build_generic_connection_params(model, conn):
     return BuiltConnection(
         decoders=None,
-        transform=full_transform(conn, slice_pre=False),
+        transform=full_transform(conn, slice_pre=False, allow_scalars=False),
         eval_points=None,
         solver_info=None
     )

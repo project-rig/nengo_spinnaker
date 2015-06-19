@@ -232,9 +232,9 @@ class NodeIOController(object):
         """
         raise NotImplementedError
 
-    def prepare(self, controller, netlist):
-        """Prepare the Node controller to work with the given netlist and
-        machine controller.
+    def prepare(self, model, controller, netlist):
+        """Prepare the Node controller to work with the given model, netlist
+        and machine controller.
         """
         pass
 

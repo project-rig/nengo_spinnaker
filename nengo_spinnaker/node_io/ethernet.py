@@ -73,7 +73,7 @@ class Ethernet(NodeIOController):
         return spec(ObjectPort(self._sdp_transmitters[connection.post_obj],
                                InputPort.standard))
 
-    def prepare(self, controller, netlist):
+    def prepare(self, model, controller, netlist):
         """Prepare for simulation given the placed netlist and the machine
         controller.
         """
@@ -94,8 +94,11 @@ class Ethernet(NodeIOController):
                 x, y = netlist.placements[vertex]
                 p = netlist.allocations[vertex][Cores].start
 
-                # Store this connection -> (x, y, p) map
-                self._node_outgoing[node].append((connection, (x, y, p)))
+                # Store this connection, transform, (x, y, p) map
+                self._node_outgoing[node].append(
+                    (connection, model.params[connection].transform,
+                     (x, y, p))
+                )
 
         # Build a map of (x, y, p) to Node for incoming values
         for node, sdp_tx in iteritems(self._sdp_transmitters):
@@ -110,12 +113,12 @@ class Ethernet(NodeIOController):
         """Transmit the value output by a Node."""
         # Build an SDP packet to transmit for each outgoing connection for the
         # node
-        for connection, (x, y, p) in self._node_outgoing[node]:
+        for connection, transform, (x, y, p) in self._node_outgoing[node]:
             # Apply the pre-slice, the connection function and the transform.
             c_value = value[connection.pre_slice]
             if connection.function is not None:
                 c_value = connection.function(c_value)
-            c_value = np.dot(connection.transform, c_value)
+            c_value = np.dot(transform, c_value)
 
             # Transmit the packet
             packet_data = bytes(tp.np_to_fix(c_value).data)

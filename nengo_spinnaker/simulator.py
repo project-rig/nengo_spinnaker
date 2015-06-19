@@ -124,7 +124,7 @@ class Simulator(object):
 
         # Prepare the simulator against the placed, allocated and routed
         # netlist.
-        self.io_controller.prepare(self.controller, self.netlist)
+        self.io_controller.prepare(self.model, self.controller, self.netlist)
 
         # Load the application
         logger.info("Loading application")
