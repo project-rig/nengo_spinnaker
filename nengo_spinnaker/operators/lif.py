@@ -256,6 +256,11 @@ class SystemRegion(collections.namedtuple(
         # slightly to account for the effects of fixed point.  The result is
         # that the tuning curves of SpiNNaker neurons are usually within 5Hz of
         # the ideal curve and the tuning curve of reference Nengo neurons.
+        # The fudge factor applied (i.e. 1.0*2^-11) was determined by running
+        # the tuning curve test in "regression-tests/test_tuning_curve.py",
+        # plotting the results and stopping when the ideal tuning curve was
+        # very closely matched by the SpiNNaker tuning curve - further
+        # improvement of this factor may be possible.
 
         n_neurons = vertex_slice.stop - vertex_slice.start
         data = struct.pack(
