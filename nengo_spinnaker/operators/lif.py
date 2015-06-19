@@ -154,7 +154,7 @@ class EnsembleLIF(object):
             sdram_constraint: lambda s: regions.utils.sizeof_regions(
                 self.regions, s),
             dtcm_constraint: lambda s: regions.utils.sizeof_regions(
-                self.regions, s),
+                self.regions, s) + 5*(s.stop - s.start),  # +5 bytes per neuron
             cpu_constraint: cpu_usage,
         }
         for sl in partition.partition(slice(0, self.ensemble.n_neurons),
@@ -252,6 +252,16 @@ class SystemRegion(collections.namedtuple(
         """Write the system region for a specific vertex slice to a file-like
         object.
         """
+        # The value -e^(-dt / tau_rc) is precomputed and is scaled down ever so
+        # slightly to account for the effects of fixed point.  The result is
+        # that the tuning curves of SpiNNaker neurons are usually within 5Hz of
+        # the ideal curve and the tuning curve of reference Nengo neurons.
+        # The fudge factor applied (i.e. 1.0*2^-11) was determined by running
+        # the tuning curve test in "regression-tests/test_tuning_curve.py",
+        # plotting the results and stopping when the ideal tuning curve was
+        # very closely matched by the SpiNNaker tuning curve - further
+        # improvement of this factor may be possible.
+
         n_neurons = vertex_slice.stop - vertex_slice.start
         data = struct.pack(
             "<8I",
@@ -259,8 +269,8 @@ class SystemRegion(collections.namedtuple(
             self.n_output_dimensions,
             n_neurons,
             self.machine_timestep,
-            int(self.t_ref // self.dt),
-            tp.value_to_fix(self.dt / self.t_rc),
+            int(self.t_ref // self.dt),  # tau_ref expressed as in ticks
+            tp.value_to_fix(-np.expm1(-self.dt / self.t_rc) * (1.0 - 2**-11)),
             (0x1 if self.probe_spikes else 0x0),
             1
         )

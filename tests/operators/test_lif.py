@@ -71,7 +71,8 @@ class TestSystemRegion(object):
         assert n_n == vertex_neurons
         assert m_t == machine_timestep
         assert t_ref == int(tau_ref // dt)
-        assert dt_over_t_rc == tp.value_to_fix(dt / tau_rc)
+        assert (tp.value_to_fix(-np.expm1(-dt / tau_rc)) * 0.9 < dt_over_t_rc <
+                tp.value_to_fix(-np.expm1(-dt / tau_rc)) * 1.1)
         assert ((probe_spikes and rec_spikes != 0) or
                 (not probe_spikes and rec_spikes == 0))
         assert i_dims == 1
