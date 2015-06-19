@@ -1,9 +1,11 @@
 import nengo
 import nengo_spinnaker
 import numpy as np
+import pytest
 
 
-def test_global_inhibition():
+@pytest.mark.parametrize("source", ("ensemble", "f_of_t_node"))
+def test_global_inhibition(source):
     with nengo.Network("Test Network") as network:
         # Create a 2-d ensemble representing a constant value
         input_value = nengo.Node([0.25, -0.3])
@@ -11,16 +13,20 @@ def test_global_inhibition():
         nengo.Connection(input_value, ens)
         p_ens = nengo.Probe(ens, synapse=0.05)
 
-        # Create another ensemble which will act to gate `ens`
-        gate_driver = nengo.Ensemble(100, 1)
-        gate_driver.intercepts = [0.3] * gate_driver.n_neurons
-        gate_driver.encoders = [[1.0]] * gate_driver.n_neurons
-        nengo.Connection(gate_driver, ens.neurons,
-                         transform=[[-10.0]] * ens.n_neurons)
-
         # The gate should be open initially and then closed after 1s
         gate_control = nengo.Node(lambda t: 0.0 if t < 1.0 else 1.0)
-        nengo.Connection(gate_control, gate_driver)
+
+        if source == "ensemble":
+            # Create another ensemble which will act to gate `ens`
+            gate_driver = nengo.Ensemble(100, 1)
+            gate_driver.intercepts = [0.3] * gate_driver.n_neurons
+            gate_driver.encoders = [[1.0]] * gate_driver.n_neurons
+            nengo.Connection(gate_control, gate_driver)
+            nengo.Connection(gate_driver, ens.neurons,
+                             transform=[[-10.0]] * ens.n_neurons)
+        elif source == "node" or source == "f_of_t_node":
+            nengo.Connection(gate_control, ens.neurons,
+                             transform=[[-10.0]] * ens.n_neurons)
 
     # Mark appropriate Nodes as functions of time
     nengo_spinnaker.add_spinnaker_params(network.config)
@@ -51,4 +57,5 @@ def test_global_inhibition():
 
 
 if __name__ == "__main__":
-    test_global_inhibition()
+    test_global_inhibition("ensemble")
+    test_global_inhibition("f_of_t_node")

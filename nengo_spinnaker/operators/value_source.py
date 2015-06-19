@@ -13,7 +13,6 @@ from nengo_spinnaker.netlist import VertexSlice
 from nengo_spinnaker import partition_and_cluster as partition
 from nengo_spinnaker import regions
 from nengo_spinnaker.utils.application import get_application
-from nengo_spinnaker.utils.keyspaces import get_derived_keyspaces
 from nengo_spinnaker.utils.type_casts import np_to_fix
 
 
@@ -45,17 +44,15 @@ class ValueSource(object):
             return netlistspec([])
 
         keys = list()
-        self.conns = list()
+        self.conns_transforms = list()
         for sig, conns in iteritems(sigs_conns[OutputPort.standard]):
             assert len(conns) == 1, "Expected a 1:1 mapping"
 
             # Add the keys for this connection
             conn = conns[0]
-            keys.extend(list(
-                get_derived_keyspaces(sig.keyspace, conn.post_slice,
-                                      max_v=conn.post_obj.size_in)
-            ))
-            self.conns.append(conn)
+            transform, sig_keys = get_transform_keys(model, sig, conn)
+            keys.extend(sig_keys)
+            self.conns_transforms.append((conn, transform))
         size_out = len(keys)
 
         # Build the keys region
@@ -147,7 +144,7 @@ class ValueSource(object):
 
         # Compute the output for each connection
         outputs = []
-        for conn in self.conns:
+        for conn, transform in self.conns_transforms:
             output = []
 
             # For each f(t) for the next set of simulations we calculate the
@@ -161,8 +158,8 @@ class ValueSource(object):
                 if conn.function is not None:
                     v = conn.function(v)
 
-                output.append(np.dot(conn.transform, v.T))
-            outputs.append(np.array(output).reshape(n_steps, conn.size_out))
+                output.append(np.dot(transform, v.T))
+            outputs.append(np.array(output).reshape(n_steps, -1))
 
         # Combine all of the output values to form a large matrix which we can
         # dump into memory.
@@ -212,3 +209,18 @@ class SystemRegion(regions.Region):
             "<6I", self.timestep, size_out, 0x1 if self.periodic else 0x0,
             n_blocks, frames_per_block, last_block_length
         ))
+
+
+def get_transform_keys(model, sig, conn):
+    # Get the transform for the connection from the list of built connections,
+    # then remove zeroed rows (should any exist) and derive the list of keys.
+    transform = model.params[conn].transform
+    keep = np.any(transform != 0.0, axis=1)
+    keys = list()
+
+    for i, k in zip(range(transform.shape[0]), keep):
+        if k:
+            keys.append(sig.keyspace(index=i))
+
+    # Return the transform and the list of keys
+    return transform[keep], keys
