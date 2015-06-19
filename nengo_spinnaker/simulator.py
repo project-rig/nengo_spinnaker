@@ -1,3 +1,4 @@
+import atexit
 import logging
 import nengo
 from nengo.cache import get_default_decoder_cache
@@ -38,6 +39,16 @@ class Simulator(object):
         with sim:
             sim.run(10.0)
     """
+    _open_simulators = set()
+
+    @classmethod
+    def _add_simulator(cls, simulator):
+        cls._open_simulators.add(simulator)
+
+    @classmethod
+    def _remove_simulator(cls, simulator):
+        cls._open_simulators.remove(simulator)
+
     def __init__(self, network, dt=0.001, period=10.0):
         """Create a new Simulator with the given network.
 
@@ -47,6 +58,9 @@ class Simulator(object):
             Duration of one period of the simulator. This determines how much
             memory will be allocated to store precomputed and probed data.
         """
+        # Add this simulator to the set of open simulators
+        Simulator._add_simulator(self)
+
         # Create a controller for the machine and boot if necessary
         hostname = rc.get("spinnaker_machine", "hostname")
         machine_width = rc.getint("spinnaker_machine", "width")
@@ -142,7 +156,11 @@ class Simulator(object):
 
     def __enter__(self):
         """Enter a context which will close the simulator when exited."""
-        pass
+        # Return self to allow usage like:
+        #
+        #     with nengo_spinnaker.Simulator(model) as sim:
+        #         sim.run(1.0)
+        return self
 
     def __exit__(self, exception_type, exception_value, traceback):
         """Exit a context and close the simulator."""
@@ -278,10 +296,26 @@ class Simulator(object):
 
     def close(self):
         """Clean the SpiNNaker board and prevent further simulation."""
-        # Stop the application
-        self._closed = True
-        self.io_controller.close()
-        self.controller.send_signal("stop")
+        if not self._closed:
+            # Stop the application
+            self._closed = True
+            self.io_controller.close()
+            self.controller.send_signal("stop")
+
+            # Remove this simulator from the list of open simulators
+            Simulator._remove_simulator(self)
 
     def trange(self, dt=None):
         return np.arange(1, self.steps + 1) * (self.dt or dt)
+
+
+@atexit.register
+def _close_open_simulators():
+    """Close all remaining open simulators."""
+    # We make a list to avoid modifying the object we're iterating over.
+    for sim in list(Simulator._open_simulators):
+        # Ignore any errors which may occur during this shut-down process.
+        try:
+            sim.close()
+        except:
+            pass
