@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 
-@pytest.mark.parametrize("source", ("ensemble", "f_of_t_node"))
+@pytest.mark.parametrize("source", ("ensemble", "node", "f_of_t_node"))
 def test_global_inhibition(source):
     with nengo.Network("Test Network") as network:
         # Create a 2-d ensemble representing a constant value
@@ -28,9 +28,10 @@ def test_global_inhibition(source):
             nengo.Connection(gate_control, ens.neurons,
                              transform=[[-10.0]] * ens.n_neurons)
 
-    # Mark appropriate Nodes as functions of time
-    nengo_spinnaker.add_spinnaker_params(network.config)
-    network.config[gate_control].function_of_time = True
+    # Mark appropriate Nodes as functions of time if desired
+    if source != "node":
+        nengo_spinnaker.add_spinnaker_params(network.config)
+        network.config[gate_control].function_of_time = True
 
     # Create the simulate and simulate
     sim = nengo_spinnaker.Simulator(network)
@@ -41,9 +42,9 @@ def test_global_inhibition(source):
         sim.run(2.0)
 
     # Check that the values are decoded as expected
-    index10 = int(p_ens.synapse.tau * 3 / sim.dt)
+    index10 = int(p_ens.synapse.tau * 4 / sim.dt)
     index11 = 1.0 / sim.dt
-    index20 = index11 + int(p_ens.synapse.tau * 3 / sim.dt)
+    index20 = index11 + int(p_ens.synapse.tau * 4 / sim.dt)
     data = sim.data[p_ens]
 
     assert (np.all(+0.20 <= data[index10:index11, 0]) and
@@ -58,4 +59,5 @@ def test_global_inhibition(source):
 
 if __name__ == "__main__":
     test_global_inhibition("ensemble")
+    test_global_inhibition("node")
     test_global_inhibition("f_of_t_node")

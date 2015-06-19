@@ -1,4 +1,5 @@
 import mock
+import numpy as np
 import pytest
 from rig.machine import Cores, SDRAM
 import six
@@ -47,6 +48,10 @@ class TestSDPReceiver(object):
             conn_a: sig_a,
             conn_b: sig_b,
         }
+        model.params[conn_a] = mock.Mock()
+        model.params[conn_a].transform = np.eye(conn_a.size_out)
+        model.params[conn_b] = mock.Mock()
+        model.params[conn_b].transform = np.eye(conn_b.size_out)
 
         # Make the vertices
         nls = sdp_rx.make_vertices(model, 1)  # TODO Remove number of steps
