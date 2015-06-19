@@ -108,12 +108,16 @@ class NodeIOController(object):
             model.object_operators[node] = op
         elif f_of_t:
             # If the Node is a function of time then add a new value source for
-            # it.
-            vs = ValueSource(
-                node.output,
-                node.size_out,
-                getconfig(model.config, node, "function_of_time_period")
-            )
+            # it.  Determine the period by looking in the config, if the output
+            # is a constant then the period is dt (i.e., it repeats every
+            # timestep).
+            if not callable(node.output):
+                period = model.dt
+            else:
+                period = getconfig(model.config, node,
+                                   "function_of_time_period")
+
+            vs = ValueSource(node.output, node.size_out, period)
             self._f_of_t_nodes[node] = vs
             model.object_operators[node] = vs
         else:

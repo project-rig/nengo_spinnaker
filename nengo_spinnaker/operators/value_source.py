@@ -35,7 +35,7 @@ class ValueSource(object):
         """Create the vertices to be simulated on the machine."""
         # Create the system region
         self.system_region = SystemRegion(model.machine_timestep,
-                                          self.period, n_steps)
+                                          self.period is not None, n_steps)
 
         # Get all the outgoing signals to determine how big the size out is and
         # to build a list of keys.
@@ -125,7 +125,7 @@ class ValueSource(object):
 
         # Evaluate the node for this period of time
         if self.period is not None:
-            max_n = min(n_steps, self.period / simulator.dt)
+            max_n = min(n_steps, int(np.ceil(self.period / simulator.dt)))
         else:
             max_n = n_steps
 
@@ -159,7 +159,7 @@ class ValueSource(object):
                     v = conn.function(v)
 
                 output.append(np.dot(transform, v.T))
-            outputs.append(np.array(output).reshape(n_steps, -1))
+            outputs.append(np.array(output).reshape(max_n, -1))
 
         # Combine all of the output values to form a large matrix which we can
         # dump into memory.
@@ -173,6 +173,7 @@ class ValueSource(object):
         # Write the simulation values into memory
         for vertex in self.vertices:
             self.vertices_region_memory[vertex][self.system_region].seek(0)
+            self.system_region.n_steps = max_n
             self.system_region.write_subregion_to_file(
                 self.vertices_region_memory[vertex][self.system_region],
                 vertex.slice
