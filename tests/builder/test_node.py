@@ -114,7 +114,7 @@ class TestNodeIOController(object):
 
         # Assert that this added a new operator to the model
         assert model.object_operators[a].function is a.output
-        assert model.object_operators[a].period is None
+        assert model.object_operators[a].period is model.dt
 
         assert model.extra_operators == list()
 

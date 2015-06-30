@@ -44,5 +44,24 @@ def test_function_of_time_node():
             np.all(-0.48 <= data[index20:, 0]))
 
 
+def test_constant_node():
+    with nengo.Network("Test Network") as model:
+        in_val = nengo.Node([0.5])
+        pn = nengo.Node(size_in=1)
+        ens = nengo.Ensemble(100, 1)
+
+        nengo.Connection(in_val, pn)
+        nengo.Connection(pn, ens)
+
+        probe = nengo.Probe(ens, synapse=0.05)
+
+    sim = nengo_spinnaker.Simulator(model)
+    with sim:
+        sim.run(0.5)
+
+    assert 0.45 < sim.data[probe][-1] < 0.55
+
+
 if __name__ == "__main__":
     test_function_of_time_node()
+    test_constant_node()
