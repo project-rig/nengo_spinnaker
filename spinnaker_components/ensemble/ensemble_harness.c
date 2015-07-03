@@ -18,17 +18,17 @@
 
 /* Parameters and Buffers ***************************************************/
 ensemble_parameters_t g_ensemble;
-input_filter_t g_input;
-input_filter_t g_input_inhibitory;
-input_filter_t g_input_modulatory;
+struct input_filtering_collection g_input;
+struct input_filtering_collection g_input_inhibitory;
+struct input_filtering_collection g_input_modulatory;
 
 /* Multicast Wrapper ********************************************************/
 void mcpl_rx(uint key, uint payload) 
 {
   bool handled = false;
-  handled |= input_filter_mcpl_rx(&g_input, key, payload);
-  handled |= input_filter_mcpl_rx(&g_input_inhibitory, key, payload);
-  handled |= input_filter_mcpl_rx(&g_input_modulatory, key, payload);
+  handled |= input_filtering_input(&g_input, key, payload);
+  handled |= input_filtering_input(&g_input_inhibitory, key, payload);
+  handled |= input_filtering_input(&g_input_modulatory, key, payload);
 
   if(!handled)
   {
@@ -79,19 +79,15 @@ bool initialise_ensemble(region_system_t *pars) {
                       sizeof(value_t));
 
   // Setup subcomponents
-  g_ensemble.input = input_filter_initialise(&g_input, pars->n_input_dimensions);
-  if (g_ensemble.input == NULL)
-    return false;
+  input_filtering_initialise_output(&g_input, pars->n_input_dimensions);
+  g_ensemble.input = g_input.output;
 
-  io_printf(IO_BUF, "@\n");
-  if (pars->n_inhibitory_dimensions > 0) {
-    if (NULL == input_filter_initialise(
-          &g_input_inhibitory, pars->n_inhibitory_dimensions))
-      return false;
+  if (pars->n_inhibitory_dimensions > 0)
+  {
+    input_filtering_initialise_output(&g_input_inhibitory,
+                                      pars->n_inhibitory_dimensions);
   }
-  io_printf(IO_BUF, "@\n");
-  input_filter_initialise_no_accumulator(&g_input_modulatory);
-  io_printf(IO_BUF, "@\n");
+  input_filtering_initialise_output(&g_input_modulatory, 0);
 
   g_ensemble.output = initialise_output(pars);
   if (g_ensemble.output == NULL && g_n_output_dimensions > 0)

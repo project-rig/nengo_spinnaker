@@ -9,6 +9,6 @@
 # ----------------------------------------------------------------------------
 
 APP = nengo_filter
-SOURCES = filter_main.c ../common/input_filter.c
+SOURCES = filter_main.c ../common/input_filtering.c
 
 include ../Makefile.depend

@@ -9,5 +9,5 @@
 # ----------------------------------------------------------------------------
 
 APP = nengo_ensemble
-SOURCES = ensemble_main.c ensemble_data.c ensemble_harness.c ensemble_output.c ensemble_update.c ensemble_pes.c recording.c ../common/input_filter.c
+SOURCES = ensemble_main.c ensemble_data.c ensemble_harness.c ensemble_output.c ensemble_update.c ensemble_pes.c recording.c ../common/input_filtering.c
 include ../Makefile.depend

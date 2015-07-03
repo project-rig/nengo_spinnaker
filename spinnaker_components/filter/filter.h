@@ -14,7 +14,7 @@
 #define __FILTER_H__
 
 #include "spin1_api.h"
-#include "input_filter.h"
+#include "input_filtering.h"
 #include "nengo-common.h"
 
 #include "common-impl.h"

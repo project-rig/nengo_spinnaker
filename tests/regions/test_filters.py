@@ -1,33 +1,60 @@
-import math
 import mock
 import nengo
+import numpy as np
 import pytest
 import struct
 import tempfile
 
 from nengo_spinnaker.regions.filters import (
     FilterRegion, FilterRoutingRegion, LowpassFilter, NoneFilter,
-    make_filter_regions)
+    make_filter_regions, Filter)
 from nengo_spinnaker.utils.keyspaces import KeyspaceContainer
 from nengo_spinnaker.utils import type_casts as tp
 
 
+@pytest.mark.parametrize("width, latching, init_index, words",
+                         [(10, False, 0xDEAD, 3),
+                          (11, True, 0xCAFE, 5)])
+def test_filter_pack_into(width, latching, init_index, words):
+    class MyFilter(Filter):
+        def size_words(self):
+            return words
+
+        def method_index(self):
+            return init_index
+
+    # Create a filter instance, assert that it packs data correctly
+    fil = MyFilter(width, latching)
+    fil.pack_data = mock.Mock()
+
+    # Create a buffer to pack into
+    data = bytearray(100)
+    fil.pack_into(0.001, data, 5)
+
+    # Assert we were called correctly
+    fil.pack_data.assert_called_once_with(0.001, data, 21)
+
+    # Unpack, check that the values were fine
+    (n_words, init_method, size, flags) = struct.unpack_from("<4I", data, 5)
+    assert n_words == words
+    assert init_method == init_index
+    assert flags == (0x1 if latching else 0x0)
+    assert size == width
+
+
 class TestNoneFilter(object):
     """Test creating and writing out None filters."""
-    @pytest.mark.parametrize("width, latching", [(5, True), (10, False)])
-    def test_standard(self, width, latching):
-        nf = NoneFilter(width, latching)
+    def test_size_words(self):
+        f = NoneFilter(1, False)
+        assert f.size_words() == 0
 
-        # Pack the filter into some data
-        data = bytearray(nf.size)
-        nf.pack_into(0.001, data)
+    def test_pack_data(self):
+        f = NoneFilter(1, False)
 
-        # Check the values are sane
-        v1, v2, mask, size = struct.unpack("<4I", data)
-        assert v1 == 0
-        assert v2 == tp.value_to_fix(1.0)
-        assert mask == (0xffffffff if latching else 0x00000000)
-        assert size == width
+        # Packing into an empty array should be fine because there is nothing
+        # to pack
+        data = bytearray(0)
+        f.pack_data(0.001, data)
 
     @pytest.mark.parametrize("width, latching", [(5, True), (10, False)])
     def test_from_signal_and_connection(self, latching, width):
@@ -76,23 +103,23 @@ class TestNoneFilter(object):
 
 
 class TestLowpassFilter(object):
-    @pytest.mark.parametrize("width, latching, dt, tc",
-                             [(3, False, 0.001, 0.01), (1, True, 0.002, 0.2)])
-    def test_standard(self, width, latching, dt, tc):
-        """Test creating and writing out lowpass filters."""
-        lpf = LowpassFilter(width, latching, tc)
+    @pytest.mark.parametrize("tau, dt", [(0.01, 0.001), (0.03, 0.002)])
+    def test_pack_data(self, tau, dt):
+        # Create the filter
+        f = LowpassFilter(0, False, tau)
 
-        # Pack the filter into some data
-        data = bytearray(lpf.size)
-        lpf.pack_into(dt, data)
+        # Pack into an array
+        data = bytearray(8)
+        f.pack_data(dt, data, 0)
 
-        # Check the values are sane
-        v1, v2, mask, size = struct.unpack("<4I", data)
-        val = math.exp(-dt / tc)
-        assert v1 == tp.value_to_fix(val)
-        assert v2 == tp.value_to_fix(1 - val)
-        assert mask == (0xffffffff if latching else 0x00000000)
-        assert size == width
+        # Compute expected values
+        exp_a = tp.value_to_fix(np.exp(-dt / tau))
+        exp_b = tp.value_to_fix(1.0 - np.exp(-dt / tau))
+
+        # Unpack and check for accuracy
+        (a, b) = struct.unpack_from("<2I", data)
+        assert a == exp_a
+        assert b == exp_b
 
     @pytest.mark.parametrize("width, latching, tc",
                              [(3, False, 0.01), (1, True, 0.2)])
@@ -166,8 +193,9 @@ def test_filter_region():
     # Create the filter region
     fr = FilterRegion(fs, dt=0.001)
 
-    # The size should be correct
-    assert fr.sizeof() == 4 + 16 * len(fs)
+    # The size should be correct (count of words + header 1 + data 1 + header 2
+    # + data 2)
+    assert fr.sizeof() == 4 + 16 + 8 + 16 + 0
 
     # Check that the data is written out correctly
     fp = tempfile.TemporaryFile()
@@ -177,9 +205,9 @@ def test_filter_region():
     length, = struct.unpack("<I", fp.read(4))
     assert length == len(fs)
 
-    expected_data = bytearray(32)
+    expected_data = bytearray(fr.sizeof() - 4)
     fs[0].pack_into(fr.dt, expected_data)
-    fs[1].pack_into(fr.dt, expected_data, 16)
+    fs[1].pack_into(fr.dt, expected_data, (fs[0].size_words() + 4)*4)
     assert fp.read() == expected_data
 
 
@@ -217,7 +245,7 @@ def test_filter_routing_region():
     valid_d_mask = ksc["nengo"].get_mask(field="index")
 
     for _ in range(len(ks_routes)):
-        key, mask, i, d_mask = struct.unpack("<4I", fp.read(16))
+        key, mask, d_mask, i = struct.unpack("<4I", fp.read(16))
         assert mask == valid_mask, hex(mask) + " != " + hex(valid_mask)
         assert d_mask == valid_d_mask
 

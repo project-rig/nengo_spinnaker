@@ -13,7 +13,7 @@ void c_main(void) {
 
   // Get data
   data_get_bias(region_start(2, address), g_ensemble.n_neurons);
-  data_get_encoders(region_start(3, address), g_ensemble.n_neurons, g_input.n_dimensions);
+  data_get_encoders(region_start(3, address), g_ensemble.n_neurons, g_input.output_size);
   data_get_decoders(region_start(4, address), g_ensemble.n_neurons, g_n_output_dimensions);
   data_get_keys(region_start(5, address), g_n_output_dimensions);
 
@@ -30,16 +30,12 @@ void c_main(void) {
   }
 
   // Load subcomponents
-  if (!input_filter_get_filters(&g_input, region_start(6, address)) ||
-      !input_filter_get_filter_routes(&g_input, region_start(7, address)) ||
-      !input_filter_get_filters(&g_input_inhibitory, region_start(8, address)) ||
-      !input_filter_get_filter_routes(&g_input_inhibitory, region_start(9, address)) ||
-      !input_filter_get_filters(&g_input_modulatory, region_start(11, address)) ||
-      !input_filter_get_filter_routes(&g_input_modulatory, region_start(12, address))) 
-  {
-    io_printf(IO_BUF, "[Ensemble] Failed to start.\n");
-    return;
-  }
+  input_filtering_get_filters(&g_input, region_start(6, address));
+  input_filtering_get_routes(&g_input, region_start(7, address));
+  input_filtering_get_filters(&g_input_inhibitory, region_start(8, address));
+  input_filtering_get_routes(&g_input_inhibitory, region_start(9, address));
+  input_filtering_get_filters(&g_input_modulatory, region_start(11, address));
+  input_filtering_get_routes(&g_input_modulatory, region_start(12, address));
   
   if(!get_pes(region_start(13, address)))
   {

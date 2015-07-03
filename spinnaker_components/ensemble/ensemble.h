@@ -33,9 +33,8 @@
 #include "nengo_typedefs.h"
 #include "nengo-common.h"
 
-#include "dimensional-io.h"
 #include "recording.h"
-#include "input_filter.h"
+#include "input_filtering.h"
 
 /* Structs ******************************************************************/
 /** \brief Representation of system region. See ::data_system. */
@@ -82,9 +81,10 @@ extern uint g_output_period;       //!< Delay in transmitting decoded output
 
 extern uint g_n_output_dimensions;
 
-extern input_filter_t g_input;     //!< Input filters and buffers
-extern input_filter_t g_input_inhibitory;     //!< Input filters and buffers
-extern input_filter_t g_input_modulatory;     //!< Input filters and buffers
+extern struct input_filtering_collection
+  g_input,             //!< Input filters and buffers
+  g_input_inhibitory,  //!< Input filters and buffers
+  g_input_modulatory;  //!< Input filters and buffers
 
 /* Functions ****************************************************************/
 /**
@@ -110,7 +110,7 @@ void ensemble_update( uint arg0, uint arg1 );
 // -- Encoder(s) and decoder(s)
 //! Get the encoder value for the given neuron and dimension
 static inline value_t neuron_encoder( uint n, uint d )
-  { return g_ensemble.encoders[ n * g_input.n_dimensions + d ]; };
+  { return g_ensemble.encoders[n * g_input.output_size + d]; };
 
 static inline value_t neuron_decoder( uint n, uint d )
   { return g_ensemble.decoders[ n * g_n_output_dimensions + d ]; };
