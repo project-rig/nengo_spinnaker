@@ -18,6 +18,8 @@ void _none_filter_init(void *params, struct _if_filter *filter)
 {
   use(params);
 
+  debug(">> None filter\n");
+
   // We just need to set the function pointer for the step function.
   filter->step = _none_filter_step;
 }
@@ -50,6 +52,10 @@ void _lowpass_filter_init(void *params, struct _if_filter *filter)
   MALLOC_OR_DIE(filter->state, sizeof(struct _lowpass_state));
   spin1_memcpy(filter->state, params, sizeof(struct _lowpass_state));
 
+  debug(">> Lowpass filter (%k, %k)\n",
+            ((struct _lowpass_state *)filter->state)->a,
+            ((struct _lowpass_state *)filter->state)->b);
+
   // Store a reference to the step function
   filter->step = _lowpass_filter_step;
 }
@@ -73,6 +79,7 @@ void input_filtering_get_routes(
   // Copy in the number of routing entries
   filters->n_routes = routes[0];
   routes++;  // Advance the pointer to the first entry
+  debug("Loading %d filter routes\n", filters->n_routes);
 
   // Malloc sufficient room for the entries
   MALLOC_OR_DIE(filters->routes, filters->n_routes * sizeof(struct _if_route));
@@ -80,6 +87,17 @@ void input_filtering_get_routes(
   // Copy the entries across
   spin1_memcpy(filters->routes, routes,
                filters->n_routes * sizeof(struct _if_route));
+
+  // DEBUG: Print the route entries
+#ifdef DEBUG
+  for (uint32_t n = 0; n < filters->n_routes; n++)
+  {
+    io_printf(IO_BUF, "\tRoute[%d] = (0x%08x, 0x%08x) dmask=0x%08x => %d\n",
+              n, filters->routes[n].key, filters->routes[n].mask,
+              filters->routes[n].dimension_mask,
+              filters->routes[n].input_index);
+  }
+#endif
 }
 
 // Filter specification flags
@@ -112,6 +130,8 @@ void input_filtering_get_filters(
   MALLOC_OR_DIE(filters->filters, 
                 filters->n_filters * sizeof(struct _if_filter));
 
+  debug("Loading %d filters\n", filters->n_filters);
+
   // Move the "filters" pointer to the first element
   data++;
 
@@ -126,6 +146,8 @@ void input_filtering_get_filters(
 
     // Get the size of the filter, store it
     filters->filters[f].size = params->size;
+
+    debug("> Filter [%d] size = %d\n", f, params->size);
 
     // Initialise the input accumulator
     MALLOC_OR_DIE(filters->filters[f].input, sizeof(struct _if_input));

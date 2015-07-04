@@ -3,6 +3,17 @@
 #ifndef __NENGO_COMMON_H__
 #define __NENGO_COMMON_H__
 
+/* Debug messages */
+#ifdef DEBUG
+#define debug(MESSAGE, ...) \
+  do { \
+    io_printf(IO_BUF, "%s:%d " MESSAGE, __FILE__, __LINE__, ##__VA_ARGS__); \
+  } while (0)
+#else
+#define debug(MESSAGE, ...) \
+  do { } while(0)
+#endif
+
 /** \def __MALLOC_FAIL
  * Will malloc \a SIZE and save the return pointer in \a VAR.  Should the
  * malloc fail \a DESC and an explanation will be stored in IO_BUF and
