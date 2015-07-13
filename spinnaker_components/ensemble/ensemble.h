@@ -81,7 +81,7 @@ extern uint g_output_period;       //!< Delay in transmitting decoded output
 
 extern uint g_n_output_dimensions;
 
-extern struct input_filtering_collection
+extern if_collection_t
   g_input,             //!< Input filters and buffers
   g_input_inhibitory,  //!< Input filters and buffers
   g_input_modulatory;  //!< Input filters and buffers

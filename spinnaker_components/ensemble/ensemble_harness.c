@@ -18,9 +18,9 @@
 
 /* Parameters and Buffers ***************************************************/
 ensemble_parameters_t g_ensemble;
-struct input_filtering_collection g_input;
-struct input_filtering_collection g_input_inhibitory;
-struct input_filtering_collection g_input_modulatory;
+if_collection_t g_input;
+if_collection_t g_input_inhibitory;
+if_collection_t g_input_modulatory;
 
 /* Multicast Wrapper ********************************************************/
 void mcpl_rx(uint key, uint payload) 

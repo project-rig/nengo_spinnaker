@@ -2,7 +2,7 @@
 
 filter_parameters_t g_filter;
 uint delay_remaining;
-struct input_filtering_collection g_filters;
+if_collection_t g_filters;
 
 void filter_update(uint ticks, uint arg1) {
   use(arg1);

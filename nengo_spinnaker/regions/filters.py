@@ -1,4 +1,5 @@
 import nengo.synapses
+from nengo.utils.filter_design import cont2discrete
 import numpy as np
 from six import iteritems
 import struct
@@ -83,7 +84,8 @@ class FilterRegion(Region):
 
     def sizeof(self, *args):
         """Get the size of the filter region in bytes."""
-        # 1 word + the size of the each filter
+        # 1 word + the size of the each filter (which includes a mandatory 4
+        # words, which are the first 4 words in `filter_parameters_t`.)
         words = (1 + 4*len(self.filters) +
                  sum(f.size_words() for f in self.filters))
         return words * 4
@@ -115,7 +117,7 @@ class Filter(object):
                 self.width == other.width and
                 self.latching == other.latching)
 
-    def size_words(self):
+    def size_words(self):  # pragma: no cover
         """Get the number of words used to store the parameters for this
         filter.
         """
@@ -189,6 +191,52 @@ class LowpassFilter(Filter):
         b = 1.0 - a
         struct.pack_into("<2I", buffer, offset,
                          tp.value_to_fix(a), tp.value_to_fix(b))
+
+
+@FilterRegion.supported_filter_types.register(nengo.synapses.LinearFilter)
+class LinearFilter(Filter):
+    def __init__(self, width, latching, num, den):
+        """Create a new Linear Filter."""
+        super(LinearFilter, self).__init__(width, latching)
+        self.num = np.array(num)
+        self.den = np.array(den)
+        self.order = len(den) - 1
+
+    @classmethod
+    def from_signal_and_connection(cls, signal, connection, width=None):
+        if width is None:
+            width = connection.post_obj.size_in
+        return cls(width, signal.latching,
+                   connection.synapse.num, connection.synapse.den)
+
+    def method_index(self):
+        """Get the index into the array of filter functions."""
+        return 2
+
+    def size_words(self):
+        """Number of words required to represent the filter parameters."""
+        return 1 + self.order*2
+
+    def __eq__(self, other):
+        return (super(LinearFilter, self).__eq__(other) and
+                self.num.size == other.num.size and
+                self.den.size == other.den.size and
+                np.all(self.num == other.num) and
+                np.all(self.den == other.den))
+
+    def pack_data(self, dt, buffer, offset=0):
+        """Pack the struct describing the filter into the buffer."""
+        # Compute the filter coefficients
+        b, a, _ = cont2discrete((self.num, self.den), dt)
+        b = b.flatten()
+
+        # Strip out the first values
+        assert b[0] == 0.0  # Oops!
+        ab = np.vstack((a[1:], b[1:])).T.flatten()
+
+        # Convert the values to fixpoint and write into a data buffer
+        struct.pack_into("<I", buffer, offset, self.order)
+        buffer[offset + 4:4+self.order*8] = tp.np_to_fix(ab).tostring()
 
 
 class FilterRoutingRegion(Region):

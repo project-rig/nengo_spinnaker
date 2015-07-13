@@ -4,7 +4,7 @@ address_t rec_start, rec_curr;
 uint n_dimensions;
 value_t *input;
 
-struct input_filtering_collection g_input;
+if_collection_t g_input;
 
 void sink_update(uint ticks, uint arg1) {
   use(arg1);

@@ -2,7 +2,7 @@
 
 sdp_tx_parameters_t g_sdp_tx;
 uint delay_remaining;
-struct input_filtering_collection g_input;
+if_collection_t g_input;
 
 void sdp_tx_update(uint ticks, uint arg1) {
   use(arg1);

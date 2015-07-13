@@ -1,5 +1,6 @@
 import mock
 import nengo
+from nengo.utils.filter_design import cont2discrete
 import numpy as np
 import pytest
 import struct
@@ -7,7 +8,7 @@ import tempfile
 
 from nengo_spinnaker.regions.filters import (
     FilterRegion, FilterRoutingRegion, LowpassFilter, NoneFilter,
-    make_filter_regions, Filter)
+    LinearFilter, make_filter_regions, Filter)
 from nengo_spinnaker.utils.keyspaces import KeyspaceContainer
 from nengo_spinnaker.utils import type_casts as tp
 
@@ -182,6 +183,103 @@ class TestLowpassFilter(object):
 
         nf = NoneFilter(5, True)
         assert lpf != nf and nf != lpf
+
+
+class TestLinearFilter(object):
+    @pytest.mark.parametrize(
+        "num, den, dt, order",
+        [([1.0], [0.3, 1.0], 0.001, 1),
+         ([1.0], [0.03, 0.4, 1.0], 0.01, 2),
+         ]
+    )
+    def test_pack_data(self, num, den, dt, order):
+        # Create the filter
+        lf = LinearFilter(0, False, num, den)
+
+        # Create a buffer to pack data into
+        data = bytearray((order*2 + 1)*4)
+
+        # Pack the parameters
+        lf.pack_data(dt, data, 0)
+
+        # Generate what we expect the data to look like
+        numd, dend, _ = cont2discrete((num, den), dt)
+        numd = numd.flatten()
+        exp = list()
+        for a, b in zip(dend[1:], numd[1:]):
+            exp.append(a)
+            exp.append(b)
+        expected_data = tp.np_to_fix(np.array(exp)).tostring()
+
+        # Check that's what we get
+        assert struct.unpack_from("<I", data, 0)[0] == order
+        assert data[4:] == expected_data
+
+    def test_from_signal_and_connection_force_width(self):
+        # Create the mock signal and connection
+        signal = mock.Mock(name="signal", spec_set=["latching"])
+        signal.latching = True
+
+        with nengo.Network():
+            a = nengo.Ensemble(100, 3)
+            b = nengo.Ensemble(100, 3)
+            connection = nengo.Connection(
+                a, b, synapse=nengo.LinearFilter([1.0], [0.5, 1.0])
+            )
+
+        # Create the filter
+        lpf = LinearFilter.from_signal_and_connection(signal, connection,
+                                                      width=2)
+        assert lpf == LinearFilter(2, True, [1.0], [0.5, 1.0])
+
+    @pytest.mark.parametrize(
+        "latching, num, den",
+        [(True, [1.0, 0.5], [1.0, 0.5, 0.25]),
+         (False, [1.0], [0.5, 0.25]),
+         ]
+    )
+    def test_from_signal_and_connection_with_slice(self, latching, num, den):
+        # Create the mock signal and connection
+        signal = mock.Mock(name="signal", spec_set=["latching"])
+        signal.latching = latching
+
+        with nengo.Network():
+            a = nengo.Ensemble(100, 1)
+            b = nengo.Ensemble(100, 2)
+            connection = nengo.Connection(a, b[1],
+                                          synapse=nengo.LinearFilter(num, den))
+
+        # Create the filter
+        lpf = LinearFilter.from_signal_and_connection(signal, connection)
+        assert lpf == LinearFilter(2, latching, num, den)
+
+    def test_method_index(self):
+        lf = LinearFilter(0, False, [1.0], [1.0, 0.5])
+        assert lf.method_index() == 2
+
+    @pytest.mark.parametrize(
+        "num, den, size_words",
+        [([1.0], [1.0], 1),
+         ([1.0], [0.1, 1.0], 3),
+         ([1.0], [0.1, 0.1, 1.0], 5),
+         ]
+    )
+    def test_size_words(self, num, den, size_words):
+        lf = LinearFilter(0, False, num, den)
+        assert lf.size_words() == size_words
+
+    def test_eq(self):
+        # Check that linear filters are equal iff. they share a numerator and
+        # denominator.
+        lpf = LowpassFilter(0, False, 0.1)
+        lf1 = LinearFilter(0, False, [1.0], [0.1, 0.2])
+        lf2 = LinearFilter(0, False, [1.0], [0.1, 0.3])
+        lf3 = LinearFilter(0, False, [1.0], [0.1, 0.2])
+
+        assert lf1 != lpf
+        assert lf2 != lf1
+        assert lf3 != lf2
+        assert lf3 == lf1
 
 
 def test_filter_region():

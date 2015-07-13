@@ -22,14 +22,14 @@
  * We assume that each filter has ONE input vector and ONE output vector.  When
  * packets are received their keys are used to determine to which input buffer
  * they should be added and to which component of these buffers.  This routing
- * is performed by accessing a list of `_if_route`s and from this extracting
+ * is performed by accessing a list of `if_route_t`s and from this extracting
  * the index of the input vector and component.
  *
  * (2) Applying filters
  * --------------------
  *
  * Each filter has an input vector, an output vector and some filter-specific
- * state.  This is encapsulated in `_if_filter`.  A filter can be simulated by
+ * state.  This is encapsulated in `if_filter_t`.  A filter can be simulated by
  * calling `_if_filter_step`, this will update the output vector and (if
  * necessary) reset the input vector so that it can accumulate new values.  The
  * specific function called to apply the filter is stored internally in the
@@ -62,27 +62,27 @@ typedef void (*FilterStep)(uint32_t, value_t*, value_t*, void*);
 
 /* An input accumulator.
  */
-struct _if_input
+typedef struct _if_accumulator_t
 {
   value_t *value;  // Value of the accumulator
   uint32_t mask;   // Mask used to make the accumulator latching or otherwise
-};
+} if_accumulator_t;
 
 /* A pair of input and output which are are joined by a filter function. */
-struct _if_filter
+typedef struct _if_filter_t
 {
-  struct _if_input *input;  // Input accumulator
+  if_accumulator_t *input;  // Input accumulator
   value_t *output;          // Output value
   uint32_t size;            // Size of input and output vectors
   void *state;              // State maintained by the filter
 
   FilterStep step;  // Filter evaluation function
-};
+} if_filter_t;
 
-typedef void (*FilterInit)(void *, struct _if_filter*);
+typedef void (*FilterInit)(void *, if_filter_t*, uint32_t size);
 
 /* Apply new or additional input to a filter. */
-static inline void _if_filter_input(struct _if_filter *filter,
+static inline void _if_filter_input(if_filter_t *filter,
                                     uint32_t dimension,
                                     value_t value)
 {
@@ -94,7 +94,7 @@ static inline void _if_filter_input(struct _if_filter *filter,
 }
 
 /* Simulate one step of a filter and reset its accumulator if necessary */
-static inline void _if_filter_step(struct _if_filter* filter)
+static inline void _if_filter_step(if_filter_t* filter)
 {
   // Apply the simulation step
   filter->step(filter->size, filter->input->value,
@@ -112,7 +112,7 @@ static inline void _if_filter_step(struct _if_filter* filter)
 /* A pseudo routing table entry which can be used to determine which input a
  * packet should be included in.
  */
-struct _if_route
+typedef struct _if_route_t
 {
   uint32_t key;   // Key against which to compare the received packet
   uint32_t mask;  // Mask against which to compare the received packet
@@ -120,31 +120,31 @@ struct _if_route
   uint32_t dimension_mask;  // Mask to extract the index of the component
 
   uint32_t input_index; // Index of the input add the packet to
-};
+} if_route_t;
 
 /* A collection of filters which share routing information (and possibly an
  * accumulated output value).
  */
-struct input_filtering_collection
+typedef struct _if_collection_t
 {
   // Mandatory components
   uint32_t n_filters;  // Number of filters
   uint32_t n_routes;   // Number of routing entries
-  struct _if_filter *filters;  // Filters
-  struct _if_route *routes;    // Packet to filter routes
+  if_filter_t *filters;  // Filters
+  if_route_t *routes;    // Packet to filter routes
 
   // Optional components
   uint32_t output_size;  // Size of output vector (may be 0)
   value_t *output;       // Output vector (may be NULL)
-};
+} if_collection_t;
 
 /* Include the value of a packet in a filter's input.  Returns true if the
  * packet matched any routing entries, otherwise returns false.
  */
 static inline bool input_filtering_input(
-    struct input_filtering_collection* filters, uint32_t key, uint32_t payload)
+    if_collection_t* filters, uint32_t key, uint32_t payload)
 {
-  struct _if_route route;
+  if_route_t route;
 
   // Look at all the routing entries, if we match an entry then include the
   // packet in the indicated input vector.
@@ -168,16 +168,18 @@ static inline bool input_filtering_input(
 
 /* Apply all filter steps but DO NOT accumulate their outputs. */
 static inline void input_filtering_step_no_accumulate(
-    struct input_filtering_collection *filters)
+    if_collection_t *filters)
 {
   // Apply the filter step for each filter in the collection.
   for (uint32_t n = 0; n < filters->n_filters; n++)
+  {
     _if_filter_step(&filters->filters[n]);
+  }
 }
 
 /* Apply all filter steps and accumulate their outputs. */
 static inline void input_filtering_step(
-    struct input_filtering_collection *filters)
+    if_collection_t *filters)
 {
   // Apply all the filter step functions
   input_filtering_step_no_accumulate(filters);
@@ -190,7 +192,9 @@ static inline void input_filtering_step(
 
     // Include each filter in turn
     for (uint32_t n = 0; n < filters->n_filters; n++)
+    {
       filters->output[d] += filters->filters[n].output[d];
+    }
   }
 }
 
@@ -200,7 +204,7 @@ static inline void input_filtering_step(
  * indicating the number of entries.
  */
 void input_filtering_get_routes(
-    struct input_filtering_collection *filters,
+    if_collection_t *filters,
     uint32_t *routes);
 
 /* Copy in a set of filters.
@@ -211,7 +215,7 @@ void input_filtering_get_routes(
  * which can be interpreted by the appropriate initialisation function.
  */
 void input_filtering_get_filters(
-    struct input_filtering_collection *filters,
+    if_collection_t *filters,
     uint32_t *data);
 
 /* Initialise a filter collection with an output accumulator.
@@ -219,7 +223,7 @@ void input_filtering_get_filters(
  * Use zero to indicate that no output accumulator should be assigned.
  */
 void input_filtering_initialise_output(
-    struct input_filtering_collection *filters,
+    if_collection_t *filters,
     uint32_t n_dimensions);
 
 #endif
