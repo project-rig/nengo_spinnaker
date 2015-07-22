@@ -62,6 +62,32 @@ def test_constant_node():
     assert 0.45 < sim.data[probe][-1] < 0.55
 
 
+def test_f_of_t_node_with_outgoing_function():
+    with nengo.Network() as model:
+        a = nengo.Node(0.0)
+        b = nengo.Node(size_in=2)
+        c = nengo.Ensemble(100, 2)
+
+        output = nengo.Probe(c, synapse=0.01)
+
+        nengo.Connection(a, b, function=lambda x: [np.sin(x), 1], synapse=None)
+        nengo.Connection(b, c, synapse=None)
+
+    # Simulate and ensure that the output is [0, 1] towards the end of the
+    # simulation
+    sim = nengo_spinnaker.Simulator(model)
+    with sim:
+        sim.run(0.5)
+
+    from matplotlib import pyplot as plt
+    plt.plot(sim.trange(), sim.data[output])
+    plt.savefig("test_f_t.png")
+
+    assert -0.05 < sim.data[output][-1, 0] < 0.05
+    assert 0.95 < sim.data[output][-1, 1] < 1.05
+
+
 if __name__ == "__main__":
     test_function_of_time_node()
     test_constant_node()
+    test_f_of_t_node_with_outgoing_function()
