@@ -87,7 +87,7 @@ void ensemble_update(uint ticks, uint arg1) {
       }
 
       // Record that the spike occurred
-      record_spike(&g_ensemble.recd, n);
+      record_spike(&g_ensemble.record_spikes, n);
 
       // Notify PES that neuron has spiked
       pes_neuron_spiked(n);
@@ -107,5 +107,5 @@ void ensemble_update(uint ticks, uint arg1) {
   }
 
   // Flush the recording buffer
-  record_buffer_flush(&g_ensemble.recd);
+  record_buffer_flush(&g_ensemble.record_spikes);
 }

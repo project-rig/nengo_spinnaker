@@ -73,7 +73,7 @@ typedef struct ensemble_parameters {
   value_t *input;           //!< Input buffer
   value_t *output;          //!< Output buffer
 
-  recording_buffer_t recd;  //!< Spike recording
+  recording_buffer_t record_spikes;  //!< Spike recording
 } ensemble_parameters_t;
 
 /* Parameters and Buffers ***************************************************/
