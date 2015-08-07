@@ -15,6 +15,7 @@
 #include <stdbool.h>
 #include "spin1_api.h"
 #include "common-typedefs.h"
+#include "nengo_typedefs.h"
 #include "nengo-common.h"
 #include <string.h>
 
@@ -76,6 +77,35 @@ static inline void record_spike(recording_buffer_t *buffer, uint32_t n_neuron)
   // We write to the buffer regardless of whether recording is desired or not
   // in order to reduce branching.
   buffer->buffer[n_neuron >> 5] |= 1 << (n_neuron & 0x1f);
+}
+
+/*****************************************************************************/
+/* Voltage specific functions.
+ *
+ * As membrane potential in the normalised LIF implementation is clipped to [0,
+ * 1] we can discard the most significant 16 bits of the S16.15 representation
+ * to use U1.15 to represent the voltage without any loss.
+ */
+
+/*!\brief Initialise a new recording buffer for recording voltages
+ */
+bool record_buffer_initialise_voltages(
+  recording_buffer_t *buffer,
+  address_t region,
+  uint n_blocks,
+  uint n_neurons
+);
+
+/*!\brief Record a voltage for the given neuron.
+ */
+static inline void record_voltage(
+    recording_buffer_t *buffer, uint32_t n_neuron, value_t voltage
+)
+{
+  // Cast the recording buffer to U1.15 and then store the voltage in this
+  // form.
+  uint16_t *data = (uint16_t *) buffer->buffer;
+  data[n_neuron] = bitsk(voltage) & 0xffff;
 }
 
 #endif

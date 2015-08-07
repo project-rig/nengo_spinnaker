@@ -37,6 +37,13 @@
 #include "recording.h"
 #include "input_filter.h"
 
+/** \brief Configuration flags for Ensemble applications. */
+enum
+{
+  RECORD_SPIKES   = (1 << 0),
+  RECORD_VOLTAGES = (1 << 1),
+} EnsembleFlags;
+
 /* Structs ******************************************************************/
 /** \brief Representation of system region. See ::data_system. */
 typedef struct region_system 
@@ -47,7 +54,7 @@ typedef struct region_system
   uint machine_timestep;
   uint t_ref;
   value_t exp_dt_over_t_rc;
-  bool record_spikes;
+  uint32_t flags;
   uint n_inhibitory_dimensions;
 } region_system_t;
 
@@ -73,7 +80,8 @@ typedef struct ensemble_parameters {
   value_t *input;           //!< Input buffer
   value_t *output;          //!< Output buffer
 
-  recording_buffer_t record_spikes;  //!< Spike recording
+  recording_buffer_t record_spikes;    //!< Spike recording
+  recording_buffer_t record_voltages;  //!< Voltage recording
 } ensemble_parameters_t;
 
 /* Parameters and Buffers ***************************************************/

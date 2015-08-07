@@ -45,3 +45,28 @@ bool record_buffer_initialise_spikes(
   // Use this to create the recording buffer
   return record_buffer_initialise(buffer, region, n_blocks, block_length);
 };
+
+/*****************************************************************************/
+/* Voltage specific functions.
+ *
+ * As membrane potential in the normalised LIF implementation is clipped to [0,
+ * 1] we can discard the most significant 16 bits of the S16.15 representation
+ * to use U1.15 to represent the voltage without any loss.
+ */
+
+/*!\brief Initialise a new recording buffer for recording voltages
+ */
+bool record_buffer_initialise_voltages(
+  recording_buffer_t *buffer,
+  address_t region,
+  uint n_blocks,
+  uint n_neurons
+)
+{
+  // Compute the block length. We allow for 1 short per neuron and then round
+  // up to an integral number of words.
+  uint32_t block_length = (n_neurons >> 1) + (n_neurons & 0x1);
+
+  // Use this to create the recording buffer
+  return record_buffer_initialise(buffer, region, n_blocks, block_length);
+}

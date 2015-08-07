@@ -91,7 +91,13 @@ void ensemble_update(uint ticks, uint arg1) {
 
       // Notify PES that neuron has spiked
       pes_neuron_spiked(n);
+
+      // Ensure the voltage is zeroed before we record it
+      v_voltage = 0.0k;
     }
+
+    // Record the neuron voltage
+    record_voltage(&g_ensemble.record_voltages, n, v_voltage);
   }
 
   // Transmit decoded Ensemble representation
@@ -106,6 +112,7 @@ void ensemble_update(uint ticks, uint arg1) {
     gp_output_values[output_index] = 0;
   }
 
-  // Flush the recording buffer
+  // Flush the recording buffers
   record_buffer_flush(&g_ensemble.record_spikes);
+  record_buffer_flush(&g_ensemble.record_voltages);
 }

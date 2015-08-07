@@ -96,13 +96,26 @@ class EnsembleLIF(object):
             output_keys, fields=[regions.KeyField({'cluster': 'cluster'})]
         )
 
-        # Create the spike region if necessary
-        if self.local_probes:
-            self.spike_region = SpikeRegion(n_steps)
-            self.probe_spikes = True
-        else:
-            self.spike_region = None
-            self.probe_spikes = False
+        # Create the recording regions for locally situated probes
+        self.spike_region = None
+        self.probe_spikes = False
+        self.voltage_region = None
+        self.probe_voltages = False
+
+        for probe in self.local_probes:
+            # For each probe determine which regions and flags should be set
+            if probe.attr in ("output", "spikes"):
+                # If spikes are being probed then ensure that the flag is set
+                # and a region exists.
+                if not self.probe_spikes:
+                    self.spike_region = SpikeRegion(n_steps)
+                    self.probe_spikes = True
+            elif probe.attr in ("voltage"):
+                # If voltages are being probed then ensure that the flag is set
+                # and a region exists.
+                if not self.probe_voltages:
+                    self.voltage_region = VoltageRegion(n_steps)
+                    self.probe_voltages = True
 
         # Create the regions list
         self.regions = [
@@ -112,7 +125,8 @@ class EnsembleLIF(object):
                          self.ensemble.neuron_type.tau_ref,
                          self.ensemble.neuron_type.tau_rc,
                          model.dt,
-                         self.probe_spikes
+                         self.probe_spikes,
+                         self.probe_voltages
                          ),
             self.bias_region,
             self.encoders_region,
@@ -128,6 +142,7 @@ class EnsembleLIF(object):
             self.pes_region,
             None,
             self.spike_region,
+            self.voltage_region,
         ]
 
         # Partition the ensemble and get a list of vertices to load to the
@@ -174,6 +189,8 @@ class EnsembleLIF(object):
         """Load the ensemble data into memory."""
         # For each slice
         self.spike_mem = dict()
+        self.voltage_mem = dict()
+
         for vertex in self.vertices:
             # Layout the slice of SDRAM we have been given
             region_memory = regions.utils.create_app_ptr_and_region_files(
@@ -188,6 +205,8 @@ class EnsembleLIF(object):
                         mem, vertex.slice, cluster=vertex.cluster)
                 elif region is self.spike_region and self.probe_spikes:
                     self.spike_mem[vertex] = mem
+                elif region is self.voltage_region and self.probe_voltages:
+                    self.voltage_mem[vertex] = mem
                 else:
                     region.write_subregion_to_file(mem, vertex.slice)
 
@@ -211,7 +230,7 @@ class EnsembleLIF(object):
                 spike_data.frombytes(mem.read())
                 n_neurons = vertex.slice.stop - vertex.slice.start
 
-                bpf = self.spike_region.bytes_per_frame(vertex.slice)*8
+                bpf = self.spike_region.bytes_per_frame(n_neurons)*8
                 spikes = (spike_data[n*bpf:n*bpf + n_neurons] for n in
                           range(n_steps))
 
@@ -222,6 +241,9 @@ class EnsembleLIF(object):
             # Store the data associated with every probe, applying the sampling
             # and slicing specified for the probe.
             for p in self.local_probes:
+                if p.attr not in ("output", "spikes"):
+                    continue
+
                 if p.sample_every is None:
                     sample_every = 1
                 else:
@@ -234,10 +256,62 @@ class EnsembleLIF(object):
 
                 simulator.data[p] = probed_spikes[::sample_every, neuron_slice]
 
+        # If we have probed the voltages then retrieve the probed data and
+        # store it in the simulator data.
+        if self.probe_voltages:
+            # Prepare a buffer to store the probed voltages
+            probed_voltages = np.zeros((n_steps, self.ensemble.n_neurons))
+
+            # Read back the voltage for each vertex
+            for vertex in self.vertices:
+                # Get the region of memory to read for this vertex
+                mem = self.voltage_mem[vertex]
+                mem.seek(0)
+
+                # Determine how many bytes to read back
+                n_neurons = vertex.slice.stop - vertex.slice.start
+                n_bytes = (self.voltage_region.bytes_per_frame(n_neurons) *
+                           n_steps)
+
+                # Read back the voltage data, unlike the majority of values the
+                # voltages are stored as U1.15 which means we read them back as
+                # UINT16s before converting to floats.
+                voltage_data = np.frombuffer(mem.read(n_bytes),
+                                             dtype=np.uint16)
+                voltages = tp.fix_to_np(voltage_data)
+                voltages.shape = (n_steps, -1)
+
+                # Store the voltage data into the probed voltages
+                probed_voltages[:, vertex.slice] = voltages[:, vertex.slice]
+
+            # Store the data associated with every probe, applying the sampling
+            # and slicing specified for the probe.
+            for p in self.local_probes:
+                if p.attr != "voltage":
+                    continue
+
+                if p.sample_every is None:
+                    sample_every = 1
+                else:
+                    sample_every = p.sample_every / simulator.dt
+
+                if not isinstance(p.target, ObjView):
+                    neuron_slice = slice(None)
+                else:
+                    neuron_slice = p.target.slice
+
+                probe_data = probed_voltages[::sample_every, neuron_slice]
+                if p not in simulator.data:
+                    simulator.data[p] = probe_data
+                else:
+                    simulator.data[p] = np.hstack((simulator.data[p],
+                                                   probe_data))
+
 
 class SystemRegion(collections.namedtuple(
     "SystemRegion", "n_input_dimensions, n_output_dimensions, "
-                    "machine_timestep, t_ref, t_rc, dt, probe_spikes")):
+                    "machine_timestep, t_ref, t_rc, dt, probe_spikes, "
+                    "probe_voltages")):
     """Region of memory describing the general parameters of a LIF ensemble."""
 
     def sizeof(self, vertex_slice=slice(None)):
@@ -252,6 +326,16 @@ class SystemRegion(collections.namedtuple(
         """Write the system region for a specific vertex slice to a file-like
         object.
         """
+        # Prepare the flags, these indicate any additional tasks to be
+        # performed by the executable.
+        flags = 0x0
+
+        if self.probe_spikes:
+            flags |= 1 << 0
+
+        if self.probe_voltages:
+            flags |= 1 << 1
+
         # The value -e^(-dt / tau_rc) is precomputed and is scaled down ever so
         # slightly to account for the effects of fixed point.  The result is
         # that the tuning curves of SpiNNaker neurons are usually within 5Hz of
@@ -261,7 +345,6 @@ class SystemRegion(collections.namedtuple(
         # plotting the results and stopping when the ideal tuning curve was
         # very closely matched by the SpiNNaker tuning curve - further
         # improvement of this factor may be possible.
-
         n_neurons = vertex_slice.stop - vertex_slice.start
         data = struct.pack(
             "<8I",
@@ -271,7 +354,7 @@ class SystemRegion(collections.namedtuple(
             self.machine_timestep,
             int(self.t_ref // self.dt),  # tau_ref expressed as in ticks
             tp.value_to_fix(-np.expm1(-self.dt / self.t_rc) * (1.0 - 2**-11)),
-            (0x1 if self.probe_spikes else 0x0),
+            flags,
             1
         )
         fp.write(data)
@@ -327,19 +410,28 @@ def get_decoders_and_keys(model, signals_connections, minimise=False):
     return decoders, keys
 
 
-class SpikeRegion(regions.Region):
-    """Region used to record spikes."""
+class RecordingRegion(regions.Region):
     def __init__(self, n_steps):
         self.n_steps = n_steps
 
     def sizeof(self, vertex_slice):
         # Get the number of words per frame
-        return self.bytes_per_frame(vertex_slice) * self.n_steps
-
-    def bytes_per_frame(self, vertex_slice):
         n_neurons = vertex_slice.stop - vertex_slice.start
-        words_per_frame = n_neurons//32 + (1 if n_neurons % 32 else 0)
-        return 4 * words_per_frame
+        return self.bytes_per_frame(n_neurons) * self.n_steps
 
     def write_subregion_to_file(self, *args, **kwargs):  # pragma: no cover
         pass  # Nothing to do
+
+
+class SpikeRegion(RecordingRegion):
+    """Region used to record spikes."""
+    def bytes_per_frame(self, n_neurons):
+        words_per_frame = n_neurons//32 + (1 if n_neurons % 32 else 0)
+        return 4 * words_per_frame
+
+
+class VoltageRegion(RecordingRegion):
+    """Region used to record neuron input voltages."""
+    def bytes_per_frame(self, n_neurons):
+        words_per_frame = n_neurons // 2 + n_neurons % 2
+        return 4 * words_per_frame

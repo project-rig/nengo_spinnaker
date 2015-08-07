@@ -43,7 +43,8 @@ bool initialise_ensemble(region_system_t *pars) {
   g_ensemble.machine_timestep = pars->machine_timestep;
   g_ensemble.t_ref = pars->t_ref;
   g_ensemble.exp_dt_over_t_rc = pars->exp_dt_over_t_rc;
-  g_ensemble.record_spikes.record = pars->record_spikes;
+  g_ensemble.record_spikes.record = pars->flags & RECORD_SPIKES;
+  g_ensemble.record_voltages.record = pars->flags & RECORD_VOLTAGES;
   g_ensemble.n_inhib_dims = pars->n_inhibitory_dimensions;
 
   io_printf(IO_BUF, "[Ensemble] INITIALISE_ENSEMBLE n_neurons = %d," \

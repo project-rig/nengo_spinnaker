@@ -58,6 +58,16 @@ void c_main(void) {
     return;
   }
 
+  if (!record_buffer_initialise_voltages(
+        &g_ensemble.record_voltages, region_start(16, address),
+        simulation_ticks, g_ensemble.n_neurons
+       )
+     )
+  {
+    io_printf(IO_BUF, "[Ensemble] Failed to start.\n");
+    return;
+  }
+
   // Setup timer tick, start
   io_printf(IO_BUF, "[Ensemble] C_MAIN Set timer and spin1_start.\n");
   spin1_set_timer_tick(g_ensemble.machine_timestep);
@@ -74,8 +84,9 @@ void c_main(void) {
     // Determine how long to simulate for
     config_get_n_ticks();
 
-    // Reset the spike recording region
+    // Reset the recording regions
     record_buffer_reset(&g_ensemble.record_spikes);
+    record_buffer_reset(&g_ensemble.record_voltages);
 
     // Perform the simulation
     io_printf(IO_BUF, ">>>>> Running for %d steps\n", simulation_ticks);
