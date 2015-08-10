@@ -121,7 +121,7 @@ class EnsembleLIF(object):
         if getconfig(model.config, self.ensemble, "profile", False):
             # Try and get number of samples from config
             num_profiler_samples = getconfig(model.config, self.ensemble,
-                                                  "profile_num_samples")
+                                             "profile_num_samples")
 
             # If it's not specified, calculate sensible default
             if num_profiler_samples is None:
@@ -279,6 +279,7 @@ class EnsembleLIF(object):
                 simulator.profiler_data[self.ensemble] =\
                     self.profiler_region.read_from_mem(
                         mem, EnsembleLIF.profiler_tag_names)
+
 
 class SystemRegion(collections.namedtuple(
     "SystemRegion", "n_input_dimensions, n_output_dimensions, "

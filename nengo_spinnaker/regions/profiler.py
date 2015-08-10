@@ -5,6 +5,7 @@ from .region import Region
 
 MS_SCALE = (1.0 / 200032.4)
 
+
 class Profiler(Region):
     """Region used to record spikes."""
     def __init__(self, n_samples):
@@ -24,12 +25,14 @@ class Profiler(Region):
         # Read these from memory
         data = np.fromstring(mem.read(word_written * 4), dtype=np.uint64)
 
-        # Create 32-bit view of data and slice this to seperate times, tags and flags
+        # Create 32-bit view of data and slice
+        # this to seperate times, tags and flags
         data_view = data.view(np.uint32)
         sample_times = data_view[::2]
         sample_tags_and_flags = data_view[1::2]
 
-        # Further split the tags and flags word into seperate arrays of tags and flags
+        # Further split the tags and flags word
+        # into seperate arrays of tags and flags
         sample_tags = np.bitwise_and(sample_tags_and_flags, 0x7FFFFFFF)
         sample_flags = np.right_shift(sample_tags_and_flags, 31)
 
@@ -58,12 +61,14 @@ class Profiler(Region):
             tag_entry_indices = np.where(entry_tags == tag)
             tag_exit_indices = np.where(exit_tags == tag)
 
-            # If they do occur
-            if len(tag_entry_indices[0]) > 0 and len(tag_exit_indices[0]) > 0:
-                # Use these to get subset for this tag
-                tag_entry_times_ms = entry_times_ms[tag_entry_indices]
-                tag_exit_times_ms = exit_times_ms[tag_exit_indices]
+            # Use these to get subset for this tag
+            tag_entry_times_ms = entry_times_ms[tag_entry_indices]
+            tag_exit_times_ms = exit_times_ms[tag_exit_indices]
 
+            # If both these subsets aren't empty
+            num_entry_times = len(tag_entry_times_ms)
+            num_exit_times = len(tag_exit_times_ms)
+            if num_entry_times > 0 and num_exit_times > 0:
                 # If the first exit is before the first
                 # Entry, add a dummy entry at beginning
                 if tag_exit_times_ms[0] < tag_entry_times_ms[0]:
@@ -72,12 +77,15 @@ class Profiler(Region):
 
                 if len(tag_entry_times_ms) > len(tag_exit_times_ms):
                     print "WARNING: profile finishes mid-tag"
-                    tag_entry_times_ms = tag_entry_times_ms[:len(tag_exit_times_ms)-len(tag_entry_times_ms)]
+                    tag_entry_times_ms =\
+                        tag_entry_times_ms[:num_exit_times - num_entry_times]
 
                 # Subtract entry times from exit times to get durations of each call
-                tag_durations_ms = np.subtract(tag_exit_times_ms, tag_entry_times_ms)
+                tag_durations_ms = np.subtract(
+                    tag_exit_times_ms, tag_entry_times_ms)
 
                 # Add entry times and durations to dictionary
-                tag_dictionary[tag_names[tag]] = (tag_entry_times_ms, tag_durations_ms)
+                tag_dictionary[tag_names[tag]] = (
+                    tag_entry_times_ms, tag_durations_ms)
 
         return tag_dictionary

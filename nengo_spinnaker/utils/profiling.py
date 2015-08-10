@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def print_summary(profiling_data, duration):
     ms_time_bins = np.arange(duration * 1000.0)
 
