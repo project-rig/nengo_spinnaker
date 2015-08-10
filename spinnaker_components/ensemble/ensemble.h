@@ -41,14 +41,15 @@
 /** \brief Representation of system region. See ::data_system. */
 typedef struct region_system 
 {
-  uint n_input_dimensions;
-  uint n_output_dimensions;
-  uint n_neurons;
-  uint machine_timestep;
-  uint t_ref;
+  uint32_t n_input_dimensions;
+  uint32_t n_output_dimensions;
+  uint32_t n_neurons;
+  uint32_t machine_timestep;
+  uint32_t t_ref;
   value_t exp_dt_over_t_rc;
-  bool record_spikes;
-  uint n_inhibitory_dimensions;
+  uint32_t record_spikes;
+  uint32_t n_inhibitory_dimensions;
+  uint32_t num_profiler_samples;
 } region_system_t;
 
 /** \brief Shared ensemble parameters.

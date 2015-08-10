@@ -4,7 +4,8 @@
 ##
 ## Copyright (C)   The University of Manchester - 2013
 ##
-## (Heavily) based on a Makefile by Steve Temple.  Bastardised by Andrew Mundy.
+## (Heavily) based on a Makefile by Steve Temple.
+## Bastardised by Andrew Mundy, then some more by James Knight
 ##
 ##------------------------------------------------------------------------------
 
@@ -137,9 +138,17 @@ LS  := \ls -l
 
 # Build the application
 
-# Construct the list of objects from the list of targets.
+# Get absolute path of THIS make file i.e. the spinnaker_components directory
+SPINNAKER_COMPONENTS := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 
-OBJECTS=$(SOURCES:.c=.o)
+# Get absolute paths of sources
+ABSOLUTE_SOURCES = $(abspath $(SOURCES))
+
+# Make these relative to the spinnaker_components directory
+RELATIVE_SOURCES := $(ABSOLUTE_SOURCES:$(SPINNAKER_COMPONENTS)/%.c=%.c)
+
+# Construct the list of objects to build - in subdirectories beneath $(BUILDDIR)
+OBJECTS = $(RELATIVE_SOURCES:%.c=$(BUILDDIR)/%.o)
 
 
 # Primary target is an APLX file - built from the ELF
@@ -163,7 +172,7 @@ endif
 	$(LS) $(APP_DIR)/$(APP).aplx
 
 
-# Build the ELF file
+# Build the ELF filBUILDDIRe
 
 #  1) Make a "sark_build.c" file containing app. name and build time
 #     with "mkbuild" and compile it
@@ -178,7 +187,8 @@ $(APP).elf: $(OBJECTS) $(SCRIPT) $(LIBRARY)
 	$(OD) $(APP).elf
 
 # Build the object files
-.c.o: $(INC_DIR)/spinnaker.h $(INC_DIR)/sark.h $(INC_DIR)/spin1_api.h
+$(BUILDDIR)/%.o: $(SPINNAKER_COMPONENTS)/%.c $(INC_DIR)/spinnaker.h $(INC_DIR)/sark.h $(INC_DIR)/spin1_api.h
+	-mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $< -o $@
 
 
