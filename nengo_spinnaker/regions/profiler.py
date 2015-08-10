@@ -18,12 +18,11 @@ class Profiler(Region):
         pass  # Nothing to do
 
     def read_from_mem(self, mem, tag_names):
-        # Read number of samples written by profiler
-        profiler_count = struct.unpack("I", mem.read(4))[0]
-        print "%u profiler entries read" % profiler_count
+        # Read number of words written by profiler
+        word_written = struct.unpack("I", mem.read(4))[0]
 
         # Read these from memory
-        data = np.fromstring(mem.read(profiler_count * 8), dtype=np.uint64)
+        data = np.fromstring(mem.read(word_written * 4), dtype=np.uint64)
 
         # Create 32-bit view of data and slice this to seperate times, tags and flags
         data_view = data.view(np.uint32)

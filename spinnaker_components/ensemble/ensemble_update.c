@@ -19,13 +19,14 @@
 void ensemble_update(uint ticks, uint arg1) {
   use(arg1);
 
-  profiler_write_entry(PROFILER_ENTER | PROFILER_TIMER);
-
   if (simulation_ticks != UINT32_MAX && ticks >= simulation_ticks) {
+  {
     profiler_finalise();
     spin1_exit(0);
   }
 
+  profiler_write_entry(PROFILER_ENTER | PROFILER_TIMER);
+  
   // Values used below
   current_t i_membrane;
   voltage_t v_delta, v_voltage;

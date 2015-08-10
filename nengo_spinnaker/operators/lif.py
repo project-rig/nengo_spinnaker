@@ -45,7 +45,6 @@ class EnsembleLIF(object):
         self.local_probes = list()
 
     def make_vertices(self, model, n_steps):  # TODO remove n_steps
-        print "%u STEPS" % n_steps
         """Construct the data which can be loaded into the memory of a
         SpiNNaker machine.
         """
