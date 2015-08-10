@@ -179,11 +179,16 @@ class EnsembleLIF(object):
         constraints = {
             sdram_constraint: lambda s: regions.utils.sizeof_regions(
                 self.regions, s),
+            # **HACK** don't include last two regions in DTCM estimate
+            # (profiler and spike recording)
             dtcm_constraint: lambda s: regions.utils.sizeof_regions(
-                self.regions[:-2], s) + 5*(s.stop - s.start),  # +5 bytes per neuron
+                self.regions[:-2], s) + 5*(s.stop - s.start),
             cpu_constraint: cpu_usage,
         }
-        app_name = "ensemble_profiled" if num_profiler_samples > 0 else "ensemble"
+        app_name = (
+            "ensemble_profiled" if num_profiler_samples > 0
+            else "ensemble"
+        )
         for sl in partition.partition(slice(0, self.ensemble.n_neurons),
                                       constraints):
             resources = {

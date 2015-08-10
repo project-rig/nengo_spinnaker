@@ -2,6 +2,10 @@ import numpy as np
 
 
 def print_summary(profiling_data, duration):
+    """
+    Print a summary of the profiling data to standard out
+    Showing how much time is spent in each profiler tag
+    """
     ms_time_bins = np.arange(duration * 1000.0)
 
     # Summarise data for all tags
@@ -34,12 +38,18 @@ def print_summary(profiling_data, duration):
 
 
 def write_csv_header(profiling_data, csv_writer, extra_column_headers):
-    # Write header row with extra column headers
-    # followed by tag names found in profiling_data
+    """
+    Write header row for standard profiler format CSV file with extra
+    column headers followed by tag names found in profiling_data
+    """
     csv_writer.writerow(extra_column_headers + list(profiling_data.iterkeys()))
 
 
 def write_csv_row(profiling_data, csv_writer, extra_column_values):
+    """
+    Write a row into standard profiler format CSV with user values
+    followed by mean times for each profiler tag extracted from profiling_data
+    """
     # Calculate mean of all profiling tags
     mean_times = [np.average(t[1]) for t in profiling_data.itervalues()]
 

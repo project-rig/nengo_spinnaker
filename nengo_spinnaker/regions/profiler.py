@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class Profiler(Region):
-    """Region used to record spikes."""
+    """Region used to record profiling data."""
     def __init__(self, n_samples):
         self.n_samples = n_samples
 
@@ -26,13 +26,12 @@ class Profiler(Region):
         word_written = struct.unpack("I", mem.read(4))[0]
 
         # Read these from memory
-        data = np.fromstring(mem.read(word_written * 4), dtype=np.uint64)
+        data = np.fromstring(mem.read(word_written * 4), dtype=np.uint32)
+        assert len(data) % 2 == 0
 
-        # Create 32-bit view of data and slice
-        # this to seperate times, tags and flags
-        data_view = data.view(np.uint32)
-        sample_times = data_view[::2]
-        sample_tags_and_flags = data_view[1::2]
+        # Slice data into seperate times, tags and flags
+        sample_times = data[::2]
+        sample_tags_and_flags = data[1::2]
 
         # Further split the tags and flags word
         # into seperate arrays of tags and flags

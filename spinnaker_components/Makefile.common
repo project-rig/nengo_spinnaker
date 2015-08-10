@@ -172,7 +172,7 @@ endif
 	$(LS) $(APP_DIR)/$(APP).aplx
 
 
-# Build the ELF filBUILDDIRe
+# Build the ELF file
 
 #  1) Make a "sark_build.c" file containing app. name and build time
 #     with "mkbuild" and compile it
