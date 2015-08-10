@@ -10,5 +10,6 @@ their data out to files as necessary.
 
 from .matrix import MatrixPartitioning, MatrixRegion
 from .keyspaces import KeyspacesRegion, KeyField, MaskField
+from .profiler import Profiler
 from .region import Region
 from . import utils

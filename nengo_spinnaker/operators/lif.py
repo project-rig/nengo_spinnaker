@@ -21,10 +21,22 @@ from .. import regions
 from nengo_spinnaker.netlist import VertexSlice
 from nengo_spinnaker import partition_and_cluster as partition
 from nengo_spinnaker.utils.application import get_application
+from nengo_spinnaker.utils.config import getconfig
 from nengo_spinnaker.utils import type_casts as tp
 
 
 class EnsembleLIF(object):
+    # Tag names, corresponding to those defined in ensemble_profiler.h
+    profiler_tag_names = {
+        0:  "Timer tick",
+        1:  "Input filter",
+        2:  "Output filter",
+        3:  "Neuron update",
+        4:  "Transmit output",
+        5:  "Filtered PES",
+        6:  "Filtered Voja",
+    }
+
     """Controller for an ensemble of LIF neurons."""
     def __init__(self, ensemble):
         """Create a new LIF ensemble controller."""
@@ -33,6 +45,7 @@ class EnsembleLIF(object):
         self.local_probes = list()
 
     def make_vertices(self, model, n_steps):  # TODO remove n_steps
+        print "%u STEPS" % n_steps
         """Construct the data which can be loaded into the memory of a
         SpiNNaker machine.
         """
@@ -104,6 +117,21 @@ class EnsembleLIF(object):
             self.spike_region = None
             self.probe_spikes = False
 
+        # If profiling is enabled
+        num_profiler_samples = 0
+        if getconfig(model.config, self.ensemble, "profile", False):
+            # Try and get number of samples from config
+            num_profiler_samples = getconfig(model.config, self.ensemble,
+                                                  "profile_num_samples")
+
+            # If it's not specified, calculate sensible default
+            if num_profiler_samples is None:
+                num_profiler_samples =\
+                    len(EnsembleLIF.profiler_tag_names) * n_steps * 2
+
+        # Create profiler region
+        self.profiler_region = regions.Profiler(num_profiler_samples)
+
         # Create the regions list
         self.regions = [
             SystemRegion(self.ensemble.size_in,
@@ -113,7 +141,7 @@ class EnsembleLIF(object):
                          self.ensemble.neuron_type.tau_rc,
                          model.dt,
                          self.probe_spikes
-                         0
+                         num_profiler_samples
                          ),
             self.bias_region,
             self.encoders_region,
@@ -127,7 +155,7 @@ class EnsembleLIF(object):
             self.mod_filters,
             self.mod_filter_routing,
             self.pes_region,
-            None,
+            self.profiler_region,
             self.spike_region,
         ]
 
@@ -158,13 +186,14 @@ class EnsembleLIF(object):
                 self.regions, s) + 5*(s.stop - s.start),  # +5 bytes per neuron
             cpu_constraint: cpu_usage,
         }
+        app_name = "ensemble_profiled" if num_profiler_samples > 0 else "ensemble"
         for sl in partition.partition(slice(0, self.ensemble.n_neurons),
                                       constraints):
             resources = {
                 Cores: 1,
                 SDRAM: regions.utils.sizeof_regions(self.regions, sl),
             }
-            vsl = VertexSlice(sl, get_application("ensemble"), resources)
+            vsl = VertexSlice(sl, get_application(app_name), resources)
             self.vertices.append(vsl)
 
         # Return the vertices and callback methods
@@ -175,6 +204,7 @@ class EnsembleLIF(object):
         """Load the ensemble data into memory."""
         # For each slice
         self.spike_mem = dict()
+        self.profiler_output_mem = dict()
         for vertex in self.vertices:
             # Layout the slice of SDRAM we have been given
             region_memory = regions.utils.create_app_ptr_and_region_files(
@@ -189,6 +219,9 @@ class EnsembleLIF(object):
                         mem, vertex.slice, cluster=vertex.cluster)
                 elif region is self.spike_region and self.probe_spikes:
                     self.spike_mem[vertex] = mem
+                elif (region is self.profiler_region
+                      and self.profiler_region.n_samples > 0):
+                    self.profiler_output_mem[vertex] = mem
                 else:
                     region.write_subregion_to_file(mem, vertex.slice)
 
@@ -235,6 +268,18 @@ class EnsembleLIF(object):
 
                 simulator.data[p] = probed_spikes[::sample_every, neuron_slice]
 
+        # If profiling is enabled
+        if self.profiler_region.n_samples > 0:
+            # Loop through vertices
+            for vertex in self.vertices:
+                # Get profiler output memory block
+                mem = self.profiler_output_mem[vertex]
+                mem.seek(0)
+
+                # Read profiler data from memory and put somewhere accessible
+                simulator.profiler_data[self.ensemble] =\
+                    self.profiler_region.read_from_mem(
+                        mem, EnsembleLIF.profiler_tag_names)
 
 class SystemRegion(collections.namedtuple(
     "SystemRegion", "n_input_dimensions, n_output_dimensions, "

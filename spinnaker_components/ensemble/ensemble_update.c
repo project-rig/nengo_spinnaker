@@ -44,7 +44,7 @@ void ensemble_update(uint ticks, uint arg1) {
     inhibitory_input += g_input_inhibitory.input[d];
   }
 
-  profiler_write_entry(PROFILER_ENTER | PROFILER_TIMER_INPUT_FILTER);
+  profiler_write_entry(PROFILER_ENTER | PROFILER_TIMER_NEURON);
 
   // Perform neuron updates
   for( uint n = 0; n < g_ensemble.n_neurons; n++ ) {
