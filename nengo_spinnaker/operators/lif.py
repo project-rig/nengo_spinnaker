@@ -33,8 +33,6 @@ class EnsembleLIF(object):
         2:  "Output filter",
         3:  "Neuron update",
         4:  "Transmit output",
-        5:  "Filtered PES",
-        6:  "Filtered Voja",
     }
 
     """Controller for an ensemble of LIF neurons."""
@@ -139,7 +137,7 @@ class EnsembleLIF(object):
                          self.ensemble.neuron_type.tau_ref,
                          self.ensemble.neuron_type.tau_rc,
                          model.dt,
-                         self.probe_spikes
+                         self.probe_spikes,
                          num_profiler_samples
                          ),
             self.bias_region,
@@ -182,7 +180,7 @@ class EnsembleLIF(object):
             sdram_constraint: lambda s: regions.utils.sizeof_regions(
                 self.regions, s),
             dtcm_constraint: lambda s: regions.utils.sizeof_regions(
-                self.regions, s) + 5*(s.stop - s.start),  # +5 bytes per neuron
+                self.regions[:-2], s) + 5*(s.stop - s.start),  # +5 bytes per neuron
             cpu_constraint: cpu_usage,
         }
         app_name = "ensemble_profiled" if num_profiler_samples > 0 else "ensemble"
