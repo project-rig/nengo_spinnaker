@@ -26,8 +26,8 @@ class TestEnsembleLIF(object):
 class TestSystemRegion(object):
     """Test system regions for Ensembles."""
     def test_sizeof(self):
-        region = lif.SystemRegion(1, 5, 1000, 0.01, 0.02, 0.001, False)
-        assert region.sizeof() == 8 * 4  # 8 words
+        region = lif.SystemRegion(1, 5, 1000, 0.01, 0.02, 0.001, False, 0)
+        assert region.sizeof() == 9 * 4  # 9 words
         assert region.sizeof_padded(slice(None)) == region.sizeof(slice(None))
 
     @pytest.mark.parametrize(
@@ -50,7 +50,7 @@ class TestSystemRegion(object):
         # Check that the region is correctly written to file
         region = lif.SystemRegion(
             size_in, size_out, machine_timestep, tau_ref, tau_rc,
-            dt, probe_spikes
+            dt, probe_spikes, 0
         )
 
         # Create the file
@@ -64,8 +64,8 @@ class TestSystemRegion(object):
         values = fp.read()
         assert len(values) == region.sizeof()
 
-        (n_in, n_out, n_n, m_t, t_ref, dt_over_t_rc, rec_spikes, i_dims) = \
-            struct.unpack_from("<8I", values)
+        (n_in, n_out, n_n, m_t, t_ref, dt_over_t_rc, rec_spikes, i_dims, num_profiler_samples) = \
+            struct.unpack_from("<9I", values)
         assert n_in == size_in
         assert n_out == size_out
         assert n_n == vertex_neurons
@@ -76,6 +76,7 @@ class TestSystemRegion(object):
         assert ((probe_spikes and rec_spikes != 0) or
                 (not probe_spikes and rec_spikes == 0))
         assert i_dims == 1
+        assert num_profiler_samples == 0
 
 
 class TestPESRegion(object):

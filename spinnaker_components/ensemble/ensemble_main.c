@@ -1,6 +1,8 @@
 #include "ensemble.h"
 #include "ensemble_data.h"
 #include "ensemble_pes.h"
+#include "ensemble_profiler.h"
+
 
 void c_main(void) {
   // Set the system up
@@ -53,6 +55,9 @@ void c_main(void) {
     io_printf(IO_BUF, "[Ensemble] Failed to start.\n");
     return;
   }
+
+  // Set up profiler
+  profiler_read_region(region_start(14, address));
 
   // Setup timer tick, start
   io_printf(IO_BUF, "[Ensemble] C_MAIN Set timer and spin1_start.\n");

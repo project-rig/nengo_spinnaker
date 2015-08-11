@@ -14,7 +14,7 @@
 
 #include "ensemble.h"
 #include "ensemble_output.h"
-#include "ensemble_pes.h"
+#include "ensemble_profiler.h"
 
 /* Parameters and Buffers ***************************************************/
 ensemble_parameters_t g_ensemble;
@@ -64,7 +64,8 @@ bool initialise_ensemble(region_system_t *pars) {
   MALLOC_FAIL_FALSE(g_ensemble.neuron_refractory,
                     g_ensemble.n_neurons * sizeof(uint8_t));
 
-  for (uint n = 0; n < g_ensemble.n_neurons; n++) {
+  for (uint n = 0; n < g_ensemble.n_neurons; n++)
+  {
     g_ensemble.neuron_refractory[n] = 0;
     g_ensemble.neuron_voltage[n] = 0.0k;
   }
@@ -81,13 +82,18 @@ bool initialise_ensemble(region_system_t *pars) {
   // Setup subcomponents
   g_ensemble.input = input_filter_initialise(&g_input, pars->n_input_dimensions);
   if (g_ensemble.input == NULL)
+  {
     return false;
+  }
 
   io_printf(IO_BUF, "@\n");
-  if (pars->n_inhibitory_dimensions > 0) {
+  if (pars->n_inhibitory_dimensions > 0)
+  {
     if (NULL == input_filter_initialise(
           &g_input_inhibitory, pars->n_inhibitory_dimensions))
+    {
       return false;
+    }
   }
   io_printf(IO_BUF, "@\n");
   input_filter_initialise_no_accumulator(&g_input_modulatory);
@@ -95,7 +101,13 @@ bool initialise_ensemble(region_system_t *pars) {
 
   g_ensemble.output = initialise_output(pars);
   if (g_ensemble.output == NULL && g_n_output_dimensions > 0)
+  {
     return false;
+  }
+
+  // Initialize the profiler with the number of
+  // Samples passed from the system region
+  profiler_init(pars->num_profiler_samples);
 
   // Register the update function
   spin1_callback_on(TIMER_TICK, ensemble_update, 2);

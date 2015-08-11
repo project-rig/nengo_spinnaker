@@ -105,6 +105,9 @@ class Simulator(object):
         # Holder for probe data
         self.data = {}
 
+        # Holder for profiling data
+        self.profiler_data = {}
+
         # Convert the model into a netlist
         logger.info("Building netlist")
         start = time.time()

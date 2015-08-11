@@ -8,7 +8,7 @@
 # February 2014
 # ----------------------------------------------------------------------------
 
-APP = nengo_tx
+NENGO_APP = nengo_tx
 SOURCES = sdp_tx_main.c ../common/input_filter.c
 
 include ../Makefile.depend
