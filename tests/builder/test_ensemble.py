@@ -466,7 +466,6 @@ class TestProbeNeurons(object):
         assert len(model.object_operators) == 1
         assert len(model.connections_signals) == 0
 
-    @pytest.mark.xfail(reason="Unimplemented functionality")
     def test_probe_voltage(self):
         """Check that probing voltage modifies the local_probes list on the
         operator, but does nothing else.

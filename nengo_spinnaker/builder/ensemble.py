@@ -209,7 +209,7 @@ def build_ensemble_probe(model, probe):
 @Model.probe_builders.register(nengo.ensemble.Neurons)
 def build_neurons_probe(model, probe):
     """Build a probe which has Neurons as its target."""
-    if probe.attr in ("output", "spikes"):
+    if probe.attr in ("output", "spikes", "voltage"):
         # Get the real target if the target is an ObjView
         if isinstance(probe.target, nengo.base.ObjView):
             ens = probe.target.obj.ensemble
