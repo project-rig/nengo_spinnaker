@@ -8,7 +8,7 @@
 # April 2014
 # ----------------------------------------------------------------------------
 
-APP = nengo_filter
+NENGO_APP = nengo_filter
 SOURCES = filter_main.c ../common/input_filtering.c
 
 include ../Makefile.depend

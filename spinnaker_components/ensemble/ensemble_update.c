@@ -13,13 +13,19 @@
 #include "ensemble.h"
 #include "ensemble_output.h"
 #include "ensemble_pes.h"
+#include "ensemble_profiler.h"
+
 
 void ensemble_update(uint ticks, uint arg1) {
   use(arg1);
+
   if (simulation_ticks != UINT32_MAX && ticks >= simulation_ticks) {
+    profiler_finalise();
     spin1_exit(0);
   }
 
+  profiler_write_entry(PROFILER_ENTER | PROFILER_TIMER);
+  
   // Values used below
   current_t i_membrane;
   voltage_t v_delta, v_voltage;
@@ -27,15 +33,19 @@ void ensemble_update(uint ticks, uint arg1) {
   value_t encoder_d;
 
   // Filter inputs, updating accumulator for excitatory and inhibitory inputs
+  profiler_write_entry(PROFILER_ENTER | PROFILER_TIMER_INPUT_FILTER);
   input_filtering_step(&g_input);
   input_filtering_step(&g_input_inhibitory);
   input_filtering_step_no_accumulate(&g_input_modulatory);
+  profiler_write_entry(PROFILER_EXIT | PROFILER_TIMER_INPUT_FILTER);
 
   // Compute the inhibition
   for (uint d = 0; d < g_ensemble.n_inhib_dims; d++)
   {
     inhibitory_input += g_input_inhibitory.output[d];
   }
+
+  profiler_write_entry(PROFILER_ENTER | PROFILER_TIMER_NEURON);
 
   // Perform neuron updates
   for( uint n = 0; n < g_ensemble.n_neurons; n++ ) {
@@ -50,7 +60,7 @@ void ensemble_update(uint ticks, uint arg1) {
                   inhibitory_input * g_ensemble.inhib_gain[n]);
 
     // Encode the input and add to the membrane current
-    for(uchar d = 0; d < g_input.output_size; d++)
+    for(uint32_t d = 0; d < g_input.output_size; d++)
     {
       encoder_d = neuron_encoder(n, d);
       i_membrane += encoder_d * g_ensemble.input[d];
@@ -95,6 +105,9 @@ void ensemble_update(uint ticks, uint arg1) {
       pes_neuron_spiked(n);
     }
   }
+  profiler_write_entry(PROFILER_EXIT | PROFILER_TIMER_NEURON);
+
+  profiler_write_entry(PROFILER_ENTER | PROFILER_TIMER_OUTPUT);
 
   // Transmit decoded Ensemble representation
   for (uint output_index = 0; output_index < g_n_output_dimensions;
@@ -108,6 +121,10 @@ void ensemble_update(uint ticks, uint arg1) {
     gp_output_values[output_index] = 0;
   }
 
+  profiler_write_entry(PROFILER_EXIT | PROFILER_TIMER_OUTPUT);
+
   // Flush the recording buffer
   record_buffer_flush(&g_ensemble.recd);
+
+  profiler_write_entry(PROFILER_EXIT | PROFILER_TIMER);
 }

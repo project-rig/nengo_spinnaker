@@ -1,5 +1,15 @@
+ifdef PROFILER_ENABLED
+	BUILDDIR = build_profiled
+	CFLAGS += -DPROFILER_ENABLED
+	APP = $(NENGO_APP)_profiled
+else
+	BUILDDIR = build
+	APP = $(NENGO_APP)
+endif
+
 SOURCES += ../common/spin1_config.c
 CFLAGS += -I ../common/
 CFLAGS += -Wall -Wextra
 APP_DIR = ../../nengo_spinnaker/binaries
+
 include ../Makefile.common
