@@ -21,9 +21,9 @@
 
 typedef struct _recording_buffer_t
 {
-  uint32_t *buffer;       //!< The buffer to write to
-  uint32_t block_length;  //!< Size of 1 block of the buffer (in words)
-  uint32_t n_blocks;      //!< Length of the buffer in blocks (= n_ticks)
+  uint32_t *buffer;             //!< The buffer to write to
+  uint32_t block_length_words;  //!< Size of 1 block of the buffer
+  uint32_t n_blocks;            //!< Length of the buffer in blocks (= n_ticks)
 
   bool record;  //!< Whether or not to record the data in the buffer
 
@@ -46,14 +46,14 @@ static inline void record_buffer_flush(recording_buffer_t *buffer)
   if (buffer->record)
   {
     spin1_memcpy(buffer->_sdram_current, buffer->buffer,
-                 buffer->block_length * sizeof(uint));
+                 buffer->block_length_words * sizeof(uint32_t));
   }
 
   // Empty the buffer
-  memset(buffer->buffer, 0x0, buffer->block_length * sizeof(uint32_t));
+  memset(buffer->buffer, 0x0, buffer->block_length_words * sizeof(uint32_t));
 
   // Progress the pointer
-  buffer->_sdram_current += buffer->block_length;
+  buffer->_sdram_current += buffer->block_length_words;
 }
 
 /*****************************************************************************/
@@ -104,8 +104,11 @@ static inline void record_voltage(
 {
   // Cast the recording buffer to U1.15 and then store the voltage in this
   // form.
+  union {struct {uint16_t lo; uint16_t hi;} bits; value_t value;} value;
+  value.value = voltage;
+
   uint16_t *data = (uint16_t *) buffer->buffer;
-  data[n_neuron] = bitsk(voltage) & 0xffff;
+  data[n_neuron] = (value.bits).lo;
 }
 
 #endif

@@ -2,19 +2,20 @@
 
 // Generic buffer initialisation
 bool record_buffer_initialise(recording_buffer_t *buffer, address_t region,
-                              uint32_t n_blocks, uint32_t block_length)
+                              uint32_t n_blocks, uint32_t block_length_words)
 {
   // Store buffer parameters
   buffer->n_blocks = n_blocks;
-  buffer->block_length = block_length;
+  buffer->block_length_words = block_length_words;
   buffer->_sdram_start = (uint32_t *) region;
   record_buffer_reset(buffer);
 
   // Create the local buffer
-  MALLOC_FAIL_FALSE(buffer->buffer, buffer->block_length * sizeof(uint));
+  MALLOC_FAIL_FALSE(buffer->buffer,
+                    buffer->block_length_words * sizeof(uint32_t));
 
   // Zero the local buffers
-  memset(buffer->buffer, 0x0, buffer->block_length * sizeof(uint32_t));
+  memset(buffer->buffer, 0x0, buffer->block_length_words * sizeof(uint32_t));
 
   return true;
 }
@@ -40,10 +41,11 @@ bool record_buffer_initialise_spikes(
 {
   // Compute the block length (an integral number of words allowing for 1 bit
   // per neuron).
-  uint32_t block_length = (n_neurons >> 5) + (n_neurons & 0x1f ? 1 : 0);
+  uint32_t block_length_words = (n_neurons / 32) + (n_neurons % 32 ? 1 : 0);
 
   // Use this to create the recording buffer
-  return record_buffer_initialise(buffer, region, n_blocks, block_length);
+  return record_buffer_initialise(buffer, region,
+                                  n_blocks, block_length_words);
 };
 
 /*****************************************************************************/
@@ -65,8 +67,9 @@ bool record_buffer_initialise_voltages(
 {
   // Compute the block length. We allow for 1 short per neuron and then round
   // up to an integral number of words.
-  uint32_t block_length = (n_neurons >> 1) + (n_neurons & 0x1);
+  uint32_t block_length_words = (n_neurons / 2) + (n_neurons % 2);
 
   // Use this to create the recording buffer
-  return record_buffer_initialise(buffer, region, n_blocks, block_length);
+  return record_buffer_initialise(buffer, region,
+                                  n_blocks, block_length_words);
 }
