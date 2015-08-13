@@ -13,13 +13,19 @@
 #include "ensemble.h"
 #include "ensemble_output.h"
 #include "ensemble_pes.h"
+#include "ensemble_profiler.h"
+
 
 void ensemble_update(uint ticks, uint arg1) {
   use(arg1);
+
   if (simulation_ticks != UINT32_MAX && ticks >= simulation_ticks) {
+    profiler_finalise();
     spin1_exit(0);
   }
 
+  profiler_write_entry(PROFILER_ENTER | PROFILER_TIMER);
+  
   // Values used below
   current_t i_membrane;
   voltage_t v_delta, v_voltage;
@@ -27,14 +33,18 @@ void ensemble_update(uint ticks, uint arg1) {
   value_t encoder_d;
 
   // Filter inputs, updating accumulator for excitatory and inhibitory inputs
+  profiler_write_entry(PROFILER_ENTER | PROFILER_TIMER_INPUT_FILTER);
   input_filter_step(&g_input, true);
   input_filter_step(&g_input_inhibitory, true);
   input_filter_step(&g_input_modulatory, false);
+  profiler_write_entry(PROFILER_EXIT | PROFILER_TIMER_INPUT_FILTER);
 
   // Compute the inhibition
   for (uint d = 0; d < g_ensemble.n_inhib_dims; d++) {
     inhibitory_input += g_input_inhibitory.input[d];
   }
+
+  profiler_write_entry(PROFILER_ENTER | PROFILER_TIMER_NEURON);
 
   // Perform neuron updates
   for( uint n = 0; n < g_ensemble.n_neurons; n++ ) {
@@ -99,6 +109,9 @@ void ensemble_update(uint ticks, uint arg1) {
     // Record the neuron voltage
     record_voltage(&g_ensemble.record_voltages, n, v_voltage);
   }
+  profiler_write_entry(PROFILER_EXIT | PROFILER_TIMER_NEURON);
+
+  profiler_write_entry(PROFILER_ENTER | PROFILER_TIMER_OUTPUT);
 
   // Transmit decoded Ensemble representation
   for (uint output_index = 0; output_index < g_n_output_dimensions;
@@ -112,7 +125,11 @@ void ensemble_update(uint ticks, uint arg1) {
     gp_output_values[output_index] = 0;
   }
 
+  profiler_write_entry(PROFILER_EXIT | PROFILER_TIMER_OUTPUT);
+
   // Flush the recording buffers
   record_buffer_flush(&g_ensemble.record_spikes);
   record_buffer_flush(&g_ensemble.record_voltages);
+
+  profiler_write_entry(PROFILER_EXIT | PROFILER_TIMER);
 }

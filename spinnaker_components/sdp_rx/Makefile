@@ -8,7 +8,7 @@
 # February 2014
 # ----------------------------------------------------------------------------
 
-APP = nengo_rx
+NENGO_APP = nengo_rx
 SOURCES = sdp-rx-main.c
 
 include ../Makefile.depend

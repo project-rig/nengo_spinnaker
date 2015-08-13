@@ -21,10 +21,20 @@ from .. import regions
 from nengo_spinnaker.netlist import VertexSlice
 from nengo_spinnaker import partition_and_cluster as partition
 from nengo_spinnaker.utils.application import get_application
+from nengo_spinnaker.utils.config import getconfig
 from nengo_spinnaker.utils import type_casts as tp
 
 
 class EnsembleLIF(object):
+    # Tag names, corresponding to those defined in ensemble_profiler.h
+    profiler_tag_names = {
+        0:  "Timer tick",
+        1:  "Input filter",
+        2:  "Output filter",
+        3:  "Neuron update",
+        4:  "Transmit output",
+    }
+
     """Controller for an ensemble of LIF neurons."""
     def __init__(self, ensemble):
         """Create a new LIF ensemble controller."""
@@ -117,6 +127,21 @@ class EnsembleLIF(object):
                     self.voltage_region = VoltageRegion(n_steps)
                     self.probe_voltages = True
 
+        # If profiling is enabled
+        num_profiler_samples = 0
+        if getconfig(model.config, self.ensemble, "profile", False):
+            # Try and get number of samples from config
+            num_profiler_samples = getconfig(model.config, self.ensemble,
+                                             "profile_num_samples")
+
+            # If it's not specified, calculate sensible default
+            if num_profiler_samples is None:
+                num_profiler_samples =\
+                    len(EnsembleLIF.profiler_tag_names) * n_steps * 2
+
+        # Create profiler region
+        self.profiler_region = regions.Profiler(num_profiler_samples)
+
         # Create the regions list
         self.regions = [
             SystemRegion(self.ensemble.size_in,
@@ -126,7 +151,8 @@ class EnsembleLIF(object):
                          self.ensemble.neuron_type.tau_rc,
                          model.dt,
                          self.probe_spikes,
-                         self.probe_voltages
+                         self.probe_voltages,
+                         num_profiler_samples
                          ),
             self.bias_region,
             self.encoders_region,
@@ -140,7 +166,7 @@ class EnsembleLIF(object):
             self.mod_filters,
             self.mod_filter_routing,
             self.pes_region,
-            None,
+            self.profiler_region,
             self.spike_region,
             self.voltage_region,
         ]
@@ -168,17 +194,23 @@ class EnsembleLIF(object):
         constraints = {
             sdram_constraint: lambda s: regions.utils.sizeof_regions(
                 self.regions, s),
+            # **HACK** don't include last three regions in DTCM estimate
+            # (profiler and spike recording)
             dtcm_constraint: lambda s: regions.utils.sizeof_regions(
-                self.regions, s) + 5*(s.stop - s.start),  # +5 bytes per neuron
+                self.regions[:-3], s) + 5*(s.stop - s.start),
             cpu_constraint: cpu_usage,
         }
+        app_name = (
+            "ensemble_profiled" if num_profiler_samples > 0
+            else "ensemble"
+        )
         for sl in partition.partition(slice(0, self.ensemble.n_neurons),
                                       constraints):
             resources = {
                 Cores: 1,
                 SDRAM: regions.utils.sizeof_regions(self.regions, sl),
             }
-            vsl = VertexSlice(sl, get_application("ensemble"), resources)
+            vsl = VertexSlice(sl, get_application(app_name), resources)
             self.vertices.append(vsl)
 
         # Return the vertices and callback methods
@@ -190,6 +222,7 @@ class EnsembleLIF(object):
         # For each slice
         self.spike_mem = dict()
         self.voltage_mem = dict()
+        self.profiler_output_mem = dict()
 
         for vertex in self.vertices:
             # Layout the slice of SDRAM we have been given
@@ -205,6 +238,9 @@ class EnsembleLIF(object):
                         mem, vertex.slice, cluster=vertex.cluster)
                 elif region is self.spike_region and self.probe_spikes:
                     self.spike_mem[vertex] = mem
+                elif (region is self.profiler_region
+                      and self.profiler_region.n_samples > 0):
+                    self.profiler_output_mem[vertex] = mem
                 elif region is self.voltage_region and self.probe_voltages:
                     self.voltage_mem[vertex] = mem
                 else:
@@ -307,18 +343,31 @@ class EnsembleLIF(object):
                     simulator.data[p] = np.hstack((simulator.data[p],
                                                    probe_data))
 
+        # If profiling is enabled
+        if self.profiler_region.n_samples > 0:
+            # Loop through vertices
+            for vertex in self.vertices:
+                # Get profiler output memory block
+                mem = self.profiler_output_mem[vertex]
+                mem.seek(0)
+
+                # Read profiler data from memory and put somewhere accessible
+                simulator.profiler_data[self.ensemble] =\
+                    self.profiler_region.read_from_mem(
+                        mem, EnsembleLIF.profiler_tag_names)
+
 
 class SystemRegion(collections.namedtuple(
     "SystemRegion", "n_input_dimensions, n_output_dimensions, "
                     "machine_timestep, t_ref, t_rc, dt, probe_spikes, "
-                    "probe_voltages")):
+                    "probe_voltages, num_profiler_samples")):
     """Region of memory describing the general parameters of a LIF ensemble."""
 
     def sizeof(self, vertex_slice=slice(None)):
         """Get the number of bytes necessary to represent this region of
         memory.
         """
-        return 8 * 4  # 8 words
+        return 9 * 4  # 9 words
 
     sizeof_padded = sizeof
 
@@ -345,9 +394,10 @@ class SystemRegion(collections.namedtuple(
         # plotting the results and stopping when the ideal tuning curve was
         # very closely matched by the SpiNNaker tuning curve - further
         # improvement of this factor may be possible.
+
         n_neurons = vertex_slice.stop - vertex_slice.start
         data = struct.pack(
-            "<8I",
+            "<9I",
             self.n_input_dimensions,
             self.n_output_dimensions,
             n_neurons,
@@ -355,7 +405,8 @@ class SystemRegion(collections.namedtuple(
             int(self.t_ref // self.dt),  # tau_ref expressed as in ticks
             tp.value_to_fix(-np.expm1(-self.dt / self.t_rc) * (1.0 - 2**-11)),
             flags,
-            1
+            1,
+            self.num_profiler_samples
         )
         fp.write(data)
 

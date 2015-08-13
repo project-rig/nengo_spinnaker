@@ -31,6 +31,11 @@ def add_spinnaker_params(config):
     config[nengo.Node].set_param("function_of_time_period",
                                  NumberParam(default=None, optional=True))
 
+    # Add profiling parameters to Ensembles
+    config[nengo.Ensemble].set_param("profile", BoolParam(default=False))
+    config[nengo.Ensemble].set_param("profile_num_samples",
+                                     NumberParam(default=None, optional=True))
+
 
 class CallableParameter(Parameter):
     """Parameter which only accepts callables."""
