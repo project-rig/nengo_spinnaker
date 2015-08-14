@@ -10,6 +10,8 @@
  *      Theoretical Neuroscience, University of Waterloo
  */
 
+#include "fixed_point.h"
+
 #include "ensemble.h"
 #include "ensemble_output.h"
 #include "ensemble_pes.h"
@@ -30,7 +32,6 @@ void ensemble_update(uint ticks, uint arg1) {
   current_t i_membrane;
   voltage_t v_delta, v_voltage;
   value_t inhibitory_input = 0;
-  value_t encoder_d;
 
   // Filter inputs, updating accumulator for excitatory and inhibitory inputs
   profiler_write_entry(PROFILER_ENTER | PROFILER_TIMER_INPUT_FILTER);
@@ -59,17 +60,17 @@ void ensemble_update(uint ticks, uint arg1) {
                   inhibitory_input * g_ensemble.inhib_gain[n]);
 
     // Encode the input and add to the membrane current
-    for( uchar d = 0; d < g_input.n_dimensions; d++ ) {
-      encoder_d = neuron_encoder(n, d);
-      i_membrane += encoder_d * g_ensemble.input[d];
-    }
+    value_t encoded_input = dot_product(g_input.n_dimensions,
+                                        neuron_encoder(n),
+                                        g_ensemble.input);
+    i_membrane += encoded_input;
 
     v_voltage = neuron_voltage(n);
     v_delta = (i_membrane - v_voltage) * g_ensemble.exp_dt_over_t_rc;
 
     // Voltages can't go below 0.0
     v_voltage += v_delta;
-    if(v_voltage < 0.0k)
+    if (bitsk(v_voltage) < bitsk(0.0k))
     {
       v_voltage = 0.0k;
     }
@@ -78,22 +79,25 @@ void ensemble_update(uint ticks, uint arg1) {
     set_neuron_voltage(n, v_voltage);
 
     // If this neuron has fired then process
-    if( v_voltage > 1.0k ) {
+    if (bitsk(v_voltage) > bitsk(1.0k))
+    {
       // Set the voltage to be the overshoot, set the refractory time
       set_neuron_refractory(n);
       set_neuron_voltage(n, v_voltage - 1.0k);
 
       // Decrement the refractory time in the case that the overshoot was
       // sufficiently significant.
-      if(v_voltage > 2.0k)
+      if (bitsk(v_voltage) > bitsk(2.0k))
       {
         decrement_neuron_refractory(n);
         set_neuron_voltage(n, v_voltage - 1.0k - v_delta);
       }
 
       // Update the output values
-      for( uint d = 0; d < g_n_output_dimensions; d++ ) {
-        g_ensemble.output[d] += neuron_decoder( n, d );
+      value_t *decoder = neuron_decoder_vector(n);
+      for (uint d = 0; d < g_n_output_dimensions; d++)
+      {
+        g_ensemble.output[d] += decoder[d];
       }
 
       // Record that the spike occurred
