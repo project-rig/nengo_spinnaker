@@ -42,7 +42,7 @@ def write_csv_header(profiling_data, csv_writer, extra_column_headers):
     Write header row for standard profiler format CSV file with extra
     column headers followed by tag names found in profiling_data
     """
-    csv_writer.writerow(extra_column_headers + list(profiling_data.iterkeys()))
+    csv_writer.writerow(extra_column_headers + list(profiling_data.keys()))
 
 
 def write_csv_row(profiling_data, csv_writer, extra_column_values):
@@ -51,7 +51,7 @@ def write_csv_row(profiling_data, csv_writer, extra_column_values):
     followed by mean times for each profiler tag extracted from profiling_data
     """
     # Calculate mean of all profiling tags
-    mean_times = [np.average(t[1]) for t in profiling_data.itervalues()]
+    mean_times = [np.average(t[1]) for t in profiling_data.values()]
 
     # Write extra column followed by means
     csv_writer.writerow(extra_column_values + mean_times)
