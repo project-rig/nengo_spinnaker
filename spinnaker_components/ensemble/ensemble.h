@@ -145,8 +145,10 @@ static inline uint8_t neuron_refractory(uint n)
   {return g_ensemble.neuron_refractory[n];};
 
 //! Put the given neuron in a refractory state (zero voltage, set timer)
-static inline void set_neuron_refractory( uint n )
-  {g_ensemble.neuron_refractory[n] = g_ensemble.t_ref;};
+static inline void set_neuron_refractory(uint n, uint t_ref)
+{
+  g_ensemble.neuron_refractory[n] = t_ref;
+}
 
 //! Decrement the refractory time for the given neuron
 static inline void decrement_neuron_refractory( uint n )
