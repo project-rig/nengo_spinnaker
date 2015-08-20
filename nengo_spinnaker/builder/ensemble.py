@@ -147,25 +147,21 @@ def build_lif(model, ens):
 @Model.connection_parameter_builders.register(nengo.Ensemble)
 def build_from_ensemble_connection(model, conn):
     """Build the parameters object for a connection from an Ensemble."""
+    if conn.solver.weights:
+        raise NotImplementedError(
+            "SpiNNaker does not currently support neuron to neuron connections"
+        )
+
     # Create a random number generator
     rng = np.random.RandomState(model.seeds[conn])
 
     # Get the transform
     transform = full_transform(conn, slice_pre=False)
 
-    # Use Nengo upstream to build parameters for the solver
-    eval_points, activities, targets = connection_b.build_linear_system(
+    # Solve for the decoders
+    eval_points, decoders, solver_info = connection_b.build_decoders(
         model, conn, rng
     )
-
-    # Use cached solver
-    solver = model.decoder_cache.wrap_solver(conn.solver)
-    if conn.solver.weights:
-        raise NotImplementedError(
-            "SpiNNaker does not currently support neuron to neuron connections"
-        )
-    else:
-        decoders, solver_info = solver(activities, targets, rng=rng)
 
     # Return the parameters
     return BuiltConnection(
