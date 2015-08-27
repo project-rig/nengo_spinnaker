@@ -156,7 +156,7 @@ class ValueSource(object):
 
                 # Apply the function on the connection, if there is one.
                 if conn.function is not None:
-                    v = conn.function(v)
+                    v = np.asarray(conn.function(v), dtype=float)
 
                 output.append(np.dot(transform, v.T))
             outputs.append(np.array(output).reshape(max_n, -1))

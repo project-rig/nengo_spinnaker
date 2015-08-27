@@ -46,8 +46,22 @@ void c_main(void) {
   }
 
   // Set up recording
-  if (!record_buffer_initialise(&g_ensemble.recd, region_start(15, address),
-                                simulation_ticks, g_ensemble.n_neurons)) {
+  if (!record_buffer_initialise_spikes(
+        &g_ensemble.record_spikes, region_start(15, address),
+        simulation_ticks, g_ensemble.n_neurons
+       )
+     )
+  {
+    io_printf(IO_BUF, "[Ensemble] Failed to start.\n");
+    return;
+  }
+
+  if (!record_buffer_initialise_voltages(
+        &g_ensemble.record_voltages, region_start(16, address),
+        simulation_ticks, g_ensemble.n_neurons
+       )
+     )
+  {
     io_printf(IO_BUF, "[Ensemble] Failed to start.\n");
     return;
   }
@@ -71,8 +85,9 @@ void c_main(void) {
     // Determine how long to simulate for
     config_get_n_ticks();
 
-    // Reset the spike recording region
-    record_buffer_reset(&g_ensemble.recd);
+    // Reset the recording regions
+    record_buffer_reset(&g_ensemble.record_spikes);
+    record_buffer_reset(&g_ensemble.record_voltages);
 
     // Perform the simulation
     io_printf(IO_BUF, ">>>>> Running for %d steps\n", simulation_ticks);
