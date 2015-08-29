@@ -171,9 +171,11 @@ static inline void input_filtering_step_no_accumulate(
     if_collection_t *filters)
 {
   // Apply the filter step for each filter in the collection.
-  for (uint32_t n = 0; n < filters->n_filters; n++)
+  for (uint32_t n = filters->n_filters; n > 0; n--)
   {
-    _if_filter_step(&filters->filters[n]);
+    // Get the filter and apply the step function
+    if_filter_t *filter = &filters->filters[n - 1];
+    _if_filter_step(filter);
   }
 }
 
@@ -181,19 +183,28 @@ static inline void input_filtering_step_no_accumulate(
 static inline void input_filtering_step(
     if_collection_t *filters)
 {
-  // Apply all the filter step functions
-  input_filtering_step_no_accumulate(filters);
-
-  // Accumulate the outputs of the filters
-  for (uint32_t d = 0; d < filters->output_size; d++)
+  // Zero the accumulator, not using memset as this would entail a further
+  // function call.
+  for (uint32_t d = filters->output_size; d > 0; d--)
   {
-    // Zero the accumulator
-    filters->output[d] = 0.0k;
+    filters->output[d - 1] = 0.0k;
+  }
 
-    // Include each filter in turn
-    for (uint32_t n = 0; n < filters->n_filters; n++)
+  // Apply all of the filter step functions and accumulate the outputs of the
+  // filters.
+  for (uint32_t n = filters->n_filters; n > 0; n--)
+  {
+    // Get the filter and apply the step function
+    if_filter_t *filter = &filters->filters[n - 1];
+    _if_filter_step(filter);
+
+    // Get the filter output
+    value_t *output = filters->filters[n - 1].output;
+
+    // Include each dimension in turn
+    for (uint32_t d = filters->output_size; d > 0; d--)
     {
-      filters->output[d] += filters->filters[n].output[d];
+      filters->output[d - 1] += output[d - 1];
     }
   }
 }
