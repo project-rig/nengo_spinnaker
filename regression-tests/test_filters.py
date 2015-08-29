@@ -41,7 +41,7 @@ def test_lowpass_filter(tau):
 
 
 @pytest.mark.parametrize("num, den, t, rmse, tolerance",
-                         [([1.0], [0.002, 0.12, 1.0], 0.4, 0.05, 0.1)])
+                         [([1.0], [0.001, 0.11, 1.0], 0.4, 0.05, 0.1)])
 def test_lti_filter(num, den, t, rmse, tolerance):
     """Test the LTI filter."""
     # Create the network

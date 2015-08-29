@@ -123,39 +123,42 @@ void _lti_filter_step(uint32_t n_dims, value_t *input,
 
   // Apply the filter to every dimension (realised as a Direct Form I digital
   // filter).
-  for (uint32_t d = 0; d < n_dims; d++)
+  for (uint32_t d = n_dims, dd = n_dims - 1; d > 0; d--, dd--)
   {
     // Point to the correct previous x and y values.
-    ab_t *xy = &state->xyz[d * state->order];
+    ab_t *xy = &state->xyz[dd * state->order];
 
     // Create the new output value for this dimension
-    output[d] = 0.0k;
+    register int64_t output_val = 0;
 
     // Direct Form I filter
     // `m` acts as an index into the ring buffer of historic input and output.
-    for (int32_t k=0, m = (int32_t) state->n;
-         k < (int32_t) state->order; k++)
+    for (uint32_t k=0, m = state->n; k < state->order; k++)
     {
       // Update the index into the ring buffer, if this would go negative it
       // wraps to the top of the buffer.
-      if(m <= 0)
+      if (m == 0)
       {
         m += state->order;
       }
       m--;
 
       // Apply this part of the filter
+      // Equivalent to:
+      //     output[dd] += ab.a * xyz.a;
+      //     output[dd] += ab.b * xyz.b;
       ab_t ab = state->abs[k];
       ab_t xyz = xy[m];
-      output[d] -= ab.a * xyz.a;
-      output[d] += ab.b * xyz.b;
+      output_val = __smlal(output_val, bitsk(ab.a), bitsk(xyz.a));
+      output_val = __smlal(output_val, bitsk(ab.b), bitsk(xyz.b));
     }
 
     // Include the initial new input
-    xy[state->n].b = input[d];
+    xy[state->n].b = input[dd];
 
     // Save the current output for later steps
-    xy[state->n].a = output[d];
+    output[dd] = kbits(scale_64_to_32(output_val));
+    xy[state->n].a = output[dd];
   }
 
   // Rotate the ring buffer by moving the starting pointer, if the starting
