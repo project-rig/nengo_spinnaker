@@ -117,9 +117,11 @@ void ensemble_update( uint arg0, uint arg1 );
 
 /* Static inline access functions ********************************************/
 // -- Encoder(s) and decoder(s)
-//! Get the encoder value for the given neuron and dimension
-static inline value_t neuron_encoder( uint n, uint d )
-  { return g_ensemble.encoders[n * g_input.output_size + d]; };
+//! Get the encoder for the given neuron
+static inline value_t* neuron_encoder(uint32_t n)
+{
+  return &g_ensemble.encoders[n * g_input.output_size];
+};
 
 static inline value_t neuron_decoder( uint n, uint d )
   { return g_ensemble.decoders[ n * g_n_output_dimensions + d ]; };
@@ -143,8 +145,10 @@ static inline uint8_t neuron_refractory(uint n)
   {return g_ensemble.neuron_refractory[n];};
 
 //! Put the given neuron in a refractory state (zero voltage, set timer)
-static inline void set_neuron_refractory( uint n )
-  {g_ensemble.neuron_refractory[n] = g_ensemble.t_ref;};
+static inline void set_neuron_refractory(uint n, uint t_ref)
+{
+  g_ensemble.neuron_refractory[n] = t_ref;
+}
 
 //! Decrement the refractory time for the given neuron
 static inline void decrement_neuron_refractory( uint n )
