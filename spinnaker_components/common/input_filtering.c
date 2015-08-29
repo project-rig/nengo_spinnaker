@@ -1,6 +1,8 @@
 #include "nengo-common.h"
 #include "input_filtering.h"
 #include "common-impl.h"
+#include "fixed_point.h"
+#include "arm_acle_gcc_selected.h"
 #include <string.h>
 
 // Commonly used pair of value_t types
@@ -42,13 +44,31 @@ void _lowpass_filter_step(uint32_t n_dims, value_t *input,
 {
   // Cast the params
   lowpass_state_t *params = (lowpass_state_t *) pars;
+  register int32_t a = bitsk(params->a);
+  register int32_t b = bitsk(params->b);
 
   // Apply the filter to every dimension (realised as a Direct Form I digital
   // filter).
   for (uint32_t d = 0; d < n_dims; d++)
   {
-    output[d] *= params->a;
-    output[d] += input[d] * params->b;
+    // The following is equivalent to:
+    //
+    //    output[d] *= params->a;
+    //    output[d] += input[d] * params->b;
+
+    // Compute the next value in a register
+    register int64_t next_output;
+
+    // Perform the first multiply
+    int32_t current_output = bitsk(output[d]);
+    next_output = __smull(current_output, a);
+
+    // Perform the multiply accumulate
+    int32_t current_input = bitsk(input[d]);
+    next_output = __smlal(next_output, current_input, b);
+
+    // Scale the result back down to store it
+    output[d] = kbits(scale_64_to_32(next_output));
   }
 }
 
