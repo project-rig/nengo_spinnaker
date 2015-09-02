@@ -5,7 +5,7 @@
 #include "common-typedefs.h"
 #include "common-impl.h"
 
-#include "input_filter.h"
+#include "input_filtering.h"
 
 typedef struct _region_system_t {
   uint timestep;

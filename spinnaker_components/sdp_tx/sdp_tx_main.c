@@ -2,7 +2,7 @@
 
 sdp_tx_parameters_t g_sdp_tx;
 uint delay_remaining;
-input_filter_t g_input;
+if_collection_t g_input;
 
 void sdp_tx_update(uint ticks, uint arg1) {
   use(arg1);
@@ -11,7 +11,7 @@ void sdp_tx_update(uint ticks, uint arg1) {
   }
 
   // Update the filters
-  input_filter_step(&g_input, true);
+  input_filtering_step(&g_input);
 
   // Increment the counter and transmit if necessary
   delay_remaining--;
@@ -48,7 +48,8 @@ bool data_system(address_t addr) {
             g_sdp_tx.machine_timestep);
   io_printf(IO_BUF, "[SDP Tx] transmission delay = %d\n", delay_remaining);
 
-  g_sdp_tx.input = input_filter_initialise(&g_input, g_sdp_tx.n_dimensions);
+  input_filtering_initialise_output(&g_input, g_sdp_tx.n_dimensions);
+  g_sdp_tx.input = g_input.output;
 
   if (g_sdp_tx.input == NULL)
     return false;
@@ -56,15 +57,15 @@ bool data_system(address_t addr) {
 }
 
 void mcpl_callback(uint key, uint payload) {
-  input_filter_mcpl_rx(&g_input, key, payload);
+  input_filtering_input(&g_input, key, payload);
 }
 
 void c_main(void) {
   address_t address = system_load_sram();
-  if (!data_system(region_start(1, address)) ||
-      !input_filter_get_filters(&g_input, region_start(2, address)) ||
-      !input_filter_get_filter_routes(&g_input, region_start(3, address))
-  ) {
+  input_filtering_get_filters(&g_input, region_start(2, address));
+  input_filtering_get_routes(&g_input, region_start(3, address));
+  if (!data_system(region_start(1, address)))
+  {
     io_printf(IO_BUF, "[Tx] Failed to initialise.\n");
     return;
   }

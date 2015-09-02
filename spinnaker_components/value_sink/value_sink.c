@@ -4,7 +4,7 @@ address_t rec_start, rec_curr;
 uint n_dimensions;
 value_t *input;
 
-input_filter_t g_input;
+if_collection_t g_input;
 
 void sink_update(uint ticks, uint arg1) {
   use(arg1);
@@ -13,13 +13,13 @@ void sink_update(uint ticks, uint arg1) {
   }
 
   // Filter inputs, write the latest value to SRAM
-  input_filter_step(&g_input, true);
+  input_filtering_step(&g_input);
   spin1_memcpy(rec_curr, input, n_dimensions * sizeof(value_t));
   rec_curr = &rec_curr[n_dimensions];
 }
 
 void mcpl_callback(uint key, uint payload) {
-  input_filter_mcpl_rx(&g_input, key, payload);
+  input_filtering_input(&g_input, key, payload);
 }
 
 void c_main(void)
@@ -29,18 +29,15 @@ void c_main(void)
   // Load parameters and filters
   region_system_t *pars = (region_system_t *) region_start(1, address);
   n_dimensions = pars->n_dimensions;
-  input = input_filter_initialise(&g_input, n_dimensions);
+  input_filtering_initialise_output(&g_input, n_dimensions);
+  input = g_input.output;
 
   if (input == NULL) {
     return;
   }
 
-  if (!input_filter_get_filters(&g_input, region_start(2, address)) ||
-      !input_filter_get_filter_routes(&g_input, region_start(3, address))
-  ) {
-    io_printf(IO_BUF, "[Value Sink] Failed to start.\n");
-    return;
-  }
+  input_filtering_get_filters(&g_input, region_start(2, address));
+  input_filtering_get_routes(&g_input, region_start(3, address));
   rec_start = region_start(15, address);
 
   // Set up callbacks, start

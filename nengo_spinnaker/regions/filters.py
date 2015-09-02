@@ -1,6 +1,7 @@
-import math
 import nengo.synapses
-from six import iteritems, itervalues
+from nengo.utils.filter_design import cont2discrete
+import numpy as np
+from six import iteritems
 import struct
 
 from .region import Region
@@ -58,7 +59,20 @@ def make_filter_regions(signals_and_connections, dt, minimise=False,
 
 
 class FilterRegion(Region):
-    """Region of memory which contains filter parameters."""
+    """Region of memory which contains filter parameters.
+
+    The first word of the region is a count of the number of filters in the
+    region.  Subsequent values are always a concatenation of the four values
+    with whatever additional parameters are required to simulate the filter.
+    These words are:
+
+    * The number of words that follow this set of parameters
+    * Index into the array of filter types in C.
+    * Number of dimensions in the filtered values ("width")
+    * Flags related to the simulation of the filter.
+
+    Subsequent words are filter type-specific.
+    """
 
     supported_filter_types = registerabledict()
     """Dictionary mapping synapse type to a supported type of filter."""
@@ -68,35 +82,32 @@ class FilterRegion(Region):
         self.filters = filters
         self.dt = dt
 
-        # Get the size of the largest supported filter
-        self._largest_struct = max(
-            f.size for f in itervalues(self.supported_filter_types))
-
     def sizeof(self, *args):
         """Get the size of the filter region in bytes."""
-        # 1 word + the size of the largest supported filter * number of filters
-        return 4 + self._largest_struct * len(self.filters)
+        # 1 word + the size of the each filter (which includes a mandatory 4
+        # words, which are the first 4 words in `filter_parameters_t`.)
+        words = (1 + 4*len(self.filters) +
+                 sum(f.size_words() for f in self.filters))
+        return words * 4
 
     def write_subregion_to_file(self, fp, *args, **kwargs):
         """Write the region to a file-like object."""
+        # Create a buffer for the region to write into, write in the first word
+        # and then write in each region in turn.
         data = bytearray(self.sizeof())
-
-        # Write the number of elements
         struct.pack_into("<I", data, 0, len(self.filters))
 
-        # Pack each element in, allowing enough space for the largest element
-        # in the union.
-        for i, f in enumerate(self.filters):
-            f.pack_into(self.dt, data, 4 + i*self._largest_struct)
+        # Write in each region
+        offset = 1
+        for f in self.filters:
+            f.pack_into(self.dt, data, offset*4)
+            offset += f.size_words() + 4
 
-        # Write the buffer back
+        # Write the data block to file
         fp.write(data)
 
 
 class Filter(object):
-    _pack_chars = "<2I"
-    size = struct.calcsize(_pack_chars)
-
     def __init__(self, width, latching):
         self.width = width
         self.latching = latching
@@ -106,19 +117,50 @@ class Filter(object):
                 self.width == other.width and
                 self.latching == other.latching)
 
+    def size_words(self):  # pragma: no cover
+        """Get the number of words used to store the parameters for this
+        filter.
+        """
+        raise NotImplementedError
+
     def pack_into(self, dt, buffer, offset=0):
+        """Pack the header struct describing the filter into the buffer."""
+        # Pack the header
+        struct.pack_into("<4I", buffer, offset,
+                         self.size_words(),
+                         self.method_index(),
+                         self.width,
+                         0x1 if self.latching else 0x0)
+
+        # Pack any data
+        self.pack_data(dt, buffer, offset + 16)
+
+
+@FilterRegion.supported_filter_types.register(type(None))
+class NoneFilter(Filter):
+    """Represents a filter which does nothing."""
+    @classmethod
+    def from_signal_and_connection(cls, signal, connection, width=None):
+        if width is None:
+            width = connection.post_obj.size_in
+        return cls(width, signal.latching)
+
+    def method_index(self):
+        """Get the index into the array of filter functions."""
+        return 0
+
+    def size_words(self):
+        return 0
+
+    def pack_data(self, dt, buffer, offset=0):
         """Pack the struct describing the filter into the buffer."""
-        struct.pack_into(self._pack_chars, buffer, offset,
-                         0xffffffff if self.latching else 0x00000000,
-                         self.width)
+        # None filter, so no data
+        pass
 
 
 @FilterRegion.supported_filter_types.register(nengo.synapses.Lowpass)
 class LowpassFilter(Filter):
     """Represents a Lowpass filter."""
-    _pack_chars = "<2I"
-    size = struct.calcsize(_pack_chars) + struct.calcsize(Filter._pack_chars)
-
     def __init__(self, width, latching, time_constant):
         """Create a new Lowpass filter."""
         super(LowpassFilter, self).__init__(width, latching)
@@ -130,38 +172,71 @@ class LowpassFilter(Filter):
             width = connection.post_obj.size_in
         return cls(width, signal.latching, connection.synapse.tau)
 
+    def method_index(self):
+        """Get the index into the array of filter functions."""
+        return 1
+
+    def size_words(self):
+        """Number of words required to represent the filter parameters."""
+        return 2
+
     def __eq__(self, other):
         return (super(LowpassFilter, self).__eq__(other) and
                 self.time_constant == other.time_constant)
 
-    def pack_into(self, dt, buffer, offset=0):
+    def pack_data(self, dt, buffer, offset=0):
         """Pack the struct describing the filter into the buffer."""
-        val = math.exp(-dt / self.time_constant)
-        struct.pack_into(self._pack_chars, buffer, offset,
-                         tp.value_to_fix(val),
-                         tp.value_to_fix(1 - val))
-        super(LowpassFilter, self).pack_into(
-            dt, buffer, offset + struct.calcsize(self._pack_chars))
+        # Compute the coefficients
+        a = np.exp(-dt / self.time_constant)
+        b = 1.0 - a
+        struct.pack_into("<2I", buffer, offset,
+                         tp.value_to_fix(a), tp.value_to_fix(b))
 
 
-@FilterRegion.supported_filter_types.register(type(None))
-class NoneFilter(Filter):
-    """Represents a filter which does nothing."""
-    _pack_chars = "<2I"
-    size = struct.calcsize(_pack_chars) + struct.calcsize(Filter._pack_chars)
+@FilterRegion.supported_filter_types.register(nengo.synapses.LinearFilter)
+class LinearFilter(Filter):
+    def __init__(self, width, latching, num, den):
+        """Create a new Linear Filter."""
+        super(LinearFilter, self).__init__(width, latching)
+        self.num = np.array(num)
+        self.den = np.array(den)
+        self.order = len(den) - 1
 
     @classmethod
     def from_signal_and_connection(cls, signal, connection, width=None):
         if width is None:
             width = connection.post_obj.size_in
-        return cls(width, signal.latching)
+        return cls(width, signal.latching,
+                   connection.synapse.num, connection.synapse.den)
 
-    def pack_into(self, dt, buffer, offset=0):
+    def method_index(self):
+        """Get the index into the array of filter functions."""
+        return 2
+
+    def size_words(self):
+        """Number of words required to represent the filter parameters."""
+        return 1 + self.order*2
+
+    def __eq__(self, other):
+        return (super(LinearFilter, self).__eq__(other) and
+                self.num.size == other.num.size and
+                self.den.size == other.den.size and
+                np.all(self.num == other.num) and
+                np.all(self.den == other.den))
+
+    def pack_data(self, dt, buffer, offset=0):
         """Pack the struct describing the filter into the buffer."""
-        struct.pack_into(self._pack_chars, buffer, offset,
-                         tp.value_to_fix(0.0), tp.value_to_fix(1.0))
-        super(NoneFilter, self).pack_into(
-            dt, buffer, offset + struct.calcsize(self._pack_chars))
+        # Compute the filter coefficients
+        b, a, _ = cont2discrete((self.num, self.den), dt)
+        b = b.flatten()
+
+        # Strip out the first values
+        assert b[0] == 0.0  # Oops!
+        ab = np.vstack((a[1:], b[1:])).T.flatten()
+
+        # Convert the values to fixpoint and write into a data buffer
+        struct.pack_into("<I", buffer, offset, self.order)
+        buffer[offset + 4:4+self.order*8] = tp.np_to_fix(ab).tostring()
 
 
 class FilterRoutingRegion(Region):
@@ -198,8 +273,8 @@ class FilterRoutingRegion(Region):
             struct.pack_into("<4I", data, 4 + 16*i,
                              ks.get_value(tag=self.filter_routing_tag),
                              ks.get_mask(tag=self.filter_routing_tag),
-                             index,
-                             ks.get_mask(field=self.index_field))
+                             ks.get_mask(field=self.index_field),
+                             index)
 
         # Write to file
         fp.write(data)
