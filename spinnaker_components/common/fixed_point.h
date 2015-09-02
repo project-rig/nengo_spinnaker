@@ -10,7 +10,7 @@
 /*****************************************************************************/
 // Convert from an INT64 to appropriate INT32 fixed point representation
 
-static inline int32_t scale_64_to_32(int64_t value)
+static inline int32_t convert_s32_30_s16_15(int64_t value)
 {
   // The lower word is treated as unsigned because we know that the MSB of the
   // low word will be an integral rather than a sign bit and we want to avoid
@@ -88,7 +88,7 @@ static inline value_t dot_product(uint32_t order, value_t *a, value_t *b)
   }
 
   // Convert from the S32.30 value back to S16.15 before returning
-  return kbits(scale_64_to_32(acc));
+  return kbits(convert_s32_30_s16_15(acc));
 }
 
 /*****************************************************************************/
