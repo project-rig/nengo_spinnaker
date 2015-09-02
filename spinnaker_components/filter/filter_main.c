@@ -2,7 +2,7 @@
 
 filter_parameters_t g_filter;
 uint delay_remaining;
-input_filter_t g_input;
+if_collection_t g_filters;
 
 void filter_update(uint ticks, uint arg1) {
   use(arg1);
@@ -11,7 +11,7 @@ void filter_update(uint ticks, uint arg1) {
   }
 
   // Update the filters
-  input_filter_step(&g_input, true);
+  input_filtering_step(&g_filters);
 
   // Apply the transform to the input to get the output
   for (uint j = 0; j < g_filter.size_out; j++) {
@@ -47,7 +47,8 @@ bool data_system(address_t addr) {
   delay_remaining = g_filter.transmission_delay;
   io_printf(IO_BUF, "[Filter] transmission delay = %d\n", delay_remaining);
 
-  g_filter.input = input_filter_initialise(&g_input, g_filter.size_in);
+  input_filtering_initialise_output(&g_filters, g_filter.size_in);
+  g_filter.input = g_filters.output;
 
   if (g_filter.input == NULL)
     return false;
@@ -87,16 +88,17 @@ bool data_get_transform(address_t addr) {
   return true;
 }
 
-void mcpl_callback(uint key, uint payload) {
-  input_filter_mcpl_rx(&g_input, key, payload);
+void mcpl_callback(uint key, uint payload)
+{
+  input_filtering_input(&g_filters, key, payload);
 }
 
 void c_main(void) {
   address_t address = system_load_sram();
+  input_filtering_get_filters(&g_filters, region_start(3, address));
+  input_filtering_get_routes(&g_filters, region_start(4, address));
   if (!data_system(region_start(1, address)) ||
       !data_get_output_keys(region_start(2, address)) ||
-      !input_filter_get_filters(&g_input, region_start(3, address)) ||
-      !input_filter_get_filter_routes(&g_input, region_start(4, address)) ||
       !data_get_transform(region_start(5, address))
   ) {
     io_printf(IO_BUF, "[Filter] Failed to initialise.\n");

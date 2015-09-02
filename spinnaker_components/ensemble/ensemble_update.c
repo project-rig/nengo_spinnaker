@@ -35,14 +35,15 @@ void ensemble_update(uint ticks, uint arg1) {
 
   // Filter inputs, updating accumulator for excitatory and inhibitory inputs
   profiler_write_entry(PROFILER_ENTER | PROFILER_TIMER_INPUT_FILTER);
-  input_filter_step(&g_input, true);
-  input_filter_step(&g_input_inhibitory, true);
-  input_filter_step(&g_input_modulatory, false);
+  input_filtering_step(&g_input);
+  input_filtering_step(&g_input_inhibitory);
+  input_filtering_step_no_accumulate(&g_input_modulatory);
   profiler_write_entry(PROFILER_EXIT | PROFILER_TIMER_INPUT_FILTER);
 
   // Compute the inhibition
-  for (uint d = 0; d < g_ensemble.n_inhib_dims; d++) {
-    inhibitory_input += g_input_inhibitory.input[d];
+  for (uint d = 0; d < g_ensemble.n_inhib_dims; d++)
+  {
+    inhibitory_input += g_input_inhibitory.output[d];
   }
 
   profiler_write_entry(PROFILER_ENTER | PROFILER_TIMER_NEURON);
@@ -60,7 +61,7 @@ void ensemble_update(uint ticks, uint arg1) {
                   inhibitory_input * g_ensemble.inhib_gain[n]);
 
     // Encode the input and add to the membrane current
-    value_t encoded_input = dot_product(g_input.n_dimensions,
+    value_t encoded_input = dot_product(g_input.output_size,
                                         neuron_encoder(n),
                                         g_ensemble.input);
     i_membrane += encoded_input;

@@ -33,9 +33,8 @@
 #include "nengo_typedefs.h"
 #include "nengo-common.h"
 
-#include "dimensional-io.h"
 #include "recording.h"
-#include "input_filter.h"
+#include "input_filtering.h"
 
 /** \brief Configuration flags for Ensemble applications. */
 enum
@@ -91,9 +90,10 @@ extern uint g_output_period;       //!< Delay in transmitting decoded output
 
 extern uint g_n_output_dimensions;
 
-extern input_filter_t g_input;     //!< Input filters and buffers
-extern input_filter_t g_input_inhibitory;     //!< Input filters and buffers
-extern input_filter_t g_input_modulatory;     //!< Input filters and buffers
+extern if_collection_t
+  g_input,             //!< Input filters and buffers
+  g_input_inhibitory,  //!< Input filters and buffers
+  g_input_modulatory;  //!< Input filters and buffers
 
 /* Functions ****************************************************************/
 /**
@@ -120,7 +120,7 @@ void ensemble_update( uint arg0, uint arg1 );
 //! Get the encoder for the given neuron
 static inline value_t* neuron_encoder(uint32_t n)
 {
-  return &g_ensemble.encoders[n * g_input.n_dimensions];
+  return &g_ensemble.encoders[n * g_input.output_size];
 };
 
 static inline value_t neuron_decoder( uint n, uint d )
