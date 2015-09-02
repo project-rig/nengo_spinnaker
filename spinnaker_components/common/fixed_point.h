@@ -10,57 +10,9 @@
 /*****************************************************************************/
 // Convert from an INT64 to appropriate INT32 fixed point representation
 
-static inline int32_t scale_64_to_32(int64_t value)
+static inline int32_t convert_s32_30_s16_15(int64_t value)
 {
-  // The lower word is treated as unsigned because we know that the MSB of the
-  // low word will be an integral rather than a sign bit and we want to avoid
-  // the compiler using ASR rather than LSR when we come to shift this value.
-  register union {struct {uint32_t lo; int32_t hi;} words;
-                  int64_t value;} result;
-  result.value = value;
-
-  // Include the fractional part and 2 bits of the integral part.
-  register int32_t result32 = (int32_t) ((result.words).lo >> 15);
-
-  // Include the remainder of the integral part, we will saturate in the next
-  // step.  We shift up by 17 to account for the 15 bits of fractional and 2
-  // bits of integral that we already have stored.
-  result32 |= (result.words).hi << (15 + 2);
-
-  // NOTE: With no saturation the following should compile down to 3
-  // instructions:
-  //
-  //     CMP ((result.words).hi), #0x0
-  //     BICGE product, product, #0x8000_0000
-  //     ORRLT product, product, #0x8000_0000
-  //
-  if ((result.words).hi >= 0)
-  {
-    // If we were to saturate it should happen here for +ve values.
-    //   saturated = ((result.words).hi) > (1 << 15);
-    //   if (saturated)
-    //   {
-    //     result32 = INT32_MAX;
-    //   }
-
-    // The sign bit should not be set as this value is positive.
-    result32 &= ~(1 << 31);
-  }
-  else
-  {
-    // If we were to saturate it should happen here for -ve values.
-    //   saturated = ~((result.words).hi) <= -(1 << 16);
-    //   if (saturated)
-    //   {
-    //     result32 = -INT32_MAX;
-    //   }
-
-    // The sign bit should be set as this value is negative.
-    result32 |= (1 << 31);
-  }
-
-  // Return the fixed point value
-  return result32;
+  return (int32_t) (value >> 15);
 }
 
 /*****************************************************************************/
@@ -88,7 +40,7 @@ static inline value_t dot_product(uint32_t order, value_t *a, value_t *b)
   }
 
   // Convert from the S32.30 value back to S16.15 before returning
-  return kbits(scale_64_to_32(acc));
+  return kbits(convert_s32_30_s16_15(acc));
 }
 
 /*****************************************************************************/

@@ -78,6 +78,8 @@ void ensemble_update(uint ticks, uint arg1) {
     // Save state
     set_neuron_voltage(n, v_voltage);
 
+    // NOTE: All `value_t` comparisons should be wrapped in `bitsk` otherwise
+    // GCC inserts a function call rather than just using a CMP.
     if (bitsk(v_voltage) <= bitsk(1.0k))
     {
       // If this neuron hasn't fired then just store record voltage.
