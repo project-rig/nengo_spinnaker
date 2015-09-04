@@ -1,12 +1,12 @@
 import mock
 import nengo
-import numpy as np
 
-from nengo_spinnaker.builder.builder import InputPort, Model, OutputPort
+from nengo_spinnaker.builder.builder import Model
+from nengo_spinnaker.builder.model import InputPort, OutputPort
 from nengo_spinnaker.builder.connection import (
     generic_source_getter,
     generic_sink_getter,
-    build_generic_connection_params
+    build_generic_reception_params,
 )
 
 
@@ -56,16 +56,13 @@ def test_generic_sink_getter():
     assert spec.target.port is InputPort.standard
 
 
-def test_build_standard_connection_params():
+def test_build_standard_reception_params():
     # Create the test network
     with nengo.Network():
         a = nengo.Node(lambda t: [t, t], size_in=0, size_out=2)
         b = nengo.Node(lambda t, x: None, size_in=1, size_out=0)
-        a_b = nengo.Connection(a[0], b)
+        a_b = nengo.Connection(a[0], b, synapse=0.03)
 
-    # Build the connection parameters
-    params = build_generic_connection_params(None, a_b)
-    assert params.decoders is None
-    assert params.transform == 1.0
-    assert params.eval_points is None
-    assert params.solver_info is None
+    # Build the transmission parameters
+    params = build_generic_reception_params(None, a_b)
+    assert params.filter is a_b.synapse

@@ -2,7 +2,7 @@ import nengo
 import pytest
 
 from nengo_spinnaker.builder import Model
-from nengo_spinnaker.builder.builder import OutputPort, InputPort
+from nengo_spinnaker.builder.model import OutputPort, InputPort
 from nengo_spinnaker.node_io import ethernet as ethernet_io
 from nengo_spinnaker.operators import SDPReceiver, SDPTransmitter
 

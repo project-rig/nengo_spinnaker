@@ -8,7 +8,8 @@ from nengo.utils.builder import full_transform
 from nengo.utils import numpy as npext
 import numpy as np
 
-from .builder import BuiltConnection, InputPort, Model, ObjectPort, spec
+from .builder import BuiltConnection, Model, ObjectPort, spec
+from .model import InputPort
 from .ports import EnsembleInputPort
 from .. import operators
 from ..utils import collections as collections_ext
@@ -64,14 +65,6 @@ def get_neurons_sink(model, connection):
         # Connections from non-neurons to Neurons where the transform delivers
         # the same value to all neurons are treated as global inhibition
         # connection.
-        # Modify the connection parameters
-        model.params[connection] = BuiltConnection(
-            model.params[connection].decoders,
-            model.params[connection].eval_points,
-            model.params[connection].transform[0, np.newaxis],
-            model.params[connection].solver_info
-        )
-
         # Return a signal to the correct port.
         return spec(ObjectPort(ens, EnsembleInputPort.global_inhibition))
     else:
@@ -144,7 +137,34 @@ def build_lif(model, ens):
     model.object_operators[ens] = operators.EnsembleLIF(ens)
 
 
-@Model.connection_parameter_builders.register(nengo.Ensemble)
+class EnsembleTransmissionParameters(object):
+    """Transmission parameters for a connection originating at an Ensemble.
+
+    Attributes
+    ----------
+    decoders : array
+        Decoders to use for the connection (including the transform).
+    """
+    def __init__(self, decoders):
+        # Copy the decoders
+        self.decoders = np.array(decoders)
+
+    def __ne__(self, other):
+        return not (self == other)
+
+    def __eq__(self, other):
+        # Equal iff. the decoders are the same shape
+        if self.decoders.shape != other.decoders.shape:
+            return False
+
+        # Equal iff. the decoder values are the same
+        if np.any(self.decoders != other.decoders):
+            return False
+
+        return True
+
+
+@Model.transmission_parameter_builders.register(nengo.Ensemble)
 def build_from_ensemble_connection(model, conn):
     """Build the parameters object for a connection from an Ensemble."""
     if conn.solver.weights:
@@ -156,23 +176,31 @@ def build_from_ensemble_connection(model, conn):
     rng = np.random.RandomState(model.seeds[conn])
 
     # Get the transform
-    transform = full_transform(conn, slice_pre=False)
+    transform = full_transform(conn, slice_pre=False, allow_scalars=False)
 
     # Solve for the decoders
     eval_points, decoders, solver_info = connection_b.build_decoders(
         model, conn, rng
     )
 
-    # Return the parameters
-    return BuiltConnection(
-        decoders=decoders,
-        eval_points=eval_points,
-        transform=transform,
-        solver_info=solver_info
-    )
+    # Store the parameters in the model
+    model.params[conn] = BuiltConnection(decoders=decoders,
+                                         eval_points=eval_points,
+                                         transform=transform,
+                                         solver_info=solver_info)
+
+    # Modify the transform if this is a global inhibition connection
+    if (isinstance(conn.post_obj, nengo.ensemble.Neurons) and
+            np.all(transform[0, :] == transform[1:, :])):
+        transform = np.array([transform[0]])
+
+    # Multiply the decoders by the transform and return this as the
+    # transmission parameters.
+    full_decoders = np.dot(transform, decoders.T).T
+    return EnsembleTransmissionParameters(full_decoders)
 
 
-@Model.connection_parameter_builders.register(nengo.ensemble.Neurons)
+@Model.transmission_parameter_builders.register(nengo.ensemble.Neurons)
 def build_from_neurons_connection(model, conn):
     """Build the parameters object for a connection from Neurons."""
     raise NotImplementedError(

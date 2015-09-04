@@ -1,14 +1,14 @@
 import collections
 import math
 import numpy as np
-from six import iteritems
 from rig.machine import Cores, SDRAM
 import struct
 
 from nengo.processes import Process
 from nengo.utils import numpy as npext
 
-from nengo_spinnaker.builder.builder import OutputPort, netlistspec
+from nengo_spinnaker.builder.builder import netlistspec
+from nengo_spinnaker.builder.model import OutputPort
 from nengo_spinnaker.netlist import VertexSlice
 from nengo_spinnaker import partition_and_cluster as partition
 from nengo_spinnaker import regions
@@ -39,20 +39,17 @@ class ValueSource(object):
 
         # Get all the outgoing signals to determine how big the size out is and
         # to build a list of keys.
-        sigs_conns = model.get_signals_connections_from_object(self)
+        sigs_conns = model.get_signals_from(self)
         if len(sigs_conns) == 0:
             return netlistspec([])
 
         keys = list()
-        self.conns_transforms = list()
-        for sig, conns in iteritems(sigs_conns[OutputPort.standard]):
-            assert len(conns) == 1, "Expected a 1:1 mapping"
-
+        self.transmission_parameters = list()
+        for sig, tps in sigs_conns[OutputPort.standard]:
             # Add the keys for this connection
-            conn = conns[0]
-            transform, sig_keys = get_transform_keys(model, sig, conn)
+            transform, sig_keys = get_transform_keys(sig, tps)
             keys.extend(sig_keys)
-            self.conns_transforms.append((conn, transform))
+            self.transmission_parameters.append((tps, transform))
         size_out = len(keys)
 
         # Build the keys region
@@ -75,8 +72,8 @@ class ValueSource(object):
         sdram_constraint = partition.Constraint(8*2**20)  # Max 8MiB
         constraints = {
             transmit_constraint: lambda s: s.stop - s.start,
-            sdram_constraint:
-                lambda s: regions.utils.sizeof_regions(self.regions, s),
+            sdram_constraint: (
+                lambda s: regions.utils.sizeof_regions(self.regions, s)),
         }
         for sl in partition.partition(slice(0, size_out), constraints):
             # Determine the resources
@@ -144,7 +141,7 @@ class ValueSource(object):
 
         # Compute the output for each connection
         outputs = []
-        for conn, transform in self.conns_transforms:
+        for tps, transform in self.transmission_parameters:
             output = []
 
             # For each f(t) for the next set of simulations we calculate the
@@ -152,11 +149,11 @@ class ValueSource(object):
             # the pre-slice, then the function and then the post-slice.
             for v in values:
                 # Apply the pre-slice
-                v = v[conn.pre_slice]
+                v = v[tps.pre_slice]
 
                 # Apply the function on the connection, if there is one.
-                if conn.function is not None:
-                    v = np.asarray(conn.function(v), dtype=float)
+                if tps.function is not None:
+                    v = np.asarray(tps.function(v), dtype=float)
 
                 output.append(np.dot(transform, v.T))
             outputs.append(np.array(output).reshape(max_n, -1))
@@ -212,10 +209,10 @@ class SystemRegion(regions.Region):
         ))
 
 
-def get_transform_keys(model, sig, conn):
+def get_transform_keys(sig, tps):
     # Get the transform for the connection from the list of built connections,
     # then remove zeroed rows (should any exist) and derive the list of keys.
-    transform = model.params[conn].transform
+    transform = tps.transform
     keep = np.any(transform != 0.0, axis=1)
     keys = list()
 

@@ -2,7 +2,8 @@ from rig.machine import Cores, SDRAM
 import six
 import struct
 
-from nengo_spinnaker.builder.builder import netlistspec, OutputPort
+from nengo_spinnaker.builder.builder import netlistspec
+from nengo_spinnaker.builder.model import OutputPort
 from nengo_spinnaker.netlist import Vertex
 from nengo_spinnaker.regions import KeyspacesRegion, KeyField, Region
 from nengo_spinnaker.regions import utils as region_utils
@@ -27,22 +28,18 @@ class SDPReceiver(object):
 
         # Get all outgoing signals and their associated connections (this
         # SHOULD be a 1:1 mapping)
-        out = model.get_signals_connections_from_object(self)
-        for signal, connections in six.iteritems(out[OutputPort.standard]):
-            assert len(connections) == 1, "Expecting a 1:1 mapping"
-            conn = connections[0]
-
+        for signal, tps in model.get_signals_from(self)[OutputPort.standard]:
             # Get the transform, and from this the keys
-            transform = model.params[conn].transform
+            transform = tps.transform
             keys = [signal.keyspace(index=i) for i in
                     range(transform.shape[0])]
 
             # Create a vertex for this connection (assuming its size out <= 64)
             if len(keys) > 64:
                 raise NotImplementedError(
-                    "Connection {!s} is too wide to transmit to SpiNNaker. "
+                    "Connection is too wide to transmit to SpiNNaker. "
                     "Consider breaking the connection up or making the "
-                    "originating node a function of time Node.".format(conn)
+                    "originating node a function of time Node."
                 )
 
             # Create the regions for the system
@@ -58,8 +55,8 @@ class SDPReceiver(object):
             }
 
             # Create the vertex
-            v = self.connection_vertices[conn] = Vertex(get_application("rx"),
-                                                        resources)
+            v = self.connection_vertices[tps] = Vertex(get_application("rx"),
+                                                       resources)
             self._sys_regions[v] = sys_region
             self._key_regions[v] = keys_region
 

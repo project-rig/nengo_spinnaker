@@ -1,7 +1,8 @@
 from rig.machine import Cores, SDRAM
 import struct
 
-from nengo_spinnaker.builder.builder import netlistspec, InputPort
+from nengo_spinnaker.builder.builder import netlistspec
+from nengo_spinnaker.builder.model import InputPort
 from nengo_spinnaker.netlist import Vertex
 from nengo_spinnaker.regions import Region
 from nengo_spinnaker.regions.filters import make_filter_regions
@@ -27,11 +28,9 @@ class SDPTransmitter(object):
                                         self.size_in, 1)
 
         # Build the filter regions
-        in_sigs = model.get_signals_connections_to_object(self)
+        in_sigs = model.get_signals_to(self)[InputPort.standard]
         self._filter_region, self._routing_region = make_filter_regions(
-            in_sigs[InputPort.standard], model.dt, True,
-            model.keyspaces.filter_routing_tag
-        )
+            in_sigs, model.dt, True, model.keyspaces.filter_routing_tag)
 
         # Get the resources
         resources = {

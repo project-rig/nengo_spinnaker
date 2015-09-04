@@ -2,7 +2,8 @@ import numpy as np
 from rig.machine import Cores, SDRAM
 import struct
 
-from nengo_spinnaker.builder.builder import InputPort, netlistspec
+from nengo_spinnaker.builder.builder import netlistspec
+from nengo_spinnaker.builder.model import InputPort
 from nengo_spinnaker import regions
 from nengo_spinnaker.regions.filters import make_filter_regions
 from nengo_spinnaker.netlist import Vertex
@@ -39,8 +40,7 @@ class ValueSink(object):
         """
         # Extract all the filters from the incoming connections to build the
         # filter regions.
-        signals_conns = \
-            model.get_signals_connections_to_object(self)[InputPort.standard]
+        signals_conns = model.get_signals_to(self)[InputPort.standard]
         self.filter_region, self.filter_routing_region = make_filter_regions(
             signals_conns, model.dt, True, model.keyspaces.filter_routing_tag)
 

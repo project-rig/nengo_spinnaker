@@ -4,6 +4,8 @@ import pytest
 import struct
 import tempfile
 
+from nengo_spinnaker.builder.model import SignalParameters
+from nengo_spinnaker.builder.node import PassthroughNodeTransmissionParameters
 from nengo_spinnaker.operators.filter import (SystemRegion,
                                               get_transforms_and_keys)
 
@@ -47,7 +49,6 @@ def test_get_transforms_and_keys():
     that appropriate keys are assigned.
     """
     # Create 2 mock signals and associated connections
-    sig_a = mock.Mock(name="signal A")
     sig_a_ks_0 = mock.Mock()
     sig_a_ks_1 = mock.Mock()
     sig_a_kss = {
@@ -55,44 +56,29 @@ def test_get_transforms_and_keys():
         1: sig_a_ks_1,
     }
 
-    sig_a.keyspace = mock.Mock()
-    sig_a.keyspace.side_effect = lambda index: sig_a_kss[index]
+    sig_a_ks = mock.Mock()
+    sig_a_ks.side_effect = lambda index: sig_a_kss[index]
+    sig_a = SignalParameters(keyspace=sig_a_ks)
 
-    conn_a = mock.Mock(name="connection A")
-    transform_a = np.eye(2)
+    conn_a = PassthroughNodeTransmissionParameters(np.eye(2))
 
-    sig_b = mock.Mock(name="signal B")
     sig_b_ks_0 = mock.Mock()
     sig_b_kss = {
         0: sig_b_ks_0,
     }
 
-    sig_b.keyspace = mock.Mock()
-    sig_b.keyspace.side_effect = lambda index: sig_b_kss[index]
+    sig_b_ks = mock.Mock()
+    sig_b_ks.side_effect = lambda index: sig_b_kss[index]
+    sig_b = SignalParameters(keyspace=sig_b_ks)
 
-    conn_b = mock.Mock(name="connection B")
-    transform_b = np.array([[0.5, 0.5]])
+    conn_b = PassthroughNodeTransmissionParameters(np.array([[0.5, 0.5]]))
+    transform_b = conn_b.transform
 
     # Create the dictionary type that will be used
-    signals_connections = {
-        sig_a: [conn_a],
-        sig_b: [conn_b],
-    }
+    pars = [(sig_a, conn_a), (sig_b, conn_b)]
 
     # Get the transforms and keys
-    with mock.patch("nengo_spinnaker.operators.filter.full_transform") as ft:
-        def full_transform(conn, allow_scalars):
-            assert not allow_scalars
-            if conn is conn_a:
-                return transform_a
-            elif conn is conn_b:
-                return transform_b
-            else:
-                assert False, "Unexpected connection."
-
-        ft.side_effect = full_transform
-
-        transforms, keys = get_transforms_and_keys(signals_connections)
+    transforms, keys = get_transforms_and_keys(pars)
 
     # Check that the transforms and keys are correct
     assert set(keys) == set([sig_a_ks_0, sig_a_ks_1, sig_b_ks_0])
@@ -116,16 +102,15 @@ def test_get_transforms_and_keys_removes_zeroed_rows(latching):
     sig = mock.Mock()
     sig.keyspace = ks
     sig.latching = latching
+    sig = SignalParameters(keyspace=ks, latching=latching)
 
     # Create a mock connection
-    conn = mock.Mock()
+    conn = PassthroughNodeTransmissionParameters(transform)
 
-    signals_connections = {sig: [conn]}
+    signals_connections = [(sig, conn)]
 
     # Get the transform and keys
-    with mock.patch("nengo_spinnaker.operators.filter.full_transform") as ft:
-        ft.return_value = transform
-        t, keys = get_transforms_and_keys(signals_connections)
+    t, keys = get_transforms_and_keys(signals_connections)
 
     if not latching:
         # Check the transform is correct
@@ -156,38 +141,11 @@ def test_get_transforms_and_keys_removes_zeroed_rows(latching):
                              mock.call(index=9)])
 
 
-@pytest.mark.xfail
-def test_get_transforms_and_keys_no_connection():
-    """Test that an identity matrix of the size of the signal is used when the
-    no connection is provided.
-    """
-    sig_a = mock.Mock()
-    sig_a.width = 5
-    sigs_conns = {sig_a: []}
-
-    # Get the signals and keys
-    transform, keys = get_transforms_and_keys(sigs_conns)
-    assert np.all(transform == np.eye(sig_a.width))
-
-
-def test_get_transforms_and_keys_multiple_connections_fails():
-    """Filters can't deal with multiple connections being represented by one
-    signal.
-    """
-    sig_a = mock.Mock()
-    sig_a.width = 5
-    sigs_conns = {sig_a: [mock.Mock() for _ in range(3)]}
-
-    # Get the signals and keys
-    with pytest.raises(NotImplementedError):
-        get_transforms_and_keys(sigs_conns)
-
-
-def test_get_transforms_and_keys_noting():
+def test_get_transforms_and_keys_nothing():
     """Check that no transform and no keys are returned for empty connection
     sets.
     """
-    tr, keys = get_transforms_and_keys(dict())
+    tr, keys = get_transforms_and_keys([])
 
     assert keys == list()
     assert tr.ndim == 2

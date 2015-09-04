@@ -4,50 +4,12 @@ import nengo
 from nengo.cache import NoDecoderCache
 import numpy as np
 import pytest
-from six import iteritems
 
 from nengo_spinnaker.builder.builder import (
-    Model, Signal, spec, _make_signal, ObjectPort, OutputPort, InputPort,
-    netlistspec
+    Model, spec, ObjectPort, netlistspec, _make_signal_parameters
 )
+from nengo_spinnaker.builder.model import SignalParameters
 from nengo_spinnaker.netlist import Vertex, VertexSlice
-
-
-class TestSignal(object):
-    @pytest.mark.parametrize("latching, weight", [(True, 5), (False, 1)])
-    def test_single_sink(self, latching, weight):
-        """Test that creating a signal with a single sink still expands to a
-        list.
-        """
-        source = mock.Mock()
-        sink = mock.Mock()
-        keyspace = mock.Mock()
-
-        # Create the signal
-        signal = Signal(source, sink, keyspace, weight, latching)
-
-        # Ensure the parameters are sane
-        assert signal.source is source
-        assert signal.sinks == [sink]
-        assert signal.keyspace is keyspace
-        assert signal.weight == weight
-        assert signal.latching is latching
-
-    def test_multiple_sink(self):
-        """Test that creating a signal with a multiple sinks works."""
-        source = mock.Mock()
-        sinks = [mock.Mock() for _ in range(3)]
-        keyspace = mock.Mock()
-
-        # Create the signal
-        signal = Signal(source, sinks, keyspace)
-
-        # Ensure the parameters are sane
-        assert signal.source is source
-        assert signal.sinks == sinks
-        assert signal.keyspace is keyspace
-        assert signal.weight == 0
-        assert not signal.latching
 
 
 def test_model_init():
@@ -60,9 +22,7 @@ def test_model_init():
     assert model.seeds == dict()
 
     assert dict(model.object_operators) == dict()
-    assert dict(model.connections_signals) == dict()
     assert model.extra_operators == list()
-    assert model.extra_signals == list()
 
     assert isinstance(model.decoder_cache, NoDecoderCache)
     assert len(model.keyspaces) == 1
@@ -195,146 +155,152 @@ class TestBuild(object):
 
 
 class TestMakeConnection(object):
-    @pytest.mark.parametrize("use_registered_dicts", [True, False])
-    @pytest.mark.parametrize("seed", [None, 456])
-    def test_make_connections(self, use_registered_dicts, seed):
-        """Test that building connections adds a new signal to the model."""
-        # TODO Test that the connection is fully built
-        model = Model()
-
+    """Test the building of connections."""
+    @pytest.mark.parametrize("use_make_connection", (True, False))
+    def test_standard(self, use_make_connection):
+        """Test building a single connection, ensure that all appropriate
+        methods are called and that the signal is added to the connection map.
+        """
         class A(object):
             pass
 
-        class B(object):
-            pass
+        # Create the connection (as a mock)
+        connection_source = A()
+        connection_sink = A()
 
-        a = A()
-        b = B()
-
-        # Create a connection from a to b
         connection = mock.Mock()
-        connection.seed = seed
-        connection.pre_obj = a
-        connection.post_obj = b
+        connection.pre_obj = connection_source
+        connection.post_obj = connection_sink
 
-        # Create getter methods
-        source = ObjectPort(mock.Mock(), None)
-        sink = ObjectPort(mock.Mock(), None)
+        # Create the Model which we'll build with
+        m = Model()
 
-        def source_getter_fn(m, c):
-            assert m is model
-            assert c is connection
+        # Modify the Model so that we can interpret calls to the connection map
+        m.connection_map = mock.Mock(name="ConnectionMap")
 
-            return spec(source)
+        source = mock.Mock(name="Source Object")
+        source_port = mock.Mock(name="Source Port")
+        sink = mock.Mock(name="Sink Object")
+        sink_port = mock.Mock(name="Sink Port")
 
-        source_getter = mock.Mock(wraps=source_getter_fn)
+        # Add some build methods
+        def source_getter(model, conn):
+            assert model is m
+            assert conn is connection
+            return spec(ObjectPort(source, source_port))
 
-        def sink_getter_fn(m, c):
-            assert m is model
-            assert c is connection
+        def sink_getter(model, conn):
+            assert model is m
+            assert conn is connection
+            return spec(ObjectPort(sink, sink_port))
 
-            return spec(sink)
+        source_getters = {A: mock.Mock(side_effect=source_getter)}
+        sink_getters = {A: mock.Mock(side_effect=sink_getter)}
 
-        sink_getter = mock.Mock(wraps=sink_getter_fn)
+        transmission_parameters = mock.Mock(name="Transmission Params")
 
-        # Create a method to build the connection
-        built_connection = mock.Mock(name="built connection")
+        def transmission_builder(model, conn):
+            assert model is m
+            assert conn is connection
+            return transmission_parameters
 
-        def connection_builder_fn(m, c):
-            assert m is model
-            assert c is connection
+        reception_parameters = mock.Mock(name="Reception Params")
 
-            return built_connection
+        def reception_builder(model, conn):
+            assert model is m
+            assert conn is connection
+            return reception_parameters
 
-        connection_builder_a = mock.Mock(wraps=connection_builder_fn)
-        connection_builder_b = mock.Mock(wraps=connection_builder_fn)
+        transmission_parameter_builders = {
+            A: mock.Mock(side_effect=transmission_builder)
+        }
+        reception_parameter_builders = {
+            A: mock.Mock(side_effect=reception_builder)
+        }
 
-        # Create a mock network
-        network = mock.Mock()
-        network.seed = None
-        network.connections = [connection]
-        network.ensembles = []
-        network.nodes = []
-        network.networks = []
-        network.probes = []
+        # Make the connection
+        if use_make_connection:
+            # Set an RNG to build with
+            m.rng = np.random
 
-        if use_registered_dicts:
-            # Patch the getters, add a null builder
-            with patch.object(model, "source_getters", {A: source_getter}), \
-                    patch.object(model, "sink_getters", {B: sink_getter}), \
-                    patch.object(model, "connection_parameter_builders",
-                                 {A: connection_builder_a,
-                                  B: connection_builder_b}):
-                # Build the network
-                model.build(network)
+            # Set the builders
+            m._source_getters = source_getters
+            m._sink_getters = sink_getters
+            m._transmission_parameter_builders = \
+                transmission_parameter_builders
+            m._reception_parameter_builders = reception_parameter_builders
+
+            # Build the connection directly
+            m.make_connection(connection)
         else:
-            model.build(network,
-                        extra_source_getters={A: source_getter},
-                        extra_sink_getters={B: sink_getter},
-                        extra_connection_parameter_builders={
-                            A: connection_builder_a,
-                            B: connection_builder_b,
-                        })
+            # Embed the connection in a mock Nengo network and build that
+            # instead.
+            network = mock.Mock()
+            network.seed = None
+            network.connections = [connection]
+            network.ensembles = []
+            network.nodes = []
+            network.networks = []
+            network.probes = []
 
-        # Check that seeds were provided
-        if seed is not None:
-            assert model.seeds[connection] == seed
-        else:
-            assert model.seeds[connection] is not None
+            # Build this (having overridden the builders)
+            with mock.patch.object(m, "source_getters", source_getters), \
+                    mock.patch.object(m, "sink_getters", sink_getters), \
+                    mock.patch.object(m, "transmission_parameter_builders",
+                                      transmission_parameter_builders), \
+                    mock.patch.object(m, "reception_parameter_builders",
+                                      reception_parameter_builders):
+                m.build(network)
 
-        # Assert the getters were called
-        assert source_getter.call_count == 1
-        assert sink_getter.call_count == 1
+        # Assert the connection map received an appropriate call
+        m.connection_map.add_connection.assert_called_once_with(
+            source, source_port, SignalParameters(),
+            transmission_parameters, sink, sink_port, reception_parameters
+        )
 
-        # Assert that the connection parameter builder was called
-        assert connection_builder_a.call_count == 1
-        assert connection_builder_b.call_count == 0
-
-        # Assert that the parameters were saved
-        assert model.params[connection] is built_connection
-
-        # Assert that the signal exists
-        signal = model.connections_signals[connection]
-        assert signal.source is source
-        assert signal.sinks == [sink]
-
-    @pytest.mark.parametrize(
-        "source_getter, sink_getter",
-        [(lambda m, c: None, lambda m, c: spec(None)),
-         (lambda m, c: spec(None), lambda m, c: None),
-         ]
-    )
-    def test_make_connection_no_signal(self, source_getter, sink_getter):
-        """Test that building connections adds a new signal to the model."""
-        model = Model()
-
+    @pytest.mark.parametrize("no_source, no_sink", ((True, False),
+                                                    (False, True)))
+    def test_source_is_none(self, no_source, no_sink):
+        """Test that if either the source or sink is none no connection is
+        added to the model.
+        """
         class A(object):
             pass
 
-        # Create a connection from a to b
+        # Create the connection (as a mock)
+        connection_source = A()
+        connection_sink = A()
+
         connection = mock.Mock()
-        connection.pre_obj = A()
-        connection.post_obj = A()
+        connection.pre_obj = connection_source
+        connection.post_obj = connection_sink
 
-        # Create a mock network
-        network = mock.Mock()
-        network.seed = None
-        network.connections = [connection]
-        network.ensembles = []
-        network.nodes = []
-        network.networks = []
-        network.probes = []
+        # Create the Model which we'll build with
+        m = Model()
 
-        # Patch the getters, add a null builder
-        with patch.object(model, "source_getters", {A: source_getter}), \
-                patch.object(model, "sink_getters", {A: sink_getter}), \
-                patch.object(model, "connection_parameter_builders",
-                             {A: mock.Mock()}):
-            # Build the network
-            model.build(network)
+        # Modify the Model so that we can interpret calls to the connection map
+        m.connection_map = mock.Mock(name="ConnectionMap")
 
-        # Assert that no signal exists
-        assert connection not in model.connections_signals
+        obj = mock.Mock(name="Object")
+        obj_port = mock.Mock(name="Port")
+
+        # Add some build methods
+        m._source_getters = ({A: lambda m, c: None} if no_source else
+                             {A: lambda m, c: ObjectPort(obj, obj_port)})
+        m._sink_getters = ({A: lambda m, c: None} if no_sink else
+                           {A: lambda m, c: ObjectPort(obj, obj_port)})
+        m._transmission_parameter_builders = {A: lambda m, c: None}
+        m._reception_parameter_builders = {A: lambda m, c: None}
+
+        # Make the connection
+        # Set an RNG to build with
+        m.rng = np.random
+
+        # Build the connection directly
+        m.make_connection(connection)
+
+        # Assert no call was made to add_connection
+        assert not m.connection_map.add_connection.called
 
 
 class TestBuildProbe(object):
@@ -392,32 +358,6 @@ class TestBuildProbe(object):
         assert build_neurons_probe.call_count == 1
 
 
-def test_get_object_and_connection_id():
-    """Test retrieving an object and a connection ID."""
-    obj_a = mock.Mock(name="object a")
-    conn_a0 = mock.Mock(name="connection a[0]")
-    conn_a1 = mock.Mock(name="connection a[0]")
-
-    obj_b = mock.Mock(name="object b")
-    conn_b0 = mock.Mock(name="connection b[0]")
-
-    # Create an empty model
-    model = Model()
-
-    # The first connection from the first object should get (0, 0), no matter
-    # how many times we ask
-    assert (0, 0) == model._get_object_and_connection_id(obj_a, conn_a0)
-
-    # The second connection from the first object should get (0, 1)
-    assert (0, 1) == model._get_object_and_connection_id(obj_a, conn_a1)
-    assert (0, 0) == model._get_object_and_connection_id(obj_a, conn_a0)
-
-    # The first connection from the second object should get (1, 0)
-    assert (1, 0) == model._get_object_and_connection_id(obj_b, conn_b0)
-    assert (0, 1) == model._get_object_and_connection_id(obj_a, conn_a1)
-    assert (0, 0) == model._get_object_and_connection_id(obj_a, conn_a0)
-
-
 def test_spec():
     """Test specifying the source or sink of a signal."""
     # With minimal arguments
@@ -440,342 +380,85 @@ def test_spec():
     assert s.latching is latching
 
 
-class TestMakeSignalFromSpecs(object):
-    """Test constructing signals from spec objects."""
-    def test_standard(self):
-        """Test that mostly empty specs result in appropriate calls to build
-        the keyspace and that the weight is grabbed from the connection.
-        """
-        # Create the model with it's default keyspace
-        model = mock.Mock()
-        model.keyspaces = {"nengo": mock.Mock()}
-        exp_ks = model.keyspaces["nengo"].return_value = mock.Mock()
-        model._get_object_and_connection_id.return_value = (1, 3)
+class TestMakeSignalParameters(object):
+    """Test constructing signal parameters from spec objects."""
+    @pytest.mark.parametrize("a_is_latching, b_is_latching, latching",
+                             [(False, False, False),
+                              (True, False, True),
+                              (False, True, True),
+                              (True, True, True)])
+    def test_latching(self, a_is_latching, b_is_latching, latching):
+        # Construct the specs
+        a_spec = spec(None, latching=a_is_latching)
+        b_spec = spec(None, latching=b_is_latching)
 
-        # Create the connection that we're building
-        pre = mock.Mock("pre")
-        post = mock.Mock("post")
-        post.size_in = 5
-        connection = mock.Mock(spec_set=nengo.Connection)
-        connection.pre_obj = pre
-        connection.post_obj = post
+        # Make the signal parameters, check they are correct
+        sig_pars = _make_signal_parameters(a_spec, b_spec)
+        assert sig_pars.latching is latching
 
-        # Create a spec for the source and a spec for the sink
-        source_obj = mock.Mock()
-        source_spec = spec(source_obj)
-        sink_obj = mock.Mock()
-        sink_spec = spec(sink_obj)
+    @pytest.mark.parametrize("source_weight, sink_weight",
+                             [(4, 7), (5, 2), (2, 2)])
+    def test_weight(self, source_weight, sink_weight):
+        """Test that the greatest specified weight is used."""
+        # Construct the specs
+        a_spec = spec(None, weight=source_weight)
+        b_spec = spec(None, weight=sink_weight)
 
-        # Get the Signal
-        signal = _make_signal(model, connection, source_spec, sink_spec)
-        assert signal.source is source_obj
-        assert signal.sinks == [sink_obj]
-        assert signal.keyspace is exp_ks
-        assert signal.weight == post.size_in
-        assert signal.latching is False
-
-        # Check that the keyspace was called correctly
-        model.keyspaces["nengo"].assert_called_once_with(object=1,
-                                                         connection=3)
-
-    @pytest.mark.parametrize(
-        "make_source_spec, make_sink_spec",
-        [(lambda obj: spec(obj, latching=True),
-          lambda obj: spec(obj, latching=False)),
-         (lambda obj: spec(obj, latching=False),
-          lambda obj: spec(obj, latching=True)),
-         (lambda obj: spec(obj, latching=True),
-          lambda obj: spec(obj, latching=True)),
-         ]
-    )
-    def test_latching(self, make_source_spec, make_sink_spec):
-        """Test that latching commands are taken from the spec.
-        """
-        # Create the model with it's default keyspace
-        model = Model()
-        model.keyspaces = {"nengo": mock.Mock()}
-
-        # Create the connection that we're building
-        pre = mock.Mock("pre")
-        post = mock.Mock("post")
-        post.size_in = 5
-        connection = mock.Mock(spec_set=nengo.Connection)
-        connection.pre_obj = pre
-        connection.post_obj = post
-
-        # Create a spec for the source and a spec for the sink
-        source_obj = mock.Mock()
-        source_spec = make_source_spec(source_obj)
-        sink_obj = mock.Mock()
-        sink_spec = make_sink_spec(sink_obj)
-
-        # Get the Signal
-        signal = _make_signal(model, connection, source_spec, sink_spec)
-        assert signal.latching is True
-
-    @pytest.mark.parametrize(
-        "source_weight, sink_weight, expected_weight",
-        [(0, 0, 5),
-         (10, 0, 10),
-         (0, 10, 10),
-         ]
-    )
-    def test_weights(self, source_weight, sink_weight, expected_weight):
-        """Test that weights are taken from the spec.
-        """
-        # Create the model with it's default keyspace
-        model = Model()
-
-        # Create the connection that we're building
-        pre = mock.Mock("pre")
-        post = mock.Mock("post")
-        post.size_in = 5
-        connection = mock.Mock(spec_set=nengo.Connection)
-        connection.pre_obj = pre
-        connection.post_obj = post
-
-        # Create a spec for the source and a spec for the sink
-        source_obj = mock.Mock()
-        source_spec = spec(source_obj, weight=source_weight)
-        sink_obj = mock.Mock()
-        sink_spec = spec(sink_obj, weight=sink_weight)
-
-        # Get the Signal
-        signal = _make_signal(model, connection, source_spec, sink_spec)
-        assert signal.weight == expected_weight
+        # Make the signal parameters, check they are correct
+        sig_pars = _make_signal_parameters(a_spec, b_spec)
+        assert sig_pars.weight == max((source_weight, sink_weight))
 
     def test_keyspace_from_source(self):
-        # Create the model with it's default keyspace
-        model = Model()
+        """Check that the source keyspace is used if provided."""
+        ks = mock.Mock(name="Keyspace")
+        a_spec = spec(None, keyspace=ks)
+        b_spec = spec(None)
 
-        # Create the keyspace
-        keyspace = mock.Mock(name="keyspace")
-
-        # Create the connection that we're building
-        pre = mock.Mock("pre")
-        post = mock.Mock("post")
-        post.size_in = 0
-        connection = mock.Mock(spec_set=nengo.Connection)
-        connection.pre_obj = pre
-        connection.post_obj = post
-
-        # Create a spec for the source and a spec for the sink
-        source_obj = mock.Mock()
-        source_spec = spec(source_obj, keyspace=keyspace)
-        sink_obj = mock.Mock()
-        sink_spec = spec(sink_obj)
-
-        # Get the Signal
-        signal = _make_signal(model, connection, source_spec, sink_spec)
-        assert signal.keyspace is keyspace
+        # Make the signal parameters, check they are correct
+        sig_pars = _make_signal_parameters(a_spec, b_spec)
+        assert sig_pars.keyspace is ks
 
     def test_keyspace_from_sink(self):
-        # Create the model with it's default keyspace
-        model = Model()
+        """Check that the sink keyspace is used if provided."""
+        ks = mock.Mock(name="Keyspace")
+        a_spec = spec(None)
+        b_spec = spec(None, keyspace=ks)
 
-        # Create the keyspace
-        keyspace = mock.Mock(name="keyspace")
-
-        # Create the connection that we're building
-        pre = mock.Mock("pre")
-        post = mock.Mock("post")
-        post.size_in = 0
-        connection = mock.Mock(spec_set=nengo.Connection)
-        connection.pre_obj = pre
-        connection.post_obj = post
-
-        # Create a spec for the source and a spec for the sink
-        source_obj = mock.Mock()
-        source_spec = spec(source_obj)
-        sink_obj = mock.Mock()
-        sink_spec = spec(sink_obj, keyspace=keyspace)
-
-        # Get the Signal
-        signal = _make_signal(model, connection, source_spec, sink_spec)
-        assert signal.keyspace is keyspace
+        # Make the signal parameters, check they are correct
+        sig_pars = _make_signal_parameters(a_spec, b_spec)
+        assert sig_pars.keyspace is ks
 
     def test_keyspace_collision(self):
-        # Create the model with it's default keyspace
-        model = Model()
-
-        # Create the keyspace
-        keyspace_a = mock.Mock(name="keyspace")
-        keyspace_b = mock.Mock(name="keyspace")
-
-        # Create the connection that we're building
-        pre = mock.Mock("pre")
-        post = mock.Mock("post")
-        post.size_in = 0
-        connection = mock.Mock(spec_set=nengo.Connection)
-        connection.pre_obj = pre
-        connection.post_obj = post
-
-        # Create a spec for the source and a spec for the sink
-        source_obj = mock.Mock()
-        source_spec = spec(source_obj, keyspace=keyspace_a)
-        sink_obj = mock.Mock()
-        sink_spec = spec(sink_obj, keyspace=keyspace_b)
-
-        with pytest.raises(NotImplementedError) as excinfo:
-            _make_signal(model, connection, source_spec, sink_spec)
-        assert "keyspace" in str(excinfo.value)
-
-
-class TestGetSignalsAndConnections(object):
-    """Test getting the signals and connections which either originate or
-    terminate at a given object.
-    """
-    def test_get_signals_and_connections_starting_from(self):
-        """Test getting the signals and connections which start from a given
-        object.
+        """Test that if both the source and spec provide a keyspace an error is
+        raised.
         """
-        # Create some objects and some connections
-        obj_a = mock.Mock(name="object a")
-        obj_b = mock.Mock(name="object b")
+        a_spec = spec(None, keyspace=mock.Mock())
+        b_spec = spec(None, keyspace=mock.Mock())
 
-        conn_ab1 = mock.Mock()
-        sig_ab1 = Signal(ObjectPort(obj_a, OutputPort.standard),
-                         ObjectPort(obj_b, InputPort.standard),
-                         None)
-        conn_ab2 = mock.Mock()
-        sig_ab2 = Signal(ObjectPort(obj_a, OutputPort.standard),
-                         ObjectPort(obj_b, InputPort.standard),
-                         None)
-
-        sig_ab3 = Signal(ObjectPort(obj_a, OutputPort.standard),
-                         ObjectPort(obj_b, InputPort.standard),
-                         None)
-        sig_ab4 = Signal(ObjectPort(obj_a, OutputPort.standard),
-                         ObjectPort(obj_b, InputPort.standard),
-                         None)
-
-        conn_ba1 = mock.Mock()
-        port_b1 = mock.Mock(name="port B1")
-        sig_ba1 = Signal(ObjectPort(obj_b, port_b1),
-                         ObjectPort(obj_a, InputPort.standard),
-                         None)
-        conn_ba2 = mock.Mock()
-        conn_ba3 = mock.Mock()
-        port_b2 = mock.Mock(name="port B2")
-        sig_ba2 = Signal(ObjectPort(obj_b, port_b2),
-                         ObjectPort(obj_a, InputPort.standard),
-                         None)
-
-        port_b3 = mock.Mock(name="port B3")
-        sig_ba3 = Signal(ObjectPort(obj_b, port_b3),
-                         ObjectPort(obj_a, InputPort.standard),
-                         None)
-
-        # Create a model holding all of these items
-        model = Model()
-        model.connections_signals = {
-            conn_ab1: sig_ab1,
-            conn_ab2: sig_ab2,
-            conn_ba1: sig_ba1,
-            conn_ba2: sig_ba2,
-            conn_ba3: sig_ba2,
-        }
-        model.extra_signals = [sig_ab3, sig_ab4, sig_ba3]
-
-        # Query it for connections starting from different objects
-        assert model.get_signals_connections_from_object(obj_a) == {
-            OutputPort.standard: {
-                sig_ab1: [conn_ab1],
-                sig_ab2: [conn_ab2],
-                sig_ab3: [],
-                sig_ab4: [],
-            },
-        }
-
-        for port, sigs_conns in iteritems(
-                model.get_signals_connections_from_object(obj_b)):
-            if port is port_b1:
-                assert sigs_conns == {
-                    sig_ba1: [conn_ba1],
-                }
-            elif port is port_b2:
-                for sig, conns in iteritems(sigs_conns):
-                    assert sig is sig_ba2
-                    for conn in conns:
-                        assert conn is conn_ba2 or conn is conn_ba3
-            elif port is port_b3:
-                assert sigs_conns == {sig_ba3: []}
-            else:
-                assert False, "Unexpected signal"
-
-    def test_get_signals_and_connections_terminating_at(self):
-        """Test getting the signals and connections which end at a given
-        object.
-        """
-        # Create some objects and some connections
-        obj_a = mock.Mock(name="object a")
-        obj_b = mock.Mock(name="object b")
-
-        conn_ab1 = mock.Mock()
-        port_b1 = mock.Mock(name="port B1")
-        sig_ab1 = Signal(ObjectPort(obj_a, OutputPort.standard),
-                         ObjectPort(obj_b, port_b1),
-                         None)
-        conn_ab2 = mock.Mock()
-        port_b2 = mock.Mock(name="port B2")
-        sig_ab2 = Signal(ObjectPort(obj_a, OutputPort.standard),
-                         ObjectPort(obj_b, port_b2),
-                         None)
-
-        sig_ab3 = Signal(ObjectPort(obj_a, OutputPort.standard),
-                         ObjectPort(obj_b, port_b2),
-                         None)
-
-        conn_ba1 = mock.Mock()
-        sig_ba1 = Signal(ObjectPort(obj_b, OutputPort.standard),
-                         ObjectPort(obj_a, InputPort.standard),
-                         None)
-        conn_ba2 = mock.Mock()
-        conn_ba3 = mock.Mock()
-        sig_ba2 = Signal(ObjectPort(obj_b, port_b2),
-                         ObjectPort(obj_a, InputPort.standard),
-                         None)
-
-        # Create a model holding all of these items
-        model = Model()
-        model.connections_signals = {
-            conn_ab1: sig_ab1,
-            conn_ab2: sig_ab2,
-            conn_ba1: sig_ba1,
-            conn_ba2: sig_ba2,
-            conn_ba3: sig_ba2,
-        }
-        model.extra_signals = [sig_ab3]
-
-        # Query it for connections terminating at different objects
-        for port, sigs_conns in iteritems(
-                model.get_signals_connections_to_object(obj_a)):
-            assert port is InputPort.standard
-
-            for sig, conns in iteritems(sigs_conns):
-                if sig is sig_ba1:
-                    assert conns == [conn_ba1]
-                elif sig is sig_ba2:
-                    for conn in conns:
-                        assert conn in [conn_ba2, conn_ba3]
-                elif sig is sig_ba3:
-                    assert len(conns) == 0
-                else:
-                    assert False, "Unexpected signal"
-
-        assert model.get_signals_connections_to_object(obj_b) == {
-            port_b1: {
-                sig_ab1: [conn_ab1],
-            },
-            port_b2: {
-                sig_ab2: [conn_ab2],
-                sig_ab3: [],
-            },
-        }
+        # Make the signal parameters, this should raise an error
+        with pytest.raises(NotImplementedError):
+            _make_signal_parameters(a_spec, b_spec)
 
 
 class TestMakeNetlist(object):
     """Test production of netlists from operators and signals."""
+    def test_calls_add_default_keyspace(self):
+        """Test that creating a netlist assigns from default keyspace to the
+        network.
+        """
+        # Create a model and patch out the default keyspace and the connection
+        # map.
+        default_ks = mock.Mock()
+        model = Model(keyspaces={"nengo": default_ks})
+        model.connection_map = mock.Mock()
+        model.connection_map.get_signals.return_value = list()
+
+        # Create the netlist, ensure that this results in a call to
+        # `add_default_keyspace'
+        model.make_netlist()
+        model.connection_map.add_default_keyspace.assert_called_once_with(
+            default_ks)
+
     def test_single_vertices(self):
         """Test that operators which produce single vertices work correctly and
         that all functions and signals are correctly collected and included in
@@ -804,15 +487,16 @@ class TestMakeNetlist(object):
         # Create a signal between the operators
         keyspace = mock.Mock(name="keyspace")
         keyspace.length = 32
-        signal_ab = Signal(ObjectPort(operator_a, None),
-                           ObjectPort(operator_b, None),
-                           keyspace=keyspace, weight=43)
+        signal_ab_parameters = SignalParameters(keyspace=keyspace, weight=43)
 
         # Create the model, add the items and then generate the netlist
         model = Model()
         model.object_operators[object_a] = operator_a
         model.object_operators[object_b] = operator_b
-        model.connections_signals[None] = signal_ab
+        model.connection_map.add_connection(
+            operator_a, None, signal_ab_parameters, None,
+            operator_b, None, None
+        )
         netlist = model.make_netlist()
 
         # Check that the make_vertices functions were called
@@ -825,7 +509,7 @@ class TestMakeNetlist(object):
             assert net.source is vertex_a
             assert net.sinks == [vertex_b]
             assert net.keyspace is keyspace
-            assert net.weight == signal_ab.weight
+            assert net.weight == signal_ab_parameters.weight
 
         assert set(netlist.vertices) == set([vertex_a, vertex_b])
         assert netlist.keyspaces is model.keyspaces
@@ -835,8 +519,8 @@ class TestMakeNetlist(object):
         assert netlist.after_simulation_functions == [post_fn_a]
 
     def test_extra_operators_and_signals(self):
-        """Test the operators and signals in the extra_operators and
-        extra_signals lists are included when building netlists.
+        """Test the operators in the extra_operators list are included when
+        building netlists.
         """
         # Create the first operator
         vertex_a = mock.Mock(name="vertex A")
@@ -856,17 +540,9 @@ class TestMakeNetlist(object):
         operator_b.make_vertices.return_value = \
             netlistspec(vertex_b, load_fn_b)
 
-        # Create a signal between the operators
-        keyspace = mock.Mock(name="keyspace")
-        keyspace.length = 32
-        signal_ab = Signal(ObjectPort(operator_a, None),
-                           ObjectPort(operator_b, None),
-                           keyspace=keyspace, weight=43)
-
         # Create the model, add the items and then generate the netlist
         model = Model()
         model.extra_operators = [operator_a, operator_b]
-        model.extra_signals = [signal_ab]
         netlist = model.make_netlist()
 
         # Check that the make_vertices functions were called
@@ -874,12 +550,7 @@ class TestMakeNetlist(object):
         operator_b.make_vertices.assert_called_once_with(model)
 
         # Check that the netlist is as expected
-        assert len(netlist.nets) == 1
-        for net in netlist.nets:
-            assert net.source is vertex_a
-            assert net.sinks == [vertex_b]
-            assert net.keyspace is keyspace
-            assert net.weight == signal_ab.weight
+        assert len(netlist.nets) == 0
 
         assert set(netlist.vertices) == set([vertex_a, vertex_b])
         assert netlist.keyspaces is model.keyspaces
@@ -888,7 +559,11 @@ class TestMakeNetlist(object):
         assert netlist.before_simulation_functions == [pre_fn_a]
         assert netlist.after_simulation_functions == [post_fn_a]
 
+
     def test_multiple_sink_vertices(self):
+        """Test that each of the vertices associated with a sink is correctly
+        included in the sinks of a net.
+        """
         # Create the first operator
         vertex_a = mock.Mock(name="vertex A")
         load_fn_a = mock.Mock(name="load function A")
@@ -913,15 +588,16 @@ class TestMakeNetlist(object):
         # Create a signal between the operators
         keyspace = mock.Mock(name="keyspace")
         keyspace.length = 32
-        signal_ab = Signal(ObjectPort(operator_a, None),
-                           ObjectPort(operator_b, None),
-                           keyspace=keyspace, weight=3)
+        signal_ab_parameters = SignalParameters(keyspace=keyspace, weight=3)
 
         # Create the model, add the items and then generate the netlist
         model = Model()
         model.object_operators[object_a] = operator_a
         model.object_operators[object_b] = operator_b
-        model.connections_signals[None] = signal_ab
+        model.connection_map.add_connection(
+            operator_a, None, signal_ab_parameters, None,
+            operator_b, None, None
+        )
         netlist = model.make_netlist()
 
         # Check that the netlist is as expected
@@ -931,12 +607,15 @@ class TestMakeNetlist(object):
             assert net.source is vertex_a
             assert net.sinks == [vertex_b0, vertex_b1]
             assert net.keyspace is keyspace
-            assert net.weight == signal_ab.weight
+            assert net.weight == signal_ab_parameters.weight
 
         # Check that the groups are correct
         assert netlist.groups == [set([vertex_b0, vertex_b1])]
 
     def test_multiple_source_vertices(self):
+        """Test that each of the vertices associated with a source is correctly
+        included in the sources of a net.
+        """
         # Create the first operator
         vertex_a0 = VertexSlice(slice(0, 1))
         vertex_a1 = VertexSlice(slice(1, 2))
@@ -961,15 +640,16 @@ class TestMakeNetlist(object):
         # Create a signal between the operators
         keyspace = mock.Mock(name="keyspace")
         keyspace.length = 32
-        signal_ab = Signal(ObjectPort(operator_a, None),
-                           ObjectPort(operator_b, None),
-                           keyspace=keyspace, weight=43)
+        signal_ab_parameters = SignalParameters(keyspace=keyspace, weight=43)
 
         # Create the model, add the items and then generate the netlist
         model = Model()
         model.object_operators[object_a] = operator_a
         model.object_operators[object_b] = operator_b
-        model.connections_signals[None] = signal_ab
+        model.connection_map.add_connection(
+            operator_a, None, signal_ab_parameters, None,
+            operator_b, None, None
+        )
         netlist = model.make_netlist()
 
         # Check that the netlist is as expected

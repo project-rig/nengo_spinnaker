@@ -1,11 +1,9 @@
 import numpy as np
 from rig.machine import Cores, SDRAM
-from six import iteritems
 import struct
 
-from nengo.utils.builder import full_transform
-
-from nengo_spinnaker.builder.builder import InputPort, netlistspec, OutputPort
+from nengo_spinnaker.builder.builder import netlistspec
+from nengo_spinnaker.builder.model import InputPort, OutputPort
 from nengo_spinnaker.regions.filters import make_filter_regions
 from .. import regions
 from nengo_spinnaker.netlist import Vertex
@@ -46,16 +44,15 @@ class Filter(object):
         """Make a vertex for the operator."""
         # We don't partition Filters, so create the vertex and return it
         # Get the incoming filters
-        incoming = model.get_signals_connections_to_object(self)
+        incoming = model.get_signals_to(self)
         self.filters_region, self.routing_region = make_filter_regions(
             incoming[InputPort.standard], model.dt, True,
             model.keyspaces.filter_routing_tag, width=self.size_in
         )
 
         # Create a combined output transform and set of keys
-        outgoing = model.get_signals_connections_from_object(self)
-        transform, output_keys = get_transforms_and_keys(
-            outgoing[OutputPort.standard])
+        outgoing = model.get_signals_from(self)[OutputPort.standard]
+        transform, output_keys = get_transforms_and_keys(outgoing)
 
         size_out = len(output_keys)
 
@@ -108,17 +105,9 @@ def get_transforms_and_keys(signals_connections):
     transforms = list()
     keys = list()
 
-    for signal, connections in iteritems(signals_connections):
-        if len(connections) == 1:
-            # Use the transform from the connection
-            transform = full_transform(connections[0], allow_scalars=False)
-        elif len(connections) == 0:
-            # Use the identity matrix
-            raise NotImplementedError
-        else:
-            # Can't do this
-            raise NotImplementedError("Filters cannot transmit multiple "
-                                      "Connections using the same signal.")
+    for signal, tps in signals_connections:
+        # Extract the transform
+        transform = tps.transform
 
         if signal.latching:
             # If the signal is latching then we use the transform exactly as it

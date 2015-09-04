@@ -1,13 +1,13 @@
 """SpiNNaker builder for Nengo models."""
 import collections
-import enum
 import itertools
 import nengo
 from nengo.cache import NoDecoderCache
 from nengo.utils import numpy as npext
 import numpy as np
-from six import iteritems, itervalues
+from six import itervalues
 
+from . import model
 from nengo_spinnaker.netlist import Net, Netlist
 from nengo_spinnaker.utils import collections as collections_ext
 from nengo_spinnaker.utils.keyspaces import KeyspaceContainer
@@ -45,10 +45,8 @@ class Model(object):
         Map of objects to the operators which will simulate them on SpiNNaker.
     extra_operators: [operator, ...]
         Additional operators.
-    connections_signals : {connection: :py:`~.Signal`, ...}
-        Map of connections to the signals that simulate them.
-    extra_signals: [operator, ...]
-        Additional signals.
+    connection_map :
+        Connection manager.
     """
 
     builders = collections_ext.registerabledict()
@@ -63,19 +61,22 @@ class Model(object):
     suppress SpiNNaker simulation of the object).
     """
 
-    connection_parameter_builders = collections_ext.registerabledict()
-    """Functions which can build the parameters for a connection.
+    transmission_parameter_builders = collections_ext.registerabledict()
+    """Functions which can provide the parameters for transmitting values to
+    simulate a connection.
 
-    The parameters for a connection are built differently depending on the type
-    of the object at the start of the connection.  Functions to perform this
-    building can be registered in this dictionary against this type of the
-    originating object.  Functions must be of the form:
+    The parameters required to form multicast packets to simulate a Nengo
+    Connection vary depending on the type of the object at the start of the
+    connection. Functions to build these parameters can be registered in this
+    dictionary against the type of the originating object. Functions must be of
+    the form:
 
         .. py:function:: builder(model, connection)
 
-    It is recommended that builders return a :py:class:`~.BuiltConnection`
-    object as this will be inserted into the `params` dictionary in the
-    :py:class:`~.Model`.
+    It is recommended that functions set the value of
+    `model.params[connection]` to an instance of :py:class:`~.BuiltConnection`
+    alongside returning an appropriate value to use as the transmission
+    parameters.
     """
 
     source_getters = collections_ext.registerabledict()
@@ -95,6 +96,18 @@ class Model(object):
        the signal (in particular, the key and mask that it should use, whether
        it is latching or otherwise and the cost of the signal in terms of the
        frequency of packets across it).
+    """
+
+    reception_parameter_builders = collections_ext.registerabledict()
+    """Functions which can provide the parameters for receiving values which
+    simulate a connection.
+
+    The parameters required to interpret multicast packets can vary based on
+    the type of the object at the end of a Nengo Connection. Functions to build
+    these parameters can be registered in this dictionary against the type of
+    the terminating object.  Functions must of the form:
+
+        .. py:function:: builder(model, connection)
     """
 
     sink_getters = collections_ext.registerabledict()
@@ -130,55 +143,27 @@ class Model(object):
         self.config = None
         self.object_operators = dict()
         self.extra_operators = list()
-        self.connections_signals = dict()
-        self.extra_signals = list()
+        self.connection_map = model.ConnectionMap()
 
         if keyspaces is None:
             keyspaces = KeyspaceContainer()
         self.keyspaces = keyspaces
 
-        # Internally used dictionaries to construct keyspace information
-        self._obj_ids = collections.defaultdict(collections_ext.counter())
-        self._obj_conn_ids = collections.defaultdict(
-            lambda: collections.defaultdict(collections_ext.counter())
-        )
-
-        # Internally used dictionaries of build methods
+        # Builder dictionaries
         self._builders = dict()
-        self._connection_parameter_builders = dict()
+        self._transmission_parameter_builders = dict()
         self._source_getters = dict()
+        self._reception_parameter_builders = dict()
         self._sink_getters = dict()
         self._probe_builders = dict()
 
-    def _get_object_and_connection_id(self, obj, connection):
-        """Get a unique ID for the object and connection pair for use in
-        building instances of the default Nengo keyspace.
-        """
-        # Get the object ID and then the connection ID
-        obj_id = self._obj_ids[obj]
-        conn_id = self._obj_conn_ids[obj][connection]
-        return (obj_id, conn_id)
-
-    def build(self, network, extra_builders={},
-              extra_source_getters={}, extra_sink_getters={},
-              extra_connection_parameter_builders={},
-              extra_probe_builders={}):
+    def build(self, network, **kwargs):
         """Build a Network into this model.
 
         Parameters
         ----------
         network : :py:class:`~nengo.Network`
             Nengo network to build.  Passthrough Nodes will be removed.
-        extra_builders : {type: fn, ...}
-            Extra builder methods.
-        extra_source_getters : {type: fn, ...}
-            Extra source getter methods.
-        extra_sink_getters : {type: fn, ...}
-            Extra sink getter methods.
-        extra_connection_parameter_builder : {type: fn, ...}
-            Extra connection parameter builders.
-        extra_probe_builders : {type: fn, ...}
-            Extra probe builder methods.
         """
         # Store the network config
         self.config = network.config
@@ -186,27 +171,32 @@ class Model(object):
         # Get a clean set of builders and getters
         self._builders = collections_ext.mrolookupdict()
         self._builders.update(self.builders)
-        self._builders.update(extra_builders)
+        self._builders.update(kwargs.get("extra_builders", {}))
 
-        self._connection_parameter_builders = collections_ext.mrolookupdict()
-        self._connection_parameter_builders.update(
-            self.connection_parameter_builders
-        )
-        self._connection_parameter_builders.update(
-            extra_connection_parameter_builders
-        )
+        self._transmission_parameter_builders = \
+            collections_ext.mrolookupdict()
+        self._transmission_parameter_builders.update(
+            self.transmission_parameter_builders)
+        self._transmission_parameter_builders.update(
+            kwargs.get("extra_transmission_parameter_builders", {}))
 
         self._source_getters = collections_ext.mrolookupdict()
         self._source_getters.update(self.source_getters)
-        self._source_getters.update(extra_source_getters)
+        self._source_getters.update(kwargs.get("extra_source_getters", {}))
+
+        self._reception_parameter_builders = collections_ext.mrolookupdict()
+        self._reception_parameter_builders.update(
+            self.reception_parameter_builders)
+        self._reception_parameter_builders.update(
+            kwargs.get("extra_reception_parameter_builders", {}))
 
         self._sink_getters = collections_ext.mrolookupdict()
         self._sink_getters.update(self.sink_getters)
-        self._sink_getters.update(extra_sink_getters)
+        self._sink_getters.update(kwargs.get("extra_sink_getters", {}))
 
         self._probe_builders = dict()
         self._probe_builders.update(self.probe_builders)
-        self._probe_builders.update(extra_probe_builders)
+        self._probe_builders.update(kwargs.get("extra_probe_builders", {}))
 
         # Build
         self._build_network(network)
@@ -247,19 +237,31 @@ class Model(object):
         This method will build a connection and construct a new signal which
         will be included in the model.
         """
+        # Set the seed for the connection
         self.seeds[conn] = get_seed(conn, self.rng)
-        self.params[conn] = \
-            self._connection_parameter_builders[type(conn.pre_obj)](self, conn)
+
+        # Get the transmission parameters and reception parameters for the
+        # connection.
+        pre_type = type(conn.pre_obj)
+        tps = self._transmission_parameter_builders[pre_type](self, conn)
+        post_type = type(conn.post_obj)
+        rps = self._reception_parameter_builders[post_type](self, conn)
 
         # Get the source and sink specification, then make the signal provided
         # that neither of specs is None.
-        source = self._source_getters[type(conn.pre_obj)](self, conn)
-        sink = self._sink_getters[type(conn.post_obj)](self, conn)
+        source = self._source_getters[pre_type](self, conn)
+        sink = self._sink_getters[post_type](self, conn)
 
-        if source is not None and sink is not None:
-            assert conn not in self.connections_signals
-            self.connections_signals[conn] = _make_signal(self, conn,
-                                                          source, sink)
+        if not (source is None or sink is None):
+            # Construct the signal parameters
+            sps = _make_signal_parameters(source, sink)
+
+            # Add the connection to the connection map, this will automatically
+            # merge connections which are equivalent.
+            self.connection_map.add_connection(
+                source.target.obj, source.target.port, sps, tps,
+                sink.target.obj, sink.target.port, rps
+            )
 
     def make_probe(self, probe):
         """Call an appropriate build function for the given probe."""
@@ -273,38 +275,27 @@ class Model(object):
         # Build
         self._probe_builders[type(target_obj)](self, probe)
 
-    def get_signals_connections_from_object(self, obj):
-        """Get a dictionary mapping ports to signals to connections which
-        originate from a given intermediate object.
+    def get_signals_from(self, *args):  # pragma : no cover
+        """Get the signals transmitted by a source object.
+
+        Returns
+        -------
+        {port : [signal_parameters, ...], ...}
+            Dictionary mapping ports to lists of parameters for the signals
+            that originate from them.
         """
-        ports_sigs_conns = collections.defaultdict(
-            lambda: collections.defaultdict(collections_ext.noneignoringlist)
-        )
+        return self.connection_map.get_signals_from(*args)
 
-        for (conn, signal) in itertools.chain(
-                iteritems(self.connections_signals),
-                ((None, s) for s in self.extra_signals)):
-            if signal.source.obj is obj:
-                ports_sigs_conns[signal.source.port][signal].append(conn)
+    def get_signals_to(self, *args):  # pragma : no cover
+        """Get the signals received by a sink object.
 
-        return ports_sigs_conns
-
-    def get_signals_connections_to_object(self, obj):
-        """Get a dictionary mapping ports to signals to connections which
-        terminate at a given intermediate object.
+        Returns
+        -------
+        {port : [ReceptionSpec, ...], ...}
+            Dictionary mapping ports to the lists of objects specifying
+            incoming signals.
         """
-        ports_sigs_conns = collections.defaultdict(
-            lambda: collections.defaultdict(collections_ext.noneignoringlist)
-        )
-
-        for (conn, signal) in itertools.chain(
-                iteritems(self.connections_signals),
-                ((None, s) for s in self.extra_signals)):
-            for sink in signal.sinks:
-                if sink.obj is obj:
-                    ports_sigs_conns[sink.port][signal].append(conn)
-
-        return ports_sigs_conns
+        return self.connection_map.get_signals_to(*args)
 
     def make_netlist(self, *args, **kwargs):
         """Convert the model into a netlist for simulating on SpiNNaker.
@@ -315,6 +306,9 @@ class Model(object):
             A netlist which can be placed and routed to simulate this model on
             a SpiNNaker machine.
         """
+        # Apply the default keyspace to any signals without keyspaces
+        self.connection_map.add_default_keyspace(self.keyspaces["nengo"])
+
         # Call each operator to make vertices
         operator_vertices = dict()
         vertices = collections_ext.flatinsertionlist()
@@ -345,16 +339,15 @@ class Model(object):
 
         # Construct nets from the signals
         nets = list()
-        for signal in itertools.chain(itervalues(self.connections_signals),
-                                      self.extra_signals):
+        for signal in self.connection_map.get_signals():
             # Get the source and sink vertices
-            sources = operator_vertices[signal.source.obj]
+            sources = operator_vertices[signal.source]
             if not isinstance(sources, collections.Iterable):
                 sources = (sources, )
 
             sinks = collections_ext.flatinsertionlist()
             for sink in signal.sinks:
-                sinks.append(operator_vertices[sink.obj])
+                sinks.append(operator_vertices[sink])
 
             # Create the net(s)
             for source in sources:
@@ -373,31 +366,6 @@ class Model(object):
         )
 
 
-ObjectPort = collections.namedtuple("ObjectPort", "obj port")
-"""Source or sink of a signal.
-
-Parameters
-----------
-obj : intermediate object
-    Intermediate representation of a Nengo object, or other object, which is
-    the source or sink of a signal.
-port : port
-    Port that is the source or sink of a signal.
-"""
-
-
-class OutputPort(enum.Enum):
-    """Indicate the intended transmitting part of an executable."""
-    standard = 0
-    """Standard, value-based, output port."""
-
-
-class InputPort(enum.Enum):
-    """Indicate the intended receiving part of an executable."""
-    standard = 0
-    """Standard, value-based, output port."""
-
-
 class netlistspec(collections.namedtuple(
         "netlistspec", "vertices, load_function, before_simulation_function, "
                        "after_simulation_function")):
@@ -409,6 +377,19 @@ class netlistspec(collections.namedtuple(
             cls, vertices, load_function, before_simulation_function,
             after_simulation_function
         )
+
+
+ObjectPort = collections.namedtuple("ObjectPort", "obj port")
+"""Source or sink of a signal.
+
+Parameters
+----------
+obj : intermediate object
+    Intermediate representation of a Nengo object, or other object, which is
+    the source or sink of a signal.
+port : port
+    Port that is the source or sink of a signal.
+"""
 
 
 class spec(collections.namedtuple("spec",
@@ -428,74 +409,29 @@ class spec(collections.namedtuple("spec",
                                         weight, latching)
 
 
-class Signal(
-        collections.namedtuple("Signal",
-                               "source, sinks, keyspace, weight, latching")):
-    """Represents a stream of multicast packets across a SpiNNaker machine.
+def _make_signal_parameters(source_spec, sink_spec):
+    """Create parameters for a signal using specifications provided by the
+    source and sink.
 
-    Attributes
+    Parameters
     ----------
-    source : :py:class:`~.ObjectPort`
-        Source object and port of signal.
-    sinks : [:py:class:`.~ObjectPort`, ...]
-        Sink objects and ports of the signal.
-    keyspace : keyspace
-        Keyspace used for packets representing the signal.
-    weight : int
-        Number of packets expected to represent the signal during a single
-        timestep.
-    latching : bool
-        Indicates that the receiving buffer must *not* be reset every
-        simulation timestep but must hold its value until it next receives a
-        packet.
+    source_spec : spec
+        Signal specification parameters from the source of the signal.
+    sink_spec : spec
+        Signal specification parameters from the sink of the signal.
+
+    Returns
+    -------
+    :py:class:`~.SignalParameters`
+        Description of the signal.
     """
-    def __new__(cls, source, sinks, keyspace, weight=0, latching=False):
-        # Ensure the sinks are a list
-        if (not isinstance(sinks, ObjectPort) and
-                isinstance(sinks, collections.Iterable)):
-            sinks = list(sinks)
-        else:
-            sinks = [sinks]
+    # Raise an error if keyspaces are specified by the source and sink
+    if source_spec.keyspace is not None and sink_spec.keyspace is not None:
+        raise NotImplementedError("Cannot merge keyspaces")
 
-        # Create the tuple
-        return super(Signal, cls).__new__(cls, source, sinks, keyspace,
-                                          weight, latching)
-
-    def __hash__(self):
-        return hash(id(self))
-
-
-def _make_signal(model, connection, source_spec, sink_spec):
-    """Create a Signal."""
-    # Get the keyspace
-    if source_spec.keyspace is None and sink_spec.keyspace is None:
-        # Using the default keyspace, get the object and connection ID
-        obj_id, conn_id = model._get_object_and_connection_id(
-            connection.pre_obj, connection
-        )
-
-        # Create the keyspace from the default one provided by the model
-        keyspace = model.keyspaces["nengo"](object=obj_id, connection=conn_id)
-    elif source_spec.keyspace is not None and sink_spec.keyspace is None:
-        # Use the keyspace required by the source
-        keyspace = source_spec.keyspace
-    elif source_spec.keyspace is None and sink_spec.keyspace is not None:
-        # Use the keyspace required by the sink
-        keyspace = sink_spec.keyspace
-    else:
-        # Collision between the keyspaces
-        raise NotImplementedError("Cannot merge two keyspaces")
-
-    # Get the weight
-    weight = max((0 or source_spec.weight,
-                  0 or sink_spec.weight,
-                  getattr(connection.post_obj, "size_in", 0)))
-
-    # Determine if the connection is latching - there should probably never be
-    # a case where these requirements differ, but this may need revisiting.
-    latching = source_spec.latching or sink_spec.latching
-
-    # Create the signal
-    return Signal(
-        source_spec.target, sink_spec.target, keyspace, weight, latching
+    # Create the signal parameters
+    return model.SignalParameters(
+        latching=source_spec.latching or sink_spec.latching,
+        weight=max((source_spec.weight, sink_spec.weight)),
+        keyspace=source_spec.keyspace or sink_spec.keyspace,
     )
