@@ -207,7 +207,7 @@ class TestLinearFilter(object):
         numd = numd.flatten()
         exp = list()
         for a, b in zip(dend[1:], numd[1:]):
-            exp.append(a)
+            exp.append(-a)
             exp.append(b)
         expected_data = tp.np_to_fix(np.array(exp)).tostring()
 

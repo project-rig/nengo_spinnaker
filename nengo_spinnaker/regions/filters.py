@@ -231,8 +231,10 @@ class LinearFilter(Filter):
         b = b.flatten()
 
         # Strip out the first values
+        # `a` is negated so that it can be used with a multiply-accumulate
+        # instruction on chip.
         assert b[0] == 0.0  # Oops!
-        ab = np.vstack((a[1:], b[1:])).T.flatten()
+        ab = np.vstack((-a[1:], b[1:])).T.flatten()
 
         # Convert the values to fixpoint and write into a data buffer
         struct.pack_into("<I", buffer, offset, self.order)

@@ -1,6 +1,8 @@
 #include "nengo-common.h"
 #include "input_filtering.h"
 #include "common-impl.h"
+#include "fixed_point.h"
+#include "arm_acle_gcc_selected.h"
 #include <string.h>
 
 // Commonly used pair of value_t types
@@ -42,13 +44,31 @@ void _lowpass_filter_step(uint32_t n_dims, value_t *input,
 {
   // Cast the params
   lowpass_state_t *params = (lowpass_state_t *) pars;
+  register int32_t a = bitsk(params->a);
+  register int32_t b = bitsk(params->b);
 
   // Apply the filter to every dimension (realised as a Direct Form I digital
   // filter).
   for (uint32_t d = 0; d < n_dims; d++)
   {
-    output[d] *= params->a;
-    output[d] += input[d] * params->b;
+    // The following is equivalent to:
+    //
+    //    output[d] *= params->a;
+    //    output[d] += input[d] * params->b;
+
+    // Compute the next value in a register
+    register int64_t next_output;
+
+    // Perform the first multiply
+    int32_t current_output = bitsk(output[d]);
+    next_output = __smull(current_output, a);
+
+    // Perform the multiply accumulate
+    int32_t current_input = bitsk(input[d]);
+    next_output = __smlal(next_output, current_input, b);
+
+    // Scale the result back down to store it
+    output[d] = kbits(convert_s32_30_s16_15(next_output));
   }
 }
 
@@ -103,39 +123,42 @@ void _lti_filter_step(uint32_t n_dims, value_t *input,
 
   // Apply the filter to every dimension (realised as a Direct Form I digital
   // filter).
-  for (uint32_t d = 0; d < n_dims; d++)
+  for (uint32_t d = n_dims, dd = n_dims - 1; d > 0; d--, dd--)
   {
     // Point to the correct previous x and y values.
-    ab_t *xy = &state->xyz[d * state->order];
+    ab_t *xy = &state->xyz[dd * state->order];
 
     // Create the new output value for this dimension
-    output[d] = 0.0k;
+    register int64_t output_val = 0;
 
     // Direct Form I filter
     // `m` acts as an index into the ring buffer of historic input and output.
-    for (int32_t k=0, m = (int32_t) state->n;
-         k < (int32_t) state->order; k++)
+    for (uint32_t k=0, m = state->n; k < state->order; k++)
     {
       // Update the index into the ring buffer, if this would go negative it
       // wraps to the top of the buffer.
-      if(m <= 0)
+      if (m == 0)
       {
         m += state->order;
       }
       m--;
 
       // Apply this part of the filter
+      // Equivalent to:
+      //     output[dd] += ab.a * xyz.a;
+      //     output[dd] += ab.b * xyz.b;
       ab_t ab = state->abs[k];
       ab_t xyz = xy[m];
-      output[d] -= ab.a * xyz.a;
-      output[d] += ab.b * xyz.b;
+      output_val = __smlal(output_val, bitsk(ab.a), bitsk(xyz.a));
+      output_val = __smlal(output_val, bitsk(ab.b), bitsk(xyz.b));
     }
 
     // Include the initial new input
-    xy[state->n].b = input[d];
+    xy[state->n].b = input[dd];
 
     // Save the current output for later steps
-    xy[state->n].a = output[d];
+    output[dd] = kbits(convert_s32_30_s16_15(output_val));
+    xy[state->n].a = output[dd];
   }
 
   // Rotate the ring buffer by moving the starting pointer, if the starting

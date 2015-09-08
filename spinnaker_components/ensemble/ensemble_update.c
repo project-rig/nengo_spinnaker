@@ -10,12 +10,11 @@
  *      Theoretical Neuroscience, University of Waterloo
  */
 
-#include "fixed_point.h"
-
 #include "ensemble.h"
 #include "ensemble_output.h"
 #include "ensemble_pes.h"
 #include "ensemble_profiler.h"
+#include "fixed_point.h"
 
 
 void ensemble_update(uint ticks, uint arg1) {
