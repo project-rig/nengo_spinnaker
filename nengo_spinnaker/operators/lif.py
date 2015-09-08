@@ -179,13 +179,12 @@ class EnsembleLIF(object):
             """Calculate the CPU usage (in cycles) based on the number of
             neurons and the size_in and size_out of the ensemble.
 
-            The equation and coefficients are taken from: "An Efficient
-            SpiNNaker Implementation of the NEF", Mundy, Knight, Stewart and
-            Furber [IJCNN 2015]
+            The equation and coefficients are taken from
+            https://github.com/project-rig/nengo_spinnaker/pull/58.
             """
             n_neurons = (sl.stop - sl.start)
-            return (245 + 43*self.ensemble.size_in + 100 + 702*size_out +
-                    188 + 69*n_neurons + 13*n_neurons*self.ensemble.size_in)
+            return (196 + 43*self.ensemble.size_in + 45 + 126*size_out +
+                    69.45*n_neurons + 8.81*n_neurons*self.ensemble.size_in)
 
         self.vertices = list()
         sdram_constraint = partition.Constraint(8*2**20)  # Max 8MiB

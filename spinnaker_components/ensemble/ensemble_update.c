@@ -10,6 +10,8 @@
  *      Theoretical Neuroscience, University of Waterloo
  */
 
+#include "fixed_point.h"
+
 #include "ensemble.h"
 #include "ensemble_output.h"
 #include "ensemble_pes.h"
@@ -30,7 +32,6 @@ void ensemble_update(uint ticks, uint arg1) {
   current_t i_membrane;
   voltage_t v_delta, v_voltage;
   value_t inhibitory_input = 0;
-  value_t encoder_d;
 
   // Filter inputs, updating accumulator for excitatory and inhibitory inputs
   profiler_write_entry(PROFILER_ENTER | PROFILER_TIMER_INPUT_FILTER);
@@ -60,18 +61,17 @@ void ensemble_update(uint ticks, uint arg1) {
                   inhibitory_input * g_ensemble.inhib_gain[n]);
 
     // Encode the input and add to the membrane current
-    for(uint32_t d = 0; d < g_input.output_size; d++)
-    {
-      encoder_d = neuron_encoder(n, d);
-      i_membrane += encoder_d * g_ensemble.input[d];
-    }
+    value_t encoded_input = dot_product(g_input.output_size,
+                                        neuron_encoder(n),
+                                        g_ensemble.input);
+    i_membrane += encoded_input;
 
     v_voltage = neuron_voltage(n);
     v_delta = (i_membrane - v_voltage) * g_ensemble.exp_dt_over_t_rc;
 
     // Voltages can't go below 0.0
     v_voltage += v_delta;
-    if(v_voltage < 0.0k)
+    if (bitsk(v_voltage) < bitsk(0.0k))
     {
       v_voltage = 0.0k;
     }
@@ -79,23 +79,47 @@ void ensemble_update(uint ticks, uint arg1) {
     // Save state
     set_neuron_voltage(n, v_voltage);
 
-    // If this neuron has fired then process
-    if( v_voltage > 1.0k ) {
-      // Set the voltage to be the overshoot, set the refractory time
-      set_neuron_refractory(n);
-      set_neuron_voltage(n, v_voltage - 1.0k);
+    // NOTE: All `value_t` comparisons should be wrapped in `bitsk` otherwise
+    // GCC inserts a function call rather than just using a CMP.
+    if (bitsk(v_voltage) <= bitsk(1.0k))
+    {
+      // If this neuron hasn't fired then just store record voltage.
+      record_voltage(&g_ensemble.record_voltages, n, v_voltage);
+    }
+    else
+    {
+      // If this neuron has fired then process:
+      // We don't need to explicitly record the neuron voltage because the
+      // buffer is zeroed every timestep (i.e., for the same reason that we
+      // don't need to record that a spike didn't occur, or the same reason
+      // that we don't store the voltages of neurons in their refractory
+      // period).
+
+      // Store the voltage for after the next refractory period and set the
+      // refractory time.  The voltage after the refractory period assumes that
+      // the neuron cannot experience input transients much faster than the
+      // refractory period.
+      register uint t_ref = g_ensemble.t_ref;
+      v_voltage -= 1.0k;
 
       // Decrement the refractory time in the case that the overshoot was
-      // sufficiently significant.
-      if(v_voltage > 2.0k)
+      // sufficiently great. Also reduce the voltage that will be present on
+      // exiting the refractory period.
+      if (bitsk(v_voltage) > bitsk(2.0k))
       {
-        decrement_neuron_refractory(n);
-        set_neuron_voltage(n, v_voltage - 1.0k - v_delta);
+        t_ref--;
+        v_voltage -= v_delta;
       }
 
+      // Finally store the refractory time and voltage for later use.
+      set_neuron_refractory(n, t_ref);
+      set_neuron_voltage(n, v_voltage);
+
       // Update the output values
-      for( uint d = 0; d < g_n_output_dimensions; d++ ) {
-        g_ensemble.output[d] += neuron_decoder( n, d );
+      value_t *decoder = neuron_decoder_vector(n);
+      for (uint d = 0; d < g_n_output_dimensions; d++)
+      {
+        g_ensemble.output[d] += decoder[d];
       }
 
       // Record that the spike occurred
@@ -103,14 +127,9 @@ void ensemble_update(uint ticks, uint arg1) {
 
       // Notify PES that neuron has spiked
       pes_neuron_spiked(n);
-
-      // Ensure the voltage is zeroed before we record it
-      v_voltage = 0.0k;
     }
-
-    // Record the neuron voltage
-    record_voltage(&g_ensemble.record_voltages, n, v_voltage);
   }
+
   profiler_write_entry(PROFILER_EXIT | PROFILER_TIMER_NEURON);
 
   profiler_write_entry(PROFILER_ENTER | PROFILER_TIMER_OUTPUT);
