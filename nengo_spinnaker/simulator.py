@@ -14,7 +14,6 @@ from .node_io import Ethernet
 from .rc import rc
 from .utils.config import getconfig
 from .utils.machine_control import test_and_boot
-from .utils import model as model_optimisations
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +91,6 @@ class Simulator(object):
         start_build = time.time()
         self.model = Model(dt, decoder_cache=get_default_decoder_cache())
         self.model.build(network, **builder_kwargs)
-        model_optimisations.remove_childless_filters(self.model)
         logger.info("Build took {:.3f} seconds".format(time.time() -
                                                        start_build))
 
