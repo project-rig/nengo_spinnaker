@@ -17,8 +17,12 @@ def test_none_filter():
     with sim:
         sim.run(0.1)
 
-    # Check that the probed value is as expected
-    assert np.all(sim.data[probe][-100:-10] == inp.output)
+    # Check that the probed value is as expected, calculate the mean of the
+    # received data and ensure this is close to the given input (this accounts
+    # for dropped packets).
+    mean = np.mean(sim.data[probe], axis=0)
+    assert np.all(0.9 * inp.output <= mean)
+    assert np.all(1.1 * inp.output >= mean)
 
 
 @pytest.mark.parametrize("tau", [0.01, 0.05, 0.1])
