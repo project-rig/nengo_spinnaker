@@ -186,10 +186,14 @@ class EnsembleLIF(object):
             return (196 + 43*self.ensemble.size_in + 45 + 126*size_out +
                     69.45*n_neurons + 8.81*n_neurons*self.ensemble.size_in)
 
+        # The number of cycles is 200MHz * the machine timestep; or 200 * the
+        # machine timestep in microseconds.
+        cycles = 200 * model.machine_timestep
+
         self.vertices = list()
         sdram_constraint = partition.Constraint(8*2**20)  # Max 8MiB
         dtcm_constraint = partition.Constraint(64*2**10, .75)  # 75% of 64KiB
-        cpu_constraint = partition.Constraint(200000, .8)  # 80% of 200k cycles
+        cpu_constraint = partition.Constraint(cycles, .8)  # 80% of the cycles
         constraints = {
             sdram_constraint: lambda s: regions.utils.sizeof_regions(
                 self.regions, s),
