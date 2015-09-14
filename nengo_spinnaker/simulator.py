@@ -49,7 +49,7 @@ class Simulator(object):
     def _remove_simulator(cls, simulator):
         cls._open_simulators.remove(simulator)
 
-    def __init__(self, network, dt=0.001, period=10.0):
+    def __init__(self, network, dt=0.001, period=10.0, timescale=1.0):
         """Create a new Simulator with the given network.
 
         Parameters
@@ -57,6 +57,9 @@ class Simulator(object):
         period : float or None
             Duration of one period of the simulator. This determines how much
             memory will be allocated to store precomputed and probed data.
+        timescale : float
+            Scaling factor to apply to the simulation, e.g., a value of `0.5`
+            will cause the simulation to run at half real-time.
         """
         # Add this simulator to the set of open simulators
         Simulator._add_simulator(self)
@@ -75,6 +78,11 @@ class Simulator(object):
                               dict())
         self.io_controller = io_cls(**io_kwargs)
 
+        # Calculate the machine timestep, this is measured in microseconds
+        # (hence the 1e6 scaling factor).
+        self.timescale = timescale
+        machine_timestep = int((dt / timescale) * 1e6)
+
         # Determine the maximum run-time
         self.max_steps = None if period is None else int(period / dt)
 
@@ -90,7 +98,8 @@ class Simulator(object):
         # Create a model from the network, using the IO controller
         logger.debug("Building model")
         start_build = time.time()
-        self.model = Model(dt, decoder_cache=get_default_decoder_cache())
+        self.model = Model(dt=dt, machine_timestep=machine_timestep,
+                           decoder_cache=get_default_decoder_cache())
         self.model.build(network, **builder_kwargs)
         model_optimisations.remove_childless_filters(self.model)
         logger.info("Build took {:.3f} seconds".format(time.time() -
@@ -213,7 +222,7 @@ class Simulator(object):
         # Run the simulation
         try:
             # Prep
-            exp_time = steps * (self.model.machine_timestep / float(1e6))
+            exp_time = steps * self.dt / self.timescale
             io_thread.start()
 
             # Wait for all cores to hit SYNC1
@@ -227,6 +236,7 @@ class Simulator(object):
             host_steps = 0
             start_time = time.time()
             run_time = 0.0
+            local_timestep = self.dt / self.timescale
             while run_time < exp_time:
                 # Run a step
                 self.host_sim.step()
@@ -234,7 +244,7 @@ class Simulator(object):
 
                 # If that step took less than timestep then spin
                 time.sleep(0.0001)
-                while run_time < host_steps * self.dt:
+                while run_time < host_steps * local_timestep:
                     time.sleep(0.0001)
                     run_time = time.time() - start_time
         finally:
@@ -278,13 +288,17 @@ class Simulator(object):
                         now = time.time()
                         if node_info['start'] is None:
                             node_info['start'] = now
-                        return f(now - node_info['start'])
+
+                        t = (now - node_info['start']) * self.timescale
+                        return f(t)
                 else:
                     def func(t, x, f=old_func):
                         now = time.time()
                         if node_info['start'] is None:
                             node_info['start'] = now
-                        return f(now - node_info['start'], x)
+
+                        t = (now - node_info['start']) * self.timescale
+                        return f(t, x)
                 node.output = func
                 node_functions[node] = old_func
 
