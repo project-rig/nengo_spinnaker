@@ -39,17 +39,18 @@ class ValueSource(object):
 
         # Get all the outgoing signals to determine how big the size out is and
         # to build a list of keys.
-        sigs_conns = model.get_signals_from(self)
+        sigs_conns = model.get_signals_from_object(self)
         if len(sigs_conns) == 0:
             return netlistspec([])
 
         keys = list()
         self.transmission_parameters = list()
-        for sig, tps in sigs_conns[OutputPort.standard]:
+        for sig, transmission_params in sigs_conns[OutputPort.standard]:
             # Add the keys for this connection
-            transform, sig_keys = get_transform_keys(sig, tps)
+            transform, sig_keys = get_transform_keys(sig, transmission_params)
             keys.extend(sig_keys)
-            self.transmission_parameters.append((tps, transform))
+            self.transmission_parameters.append((transmission_params,
+                                                 transform))
         size_out = len(keys)
 
         # Build the keys region
@@ -141,7 +142,7 @@ class ValueSource(object):
 
         # Compute the output for each connection
         outputs = []
-        for tps, transform in self.transmission_parameters:
+        for transmission_params, transform in self.transmission_parameters:
             output = []
 
             # For each f(t) for the next set of simulations we calculate the
@@ -149,11 +150,12 @@ class ValueSource(object):
             # the pre-slice, then the function and then the post-slice.
             for v in values:
                 # Apply the pre-slice
-                v = v[tps.pre_slice]
+                v = v[transmission_params.pre_slice]
 
                 # Apply the function on the connection, if there is one.
-                if tps.function is not None:
-                    v = np.asarray(tps.function(v), dtype=float)
+                if transmission_params.function is not None:
+                    v = np.asarray(transmission_params.function(v),
+                                   dtype=float)
 
                 output.append(np.dot(transform, v.T))
             outputs.append(np.array(output).reshape(max_n, -1))
@@ -209,10 +211,10 @@ class SystemRegion(regions.Region):
         ))
 
 
-def get_transform_keys(sig, tps):
+def get_transform_keys(sig, transmission_params):
     # Get the transform for the connection from the list of built connections,
     # then remove zeroed rows (should any exist) and derive the list of keys.
-    transform = tps.transform
+    transform = transmission_params.transform
     keep = np.any(transform != 0.0, axis=1)
     keys = list()
 

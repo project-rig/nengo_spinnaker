@@ -35,11 +35,11 @@ def make_filter_regions(specs, dt, minimise=False,
     filters = list()
     keyspace_routes = list()
 
-    for signal, rps in specs:
+    for signal, reception_params in specs:
         # Make the filter
-        f_type = type(rps.filter)
+        f_type = type(reception_params.filter)
         f = FilterRegion.supported_filter_types[f_type].from_parameters(
-            signal, rps, width=width
+            signal, reception_params, width=width
         )
 
         # Store the filter and add the route
@@ -141,9 +141,9 @@ class Filter(object):
 class NoneFilter(Filter):
     """Represents a filter which does nothing."""
     @classmethod
-    def from_parameters(cls, signal, rps, width=None):
+    def from_parameters(cls, signal, reception_params, width=None):
         if width is None:
-            width = rps.width
+            width = reception_params.width
         return cls(width, signal.latching)
 
     def method_index(self):
@@ -168,10 +168,10 @@ class LowpassFilter(Filter):
         self.time_constant = time_constant
 
     @classmethod
-    def from_parameters(cls, signal, rps, width=None):
+    def from_parameters(cls, signal, reception_params, width=None):
         if width is None:
-            width = rps.width
-        return cls(width, signal.latching, rps.filter.tau)
+            width = reception_params.width
+        return cls(width, signal.latching, reception_params.filter.tau)
 
     def method_index(self):
         """Get the index into the array of filter functions."""
@@ -204,10 +204,12 @@ class LinearFilter(Filter):
         self.order = len(den) - 1
 
     @classmethod
-    def from_parameters(cls, signal, rps, width=None):
+    def from_parameters(cls, signal, reception_params, width=None):
         if width is None:
-            width = rps.width
-        return cls(width, signal.latching, rps.filter.num, rps.filter.den)
+            width = reception_params.width
+        return cls(width, signal.latching,
+                   reception_params.filter.num,
+                   reception_params.filter.den)
 
     def method_index(self):
         """Get the index into the array of filter functions."""

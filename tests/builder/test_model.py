@@ -37,15 +37,6 @@ class TestSignalParameters(object):
             assert a == b
 
 
-def test_transmission_parameters_eq():
-    """Test __eq__ of TransmissionParameters"""
-    class MyTransmissionParameters(model.TransmissionParameters):
-        pass
-
-    assert model.TransmissionParameters() == model.TransmissionParameters()
-    assert model.TransmissionParameters() != MyTransmissionParameters()
-
-
 class TestConnectionMap(object):
     def test_add_connection_basic(self):
         """Test adding connections to a connection map."""
@@ -195,7 +186,7 @@ class TestConnectionMap(object):
         assert sp20.keyspace is kss[(1, 0)]
         assert sp21.keyspace is kss[(1, 1)]
 
-    def test_get_signals_from(self):
+    def test_get_signals_from_object(self):
         # Create two ports
         sp_1 = mock.Mock(name="Source Port 1")
         sp_2 = mock.Mock(name="Source Port 2")
@@ -224,18 +215,18 @@ class TestConnectionMap(object):
             cm.add_connection(source_b, port, sp, tp, None, None, None)
 
         # Get the signals from source_a, check that they are as expected
-        sigs_a = cm.get_signals_from(source_a)
+        sigs_a = cm.get_signals_from_object(source_a)
         assert (sp1, tp1) in sigs_a[sp_1]
         assert (sp2, tp2) in sigs_a[sp_1]
         assert sigs_a[sp_2] == [(sp3, tp3)]
 
         # Get the signals from source_b, check that they are as expected
-        sigs_b = cm.get_signals_from(source_b)
+        sigs_b = cm.get_signals_from_object(source_b)
         assert sigs_b[sp_1] == [(sp3, tp3)]
         assert (sp1, tp2) in sigs_b[sp_2]
         assert (sp2, tp2) in sigs_b[sp_2]
 
-    def test_get_signals_to(self):
+    def test_get_signals_to_object(self):
         # Create two ports
         sp_1 = mock.Mock(name="Sink Port 1")
         sp_2 = mock.Mock(name="Sink Port 2")
@@ -267,7 +258,7 @@ class TestConnectionMap(object):
         cm.add_connection(None, None, tp1, None, sink_b, sp_1, rp)
 
         # Get the signals to sink_a, check that they are as expected
-        sigs_a = cm.get_signals_to(sink_a)
+        sigs_a = cm.get_signals_to_object(sink_a)
         assert len(sigs_a[sp_1]) == 2
         seen_rps = []
 

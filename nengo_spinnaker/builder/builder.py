@@ -46,7 +46,9 @@ class Model(object):
     extra_operators: [operator, ...]
         Additional operators.
     connection_map :
-        Connection manager.
+        Data structure which performs insertion-minimisation on connections
+        wherein each source object is associated with a dictionary mapping
+        ports to lists of unique signals.
     """
 
     builders = collections_ext.registerabledict()
@@ -243,9 +245,11 @@ class Model(object):
         # Get the transmission parameters and reception parameters for the
         # connection.
         pre_type = type(conn.pre_obj)
-        tps = self._transmission_parameter_builders[pre_type](self, conn)
+        transmission_params = \
+            self._transmission_parameter_builders[pre_type](self, conn)
         post_type = type(conn.post_obj)
-        rps = self._reception_parameter_builders[post_type](self, conn)
+        reception_params = \
+            self._reception_parameter_builders[post_type](self, conn)
 
         # Get the source and sink specification, then make the signal provided
         # that neither of specs is None.
@@ -254,13 +258,14 @@ class Model(object):
 
         if not (source is None or sink is None):
             # Construct the signal parameters
-            sps = _make_signal_parameters(source, sink)
+            signal_params = _make_signal_parameters(source, sink)
 
             # Add the connection to the connection map, this will automatically
             # merge connections which are equivalent.
             self.connection_map.add_connection(
-                source.target.obj, source.target.port, sps, tps,
-                sink.target.obj, sink.target.port, rps
+                source.target.obj, source.target.port, signal_params,
+                transmission_params, sink.target.obj, sink.target.port,
+                reception_params
             )
 
     def make_probe(self, probe):
@@ -275,7 +280,7 @@ class Model(object):
         # Build
         self._probe_builders[type(target_obj)](self, probe)
 
-    def get_signals_from(self, *args):  # pragma : no cover
+    def get_signals_from_object(self, *args):  # pragma : no cover
         """Get the signals transmitted by a source object.
 
         Returns
@@ -284,9 +289,9 @@ class Model(object):
             Dictionary mapping ports to lists of parameters for the signals
             that originate from them.
         """
-        return self.connection_map.get_signals_from(*args)
+        return self.connection_map.get_signals_from_object(*args)
 
-    def get_signals_to(self, *args):  # pragma : no cover
+    def get_signals_to_object(self, *args):  # pragma : no cover
         """Get the signals received by a sink object.
 
         Returns
@@ -295,7 +300,7 @@ class Model(object):
             Dictionary mapping ports to the lists of objects specifying
             incoming signals.
         """
-        return self.connection_map.get_signals_to(*args)
+        return self.connection_map.get_signals_to_object(*args)
 
     def make_netlist(self, *args, **kwargs):
         """Convert the model into a netlist for simulating on SpiNNaker.

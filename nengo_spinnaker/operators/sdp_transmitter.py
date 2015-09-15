@@ -28,7 +28,7 @@ class SDPTransmitter(object):
                                         self.size_in, 1)
 
         # Build the filter regions
-        in_sigs = model.get_signals_to(self)[InputPort.standard]
+        in_sigs = model.get_signals_to_object(self)[InputPort.standard]
         self._filter_region, self._routing_region = make_filter_regions(
             in_sigs, model.dt, True, model.keyspaces.filter_routing_tag)
 

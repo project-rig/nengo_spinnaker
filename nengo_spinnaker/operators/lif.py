@@ -74,7 +74,7 @@ class EnsembleLIF(object):
         )
 
         # Extract all the filters from the incoming connections
-        incoming = model.get_signals_to(self)
+        incoming = model.get_signals_to_object(self)
 
         self.input_filters, self.input_filter_routing = make_filter_regions(
             incoming[InputPort.standard], model.dt, True,
@@ -90,7 +90,7 @@ class EnsembleLIF(object):
 
         # Extract all the decoders for the outgoing connections and build the
         # regions for the decoders and the regions for the output keys.
-        outgoing = model.get_signals_from(self)
+        outgoing = model.get_signals_from_object(self)
         if OutputPort.standard in outgoing:
             decoders, output_keys = \
                 get_decoders_and_keys(outgoing[OutputPort.standard], True)
@@ -436,8 +436,8 @@ def get_decoders_and_keys(signals_connections, minimise=False):
 
     # For each signal with a single connection we save the decoder and generate
     # appropriate keys
-    for signal, tps in signals_connections:
-        decoder = tps.decoders
+    for signal, transmission_params in signals_connections:
+        decoder = transmission_params.decoders
 
         if not minimise:
             keep = np.array([True for _ in range(decoder.shape[1])])

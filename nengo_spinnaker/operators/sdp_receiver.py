@@ -26,11 +26,11 @@ class SDPReceiver(object):
         # actually necessary; the way to avoid this is to modify how the
         # builder deals with signals when creating netlists.
 
-        # Get all outgoing signals and their associated connections (this
-        # SHOULD be a 1:1 mapping)
-        for signal, tps in model.get_signals_from(self)[OutputPort.standard]:
+        # Get all outgoing signals and their associated transmission parameters
+        for signal, transmission_params in \
+                model.get_signals_from_object(self)[OutputPort.standard]:
             # Get the transform, and from this the keys
-            transform = tps.transform
+            transform = transmission_params.transform
             keys = [signal.keyspace(index=i) for i in
                     range(transform.shape[0])]
 
@@ -55,8 +55,8 @@ class SDPReceiver(object):
             }
 
             # Create the vertex
-            v = self.connection_vertices[tps] = Vertex(get_application("rx"),
-                                                       resources)
+            v = self.connection_vertices[transmission_params] = \
+                Vertex(get_application("rx"), resources)
             self._sys_regions[v] = sys_region
             self._key_regions[v] = keys_region
 

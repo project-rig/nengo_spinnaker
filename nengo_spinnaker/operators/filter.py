@@ -44,14 +44,14 @@ class Filter(object):
         """Make a vertex for the operator."""
         # We don't partition Filters, so create the vertex and return it
         # Get the incoming filters
-        incoming = model.get_signals_to(self)
+        incoming = model.get_signals_to_object(self)
         self.filters_region, self.routing_region = make_filter_regions(
             incoming[InputPort.standard], model.dt, True,
             model.keyspaces.filter_routing_tag, width=self.size_in
         )
 
         # Create a combined output transform and set of keys
-        outgoing = model.get_signals_from(self)[OutputPort.standard]
+        outgoing = model.get_signals_from_object(self)[OutputPort.standard]
         transform, output_keys = get_transforms_and_keys(outgoing)
 
         size_out = len(output_keys)
@@ -105,9 +105,9 @@ def get_transforms_and_keys(signals_connections):
     transforms = list()
     keys = list()
 
-    for signal, tps in signals_connections:
+    for signal, transmission_params in signals_connections:
         # Extract the transform
-        transform = tps.transform
+        transform = transmission_params.transform
 
         if signal.latching:
             # If the signal is latching then we use the transform exactly as it

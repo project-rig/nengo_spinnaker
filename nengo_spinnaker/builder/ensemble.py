@@ -153,6 +153,10 @@ class EnsembleTransmissionParameters(object):
         return not (self == other)
 
     def __eq__(self, other):
+        # Equal iff. the objects are of the same type
+        if type(self) is not type(other):
+            return False
+
         # Equal iff. the decoders are the same shape
         if self.decoders.shape != other.decoders.shape:
             return False

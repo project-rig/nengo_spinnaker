@@ -40,7 +40,7 @@ class ValueSink(object):
         """
         # Extract all the filters from the incoming connections to build the
         # filter regions.
-        signals_conns = model.get_signals_to(self)[InputPort.standard]
+        signals_conns = model.get_signals_to_object(self)[InputPort.standard]
         self.filter_region, self.filter_routing_region = make_filter_regions(
             signals_conns, model.dt, True, model.keyspaces.filter_routing_tag)
 

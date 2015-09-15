@@ -78,22 +78,22 @@ class ConnectionMap(object):
         obj_ids = collections.defaultdict(counter())
 
         # For each source object
-        for obj, ptps in iteritems(self._connections):
+        for obj, ports_params_and_sinks in iteritems(self._connections):
             # Hold the count of connection IDs
             conn_id = counter()
 
             # For each transmission parameter, sinks pair
-            for tps_sinks in chain(*itervalues(ptps)):
+            for params_and_sinks in chain(*itervalues(ports_params_and_sinks)):
                 # If the signal parameter doesn't have a keyspace assign one
                 # using the default keyspace.
-                sp, _ = tps_sinks.parameters
+                sig_params, _ = params_and_sinks.parameters
 
-                if sp.keyspace is None:
+                if sig_params.keyspace is None:
                     # Assign the keyspace
-                    sp.keyspace = keyspace(object=obj_ids[obj],
-                                           connection=conn_id())
+                    sig_params.keyspace = keyspace(object=obj_ids[obj],
+                                                   connection=conn_id())
 
-    def get_signals_from(self, source_object):
+    def get_signals_from_object(self, source_object):
         """Get the signals transmitted by a source object.
 
         Returns
@@ -111,7 +111,7 @@ class ConnectionMap(object):
 
         return signals
 
-    def get_signals_to(self, sink_object):
+    def get_signals_to_object(self, sink_object):
         """Get the signals received by a sink object.
 
         Returns
@@ -125,22 +125,22 @@ class ConnectionMap(object):
         # For all connections we have reference to identify those which
         # terminate at the given object. For those that do add a new entry to
         # the signal dictionary.
-        tps_sinks = chain(*chain(*(itervalues(x) for x in
-                                   itervalues(self._connections))))
-        for tp_sinks in tps_sinks:
+        params_and_sinks = chain(*chain(*(itervalues(x) for x in
+                                          itervalues(self._connections))))
+        for param_and_sinks in params_and_sinks:
             # tp_sinks are pairs of transmission parameters and sinks
             # Extract the transmission parameters
-            sp, _ = tp_sinks.parameters
+            sig_params, _ = param_and_sinks.parameters
 
             # For each sink, if the sink object is the specified object
             # then add signal to the list.
-            for sink in tp_sinks.sinks:
+            for sink in param_and_sinks.sinks:
                 if sink.sink_object is sink_object:
                     # This is the desired sink object, so remember the
                     # signal. First construction the reception
                     # specification.
                     signals[sink.port].append(
-                        ReceptionSpec(sp, sink.reception_parameters)
+                        ReceptionSpec(sig_params, sink.reception_parameters)
                     )
 
         return signals
@@ -210,18 +210,6 @@ class SignalParameters(object):
 
     def __ne__(self, b):
         return not self == b
-
-
-class TransmissionParameters(object):
-    """Basic parameters that relate to the transmission of a series of
-    multicast packets.
-    """
-    def __eq__(self, other):
-        # Equivalent if the types are the same
-        return type(self) is type(other)
-
-    def __ne__(self, other):
-        return not (self == other)
 
 
 ReceptionParameters = collections.namedtuple("ReceptionParameters",
