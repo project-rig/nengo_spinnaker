@@ -11,10 +11,10 @@ import collections
 from nengo.base import ObjView
 import numpy as np
 from rig.machine import Cores, SDRAM
-from six import iteritems
 import struct
 
-from nengo_spinnaker.builder.builder import InputPort, netlistspec, OutputPort
+from nengo_spinnaker.builder.builder import netlistspec
+from nengo_spinnaker.builder.model import InputPort, OutputPort
 from nengo_spinnaker.builder.ports import EnsembleInputPort
 from nengo_spinnaker.regions.filters import make_filter_regions
 from .. import regions
@@ -74,7 +74,7 @@ class EnsembleLIF(object):
         )
 
         # Extract all the filters from the incoming connections
-        incoming = model.get_signals_connections_to_object(self)
+        incoming = model.get_signals_to_object(self)
 
         self.input_filters, self.input_filter_routing = make_filter_regions(
             incoming[InputPort.standard], model.dt, True,
@@ -90,9 +90,13 @@ class EnsembleLIF(object):
 
         # Extract all the decoders for the outgoing connections and build the
         # regions for the decoders and the regions for the output keys.
-        outgoing = model.get_signals_connections_from_object(self)
-        decoders, output_keys = \
-            get_decoders_and_keys(model, outgoing[OutputPort.standard], True)
+        outgoing = model.get_signals_from_object(self)
+        if OutputPort.standard in outgoing:
+            decoders, output_keys = \
+                get_decoders_and_keys(outgoing[OutputPort.standard], True)
+        else:
+            decoders = np.array([[]])
+            output_keys = list()
         size_out = decoders.shape[1]
 
         # TODO: Include learnt decoders
@@ -427,7 +431,7 @@ class PESRegion(regions.Region):
         fp.write(b"\x00" * 4)
 
 
-def get_decoders_and_keys(model, signals_connections, minimise=False):
+def get_decoders_and_keys(signals_connections, minimise=False):
     """Get a combined decoder matrix and a list of keys to use to transmit
     elements decoded using the decoders.
     """
@@ -436,11 +440,8 @@ def get_decoders_and_keys(model, signals_connections, minimise=False):
 
     # For each signal with a single connection we save the decoder and generate
     # appropriate keys
-    for signal, connections in iteritems(signals_connections):
-        assert len(connections) == 1
-        decoder = model.params[connections[0]].decoders
-        transform = model.params[connections[0]].transform
-        decoder = np.dot(transform, decoder.T).T
+    for signal, transmission_params in signals_connections:
+        decoder = transmission_params.decoders
 
         if not minimise:
             keep = np.array([True for _ in range(decoder.shape[1])])

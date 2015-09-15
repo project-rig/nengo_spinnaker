@@ -6,7 +6,8 @@ from six import iteritems
 import socket
 import threading
 
-from ..builder.builder import spec, InputPort, OutputPort, ObjectPort
+from ..builder.builder import spec, ObjectPort
+from ..builder.model import InputPort, OutputPort
 from ..builder.node import NodeIOController
 from ..operators import SDPReceiver, SDPTransmitter
 from ..utils import type_casts as tp
@@ -89,16 +90,15 @@ class Ethernet(NodeIOController):
 
         # Build a map of Node to outgoing connections and SDP receivers
         for node, sdp_rx in iteritems(self._sdp_receivers):
-            for connection, vertex in iteritems(sdp_rx.connection_vertices):
+            for transmission_params, vertex in \
+                    iteritems(sdp_rx.connection_vertices):
                 # Get the placement and core
                 x, y = netlist.placements[vertex]
                 p = netlist.allocations[vertex][Cores].start
 
-                # Store this connection, transform, (x, y, p) map
-                self._node_outgoing[node].append(
-                    (connection, model.params[connection].transform,
-                     (x, y, p))
-                )
+                # Store this transmission parameters to (x, y, p) map
+                self._node_outgoing[node].append((transmission_params,
+                                                  (x, y, p)))
 
         # Build a map of (x, y, p) to Node for incoming values
         for node, sdp_tx in iteritems(self._sdp_transmitters):
@@ -113,12 +113,12 @@ class Ethernet(NodeIOController):
         """Transmit the value output by a Node."""
         # Build an SDP packet to transmit for each outgoing connection for the
         # node
-        for connection, transform, (x, y, p) in self._node_outgoing[node]:
+        for transmission_params, (x, y, p) in self._node_outgoing[node]:
             # Apply the pre-slice, the connection function and the transform.
-            c_value = value[connection.pre_slice]
-            if connection.function is not None:
-                c_value = connection.function(c_value)
-            c_value = np.dot(transform, c_value)
+            c_value = value[transmission_params.pre_slice]
+            if transmission_params.function is not None:
+                c_value = transmission_params.function(c_value)
+            c_value = np.dot(transmission_params.transform, c_value)
 
             # Transmit the packet
             packet_data = bytes(tp.np_to_fix(c_value).data)

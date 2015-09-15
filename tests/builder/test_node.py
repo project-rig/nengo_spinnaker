@@ -6,9 +6,10 @@ import threading
 
 from nengo_spinnaker import add_spinnaker_params
 from nengo_spinnaker.builder import Model
-from nengo_spinnaker.builder.builder import OutputPort, InputPort
+from nengo_spinnaker.builder.model import OutputPort, InputPort
 from nengo_spinnaker.builder.node import (
-    NodeIOController, InputNode, OutputNode
+    NodeIOController, InputNode, OutputNode, NodeTransmissionParameters,
+    PassthroughNodeTransmissionParameters, build_node_transmission_parameters
 )
 from nengo_spinnaker.operators import ValueSink
 
@@ -511,6 +512,107 @@ class TestNodeIOController(object):
         # The host network should contain a, b and a_b and nothing else
         assert nioc.host_network.all_nodes == [a, b]
         assert nioc.host_network.all_connections == [a_b]
+
+
+class TestBuildNodeTransmissionParameters(object):
+    def test_build_standard_node(self):
+        # Create a network
+        with nengo.Network():
+            a = nengo.Node(lambda t: [t] * 5, size_out=5)
+            b = nengo.Ensemble(100, 7)
+
+            func = mock.Mock(side_effect=lambda x: x**2)
+            a_b = nengo.Connection(a[0:2], b, function=func,
+                                   transform=np.ones((7, 2)))
+
+        # Create an empty model to build into
+        model = Model()
+
+        # Build the transmission parameters
+        params = build_node_transmission_parameters(model, a_b)
+        assert params.pre_slice == slice(0, 2)
+        assert params.transform.shape == (7, 2)
+        assert params.function is func
+        assert np.all(params.transform == 1.0)
+
+    def test_build_standard_node_global_inhibition(self):
+        # Create a network
+        with nengo.Network():
+            a = nengo.Node(lambda t: [t] * 5, size_out=5)
+            b = nengo.Ensemble(100, 1)
+
+            a_b = nengo.Connection(a[0:2], b.neurons,
+                                   transform=np.ones((b.n_neurons, 2)))
+
+        # Create an empty model to build into
+        model = Model()
+
+        # Build the transmission parameters
+        params = build_node_transmission_parameters(model, a_b)
+        assert params.pre_slice == slice(0, 2)
+        assert params.transform.shape == (1, 2)
+        assert np.all(params.transform == 1.0)
+
+    def test_build_passthrough_node(self):
+        # Create a network
+        with nengo.Network():
+            a = nengo.Node(None, size_in=5)
+            b = nengo.Ensemble(100, 7)
+
+            a_b = nengo.Connection(a[0:2], b, transform=np.ones((7, 2)))
+
+        # Create an empty model to build into
+        model = Model()
+
+        # Build the transmission parameters
+        params = build_node_transmission_parameters(model, a_b)
+        assert params.transform.shape == (7, 5)
+
+    def test_build_passthrough_node_global_inhibition(self):
+        # Create a network
+        with nengo.Network():
+            a = nengo.Node(None, size_in=5)
+            b = nengo.Ensemble(100, 1)
+
+            a_b = nengo.Connection(a[0:2], b.neurons,
+                                   transform=np.ones((b.n_neurons, 2)))
+
+        # Create an empty model to build into
+        model = Model()
+
+        # Build the transmission parameters
+        params = build_node_transmission_parameters(model, a_b)
+        assert params.transform.shape == (1, 5)
+
+
+class TestNodeTransmissionParameters(object):
+    def test_eq_ne(self):
+        class MyNTP(NodeTransmissionParameters):
+            pass
+
+        # NodeTransmissionParameters are only equivalent if they are of the
+        # same type, they share the same pre_slice and transform.
+        pars = [
+            (NodeTransmissionParameters, (slice(0, 5), None, np.ones((5, 5)))),
+            (NodeTransmissionParameters, (slice(None), None, np.ones((5, 5)))),
+            (NodeTransmissionParameters, (slice(0, 5), None, np.eye(5))),
+            (NodeTransmissionParameters, (slice(0, 5), None, np.ones((1, 1)))),
+            (NodeTransmissionParameters,
+             (slice(0, 5), lambda x: x, np.ones((5, 5)))),
+            (MyNTP, (slice(0, 5), None, np.ones((5, 5)))),
+        ]
+        ntps = [cls(*args) for cls, args in pars]
+
+        # Check the inequivalence works
+        for a in ntps:
+            for b in ntps:
+                if a is not b:
+                    assert a != b
+
+        # Check that equivalence works
+        for a, b in zip(ntps, [cls(*args) for cls, args in pars]):
+            assert a is not b
+            assert a == b
 
 
 class TestInputNode(object):

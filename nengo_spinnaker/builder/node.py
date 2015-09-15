@@ -1,9 +1,10 @@
 import nengo
+from nengo.utils.builder import full_transform
 import numpy as np
 import threading
 
-from nengo_spinnaker.builder.builder import (
-    InputPort, ObjectPort, OutputPort, spec)
+from nengo_spinnaker.builder.builder import ObjectPort, spec, Model
+from nengo_spinnaker.builder.model import InputPort, OutputPort
 from nengo_spinnaker.operators import Filter, ValueSink, ValueSource
 from nengo_spinnaker.utils.config import getconfig
 
@@ -263,6 +264,81 @@ class NodeIOController(object):
     def close(self):
         """Close the NodeIOController."""
         pass
+
+
+@Model.transmission_parameter_builders.register(nengo.Node)
+def build_node_transmission_parameters(model, conn):
+    """Build transmission parameters for a connection originating at a Node."""
+    if conn.pre_obj.output is not None:
+        # Connection is not from a passthrough Node
+        # Get the full transform, not including the pre_slice
+        transform = full_transform(conn, slice_pre=False, allow_scalars=False)
+    else:
+        # Connection is from a passthrough Node
+        # Get the full transform
+        transform = full_transform(conn, allow_scalars=False)
+
+    # If the connection is to neurons and the transform is equivalent in every
+    # row we treat it as a global inhibition connection and shrink it down to
+    # one row.
+    if (isinstance(conn.post_obj, nengo.ensemble.Neurons) and
+            np.all(transform[0, :] == transform[1:, :])):
+        # Reduce the size of the transform
+        transform = np.array([transform[0]])
+
+    if conn.pre_obj.output is not None:
+        return NodeTransmissionParameters(conn.pre_slice, conn.function,
+                                          transform)
+    else:
+        return PassthroughNodeTransmissionParameters(transform)
+
+
+class PassthroughNodeTransmissionParameters(object):
+    """Parameters describing connections which originate from pass through
+    Nodes.
+    """
+    def __init__(self, transform):
+        # Store the parameters, copying the transform
+        self.transform = np.array(transform)
+
+    def __ne__(self, other):
+        return not (self == other)
+
+    def __eq__(self, other):
+        # Equivalent if the same type
+        if type(self) is not type(other):
+            return False
+
+        # and the transforms are equivalent
+        if (self.transform.shape != other.transform.shape or
+                np.any(self.transform != other.transform)):
+            return False
+
+        return True
+
+
+class NodeTransmissionParameters(PassthroughNodeTransmissionParameters):
+    """Parameters describing connections which originate from Nodes."""
+    def __init__(self, pre_slice, function, transform):
+        # Store the parameters
+        super(NodeTransmissionParameters, self).__init__(transform)
+        self.pre_slice = pre_slice
+        self.function = function
+
+    def __eq__(self, other):
+        # Parent equivalence
+        if not super(NodeTransmissionParameters, self).__eq__(other):
+            return False
+
+        # Equivalent if the pre_slices are exactly the same
+        if self.pre_slice != other.pre_slice:
+            return False
+
+        # Equivalent if the functions are the same
+        if self.function is not other.function:
+            return False
+
+        return True
 
 
 class InputNode(nengo.Node):
