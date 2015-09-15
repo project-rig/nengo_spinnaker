@@ -15,7 +15,7 @@ class Filter(object):
     """Operator which receives values, performs filter, applies and linear
     transform and then forwards the values.
     """
-    def __init__(self, size_in, transmission_delay=1, interpacket_pause=1):
+    def __init__(self, size_in, transmission_delay=1):
         """Create a new Filter.
 
         Parameters
@@ -24,12 +24,9 @@ class Filter(object):
             Width of the filter (length of any incoming signals).
         transmission_delay : int
             Number of machine timesteps to wait between transmitting packets.
-        interpacket_pause : int
-            Number of microseconds to leave between transmitting packets.
         """
         self.size_in = size_in
         self.transmission_delay = transmission_delay
-        self.interpacket_pause = interpacket_pause
 
         # Internal objects
         self.vertex = None
@@ -64,8 +61,7 @@ class Filter(object):
         # Create a system region
         self.system_region = SystemRegion(self.size_in, size_out,
                                           model.machine_timestep,
-                                          self.transmission_delay,
-                                          self.interpacket_pause)
+                                          self.transmission_delay)
 
         # Calculate the resources for the vertex
         self.regions = [
@@ -132,21 +128,20 @@ def get_transforms_and_keys(signals_connections):
 
 
 class SystemRegion(regions.Region):
-    def __init__(self, size_in, size_out, machine_timestep, transmission_delay,
-                 interpacket_pause):
+    def __init__(self, size_in, size_out,
+                 machine_timestep, transmission_delay):
         self.size_in = size_in
         self.size_out = size_out
         self.machine_timestep = machine_timestep
         self.transmission_delay = transmission_delay
-        self.interpacket_pause = interpacket_pause
 
     def sizeof(self, *args):
         """Return the size of the region in bytes."""
-        return 5 * 4
+        return 4 * 4
 
     def write_subregion_to_file(self, fp, *args, **kwargs):
         """Write the region to file."""
         fp.write(struct.pack(
-            "<5I", self.size_in, self.size_out, self.machine_timestep,
-            self.transmission_delay, self.interpacket_pause
+            "<4I", self.size_in, self.size_out, self.machine_timestep,
+            self.transmission_delay
         ))
