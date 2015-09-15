@@ -38,10 +38,10 @@ def test_function_of_time_node():
     index20 = index11 + int(p_b.synapse.tau * 3 / sim.dt)
     data = sim.data[p_b]
 
-    assert (np.all(+0.44 <= data[index10:index11, 0]) and
-            np.all(+0.72 >= data[index10:index11, 0]) and
-            np.all(-0.32 >= data[index20:, 0]) and
-            np.all(-0.48 <= data[index20:, 0]))
+    assert np.all(+0.44 <= data[index10:index11, 0])
+    assert np.all(+0.72 >= data[index10:index11, 0])
+    assert np.all(-0.32 >= data[index20:, 0])
+    assert np.all(-0.48 <= data[index20:, 0])
 
 
 def test_constant_node():
@@ -78,10 +78,6 @@ def test_f_of_t_node_with_outgoing_function():
     sim = nengo_spinnaker.Simulator(model)
     with sim:
         sim.run(0.5)
-
-    from matplotlib import pyplot as plt
-    plt.plot(sim.trange(), sim.data[output])
-    plt.savefig("test_f_t.png")
 
     assert -0.05 < sim.data[output][-1, 0] < 0.05
     assert 0.95 < sim.data[output][-1, 1] < 1.05
