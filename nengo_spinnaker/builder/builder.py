@@ -320,10 +320,11 @@ class Model(object):
         load_functions = collections_ext.noneignoringlist()
         before_simulation_functions = collections_ext.noneignoringlist()
         after_simulation_functions = collections_ext.noneignoringlist()
+        constraints = collections_ext.flatinsertionlist()
 
         for op in itertools.chain(itervalues(self.object_operators),
                                   self.extra_operators):
-            vxs, load_fn, pre_fn, post_fn = op.make_vertices(
+            vxs, load_fn, pre_fn, post_fn, constraint = op.make_vertices(
                 self, *args, **kwargs
             )
 
@@ -333,6 +334,9 @@ class Model(object):
             load_functions.append(load_fn)
             before_simulation_functions.append(pre_fn)
             after_simulation_functions.append(post_fn)
+
+            if constraint is not None:
+                constraints.append(constraint)
 
         # Construct the groups set
         groups = list()
@@ -392,6 +396,7 @@ class Model(object):
             vertices=vertices,
             keyspaces=self.keyspaces,
             groups=groups,
+            constraints=constraints,
             load_functions=load_functions,
             before_simulation_functions=before_simulation_functions,
             after_simulation_functions=after_simulation_functions
@@ -400,14 +405,14 @@ class Model(object):
 
 class netlistspec(collections.namedtuple(
         "netlistspec", "vertices, load_function, before_simulation_function, "
-                       "after_simulation_function")):
+                       "after_simulation_function, constraints")):
     """Specification of how an operator should be added to a netlist."""
     def __new__(cls, vertices, load_function=None,
                 before_simulation_function=None,
-                after_simulation_function=None):
+                after_simulation_function=None, constraints=None):
         return super(netlistspec, cls).__new__(
             cls, vertices, load_function, before_simulation_function,
-            after_simulation_function
+            after_simulation_function, constraints
         )
 
 

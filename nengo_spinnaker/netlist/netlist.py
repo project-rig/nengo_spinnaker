@@ -27,6 +27,8 @@ class Netlist(object):
         Object containing keyspaces for nets.
     groups : [{:py:class:`~.Vertex`, ...}, ...]
         List of groups of vertices.
+    constraints : [contraint, ...]
+        List of additional constraints.
     load_functions : [`fn(netlist, controller)`, ...]
         List of functions which will be called to load the model to a SpiNNaker
         machine.  Each must accept a netlist and a controller.
@@ -48,7 +50,7 @@ class Netlist(object):
         Map of vertices to file-like views of the SDRAM they have been
         allocated.
     """
-    def __init__(self, nets, vertices, keyspaces, groups,
+    def __init__(self, nets, vertices, keyspaces, groups, constraints=list(),
                  load_functions=list(), before_simulation_functions=list(),
                  after_simulation_functions=list()):
         # Store given parameters
@@ -56,7 +58,7 @@ class Netlist(object):
         self.vertices = list(vertices)
         self.keyspaces = keyspaces
         self.groups = list(groups)
-        self.constraints = list()
+        self.constraints = list(constraints)
         self.load_functions = list(load_functions)
         self.before_simulation_functions = list(before_simulation_functions)
         self.after_simulation_functions = list(after_simulation_functions)
