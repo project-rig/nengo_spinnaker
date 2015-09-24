@@ -594,6 +594,14 @@ class TestMakeNetlist(object):
         operator_b.make_vertices.return_value = \
             netlistspec([vertex_b0, vertex_b1], load_fn_b)
 
+        # Create a third operator, which won't accept the signal
+        vertex_c = mock.Mock(name="vertex C")
+        vertex_c.accepts_signal.side_effect = lambda _, __: False
+
+        object_c = mock.Mock(name="object C")
+        operator_c = mock.Mock(name="operator C")
+        operator_c.make_vertices.return_value = netlistspec(vertex_c)
+
         # Create a signal between the operators
         keyspace = mock.Mock(name="keyspace")
         keyspace.length = 32
@@ -603,14 +611,24 @@ class TestMakeNetlist(object):
         model = Model()
         model.object_operators[object_a] = operator_a
         model.object_operators[object_b] = operator_b
+        model.object_operators[object_c] = operator_c
         model.connection_map.add_connection(
             operator_a, None, signal_ab_parameters, None,
             operator_b, None, None
         )
+        model.connection_map.add_connection(
+            operator_a, None, signal_ab_parameters, None,
+            operator_c, None, None
+        )
         netlist = model.make_netlist()
 
+        # Check that the "accepts_signal" method of vertex_c was called with
+        # reasonable arguments
+        assert vertex_c.accepts_signal.called
+
         # Check that the netlist is as expected
-        assert set(netlist.vertices) == set([vertex_a, vertex_b0, vertex_b1])
+        assert set(netlist.vertices) == set(
+            [vertex_a, vertex_b0, vertex_b1, vertex_c])
         assert len(netlist.nets) == 1
         for net in netlist.nets:
             assert net.source is vertex_a
@@ -625,9 +643,20 @@ class TestMakeNetlist(object):
         """Test that each of the vertices associated with a source is correctly
         included in the sources of a net.
         """
+        class MyVertexSlice(VertexSlice):
+            def __init__(self, *args, **kwargs):
+                super(MyVertexSlice, self).__init__(*args, **kwargs)
+                self.args = None
+
+            def transmits_signal(self, signal_parameters,
+                                 transmission_parameters):
+                self.args = (signal_parameters, transmission_parameters)
+                return False
+
         # Create the first operator
         vertex_a0 = VertexSlice(slice(0, 1))
         vertex_a1 = VertexSlice(slice(1, 2))
+        vertex_a2 = MyVertexSlice(slice(2, 3))
         load_fn_a = mock.Mock(name="load function A")
         pre_fn_a = mock.Mock(name="pre function A")
         post_fn_a = mock.Mock(name="post function A")
@@ -635,7 +664,8 @@ class TestMakeNetlist(object):
         object_a = mock.Mock(name="object A")
         operator_a = mock.Mock(name="operator A")
         operator_a.make_vertices.return_value = \
-            netlistspec([vertex_a0, vertex_a1], load_fn_a, pre_fn_a, post_fn_a)
+            netlistspec([vertex_a0, vertex_a1, vertex_a2],
+                        load_fn_a, pre_fn_a, post_fn_a)
 
         # Create the second operator
         vertex_b = Vertex()
@@ -662,10 +692,16 @@ class TestMakeNetlist(object):
         netlist = model.make_netlist()
 
         # Check that the netlist is as expected
-        assert set(netlist.vertices) == set([vertex_a0, vertex_a1, vertex_b])
+        assert set(netlist.vertices) == set([vertex_a0, vertex_a1,
+                                             vertex_a2, vertex_b])
         assert len(netlist.nets) == 2
         for net in netlist.nets:
             assert net.source in [vertex_a0, vertex_a1]
             assert net.sinks == [vertex_b]
 
-        assert netlist.groups == [set([vertex_a0, vertex_a1])]
+        assert netlist.groups == [set([vertex_a0, vertex_a1, vertex_a2])]
+
+        # Check that `transmit_signal` was called correctly
+        sig, tp = vertex_a2.args
+        assert sig.keyspace is keyspace
+        assert tp is None
