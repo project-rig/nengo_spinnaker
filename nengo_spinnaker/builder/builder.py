@@ -145,7 +145,9 @@ class Model(object):
         self.config = None
         self.object_operators = dict()
         self.extra_operators = list()
+        self.extra_vertices = list()
         self.connection_map = model.ConnectionMap()
+        self.extra_nets = list()
 
         if keyspaces is None:
             keyspaces = KeyspaceContainer()
@@ -334,6 +336,9 @@ class Model(object):
             before_simulation_functions.append(pre_fn)
             after_simulation_functions.append(post_fn)
 
+        # Add the extra vertices
+        vertices.extend(self.extra_vertices)
+
         # Construct the groups set
         groups = list()
         for vxs in itervalues(operator_vertices):
@@ -358,6 +363,9 @@ class Model(object):
             for source in sources:
                 nets.append(Net(source, list(sinks),
                             signal.weight, signal.keyspace))
+
+        # Add the extra nets
+        nets.extend(self.extra_nets)
 
         # Return a netlist
         return Netlist(
