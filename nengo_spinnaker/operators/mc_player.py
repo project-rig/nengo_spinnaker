@@ -32,7 +32,7 @@ class MulticastPacketSender(object):
             Cores: 1,
             SDRAM: regions.utils.sizeof_regions(self.regions, slice(None)),
         }
-        self.vertex = Vertex(get_application("filter"), resources)
+        self.vertex = Vertex(get_application("mc_player"), resources)
 
         # Return the spec
         return netlistspec(self.vertex, self.load_to_machine)
