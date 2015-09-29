@@ -8,11 +8,13 @@ from nengo_spinnaker import regions
 from nengo_spinnaker.utils.application import get_application
 
 
-class MulticastPacketSender(object):
+class MulticastPacketSender(Vertex):
     """Object which will send pre-specified multicast packets at the start and
     end of a simulation.
     """
     def __init__(self, start_packets=list(), end_packets=list()):
+        super(MulticastPacketSender, self).__init__(get_application("mc_player"))
+        
         # Store the lists of packets to send
         self.start_packets = list(start_packets)
         self.end_packets = list(end_packets)
@@ -28,14 +30,11 @@ class MulticastPacketSender(object):
         ]
 
         # Make the vertex
-        resources = {
-            Cores: 1,
-            SDRAM: regions.utils.sizeof_regions(self.regions, slice(None)),
-        }
-        self.vertex = Vertex(get_application("mc_player"), resources)
+        self.resources[SDRAM] = regions.utils.sizeof_regions(self.regions,
+                                                             slice(None))
 
         # Return the spec
-        return netlistspec(self.vertex, self.load_to_machine)
+        return netlistspec(self, self.load_to_machine)
 
     def load_to_machine(self, netlist, controller):
         """Load data to the machine."""
