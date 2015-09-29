@@ -325,6 +325,10 @@ class NodeTransmissionParameters(PassthroughNodeTransmissionParameters):
         self.pre_slice = pre_slice
         self.function = function
 
+    def __hash__(self):
+        # Hash by ID
+        return hash(id(self))
+
     def __eq__(self, other):
         # Parent equivalence
         if not super(NodeTransmissionParameters, self).__eq__(other):
