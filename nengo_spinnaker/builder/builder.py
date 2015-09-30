@@ -8,7 +8,7 @@ import numpy as np
 from six import itervalues
 
 from . import model
-from nengo_spinnaker.netlist import Net, Netlist
+from nengo_spinnaker.netlist import Net, Netlist, Vertex
 from nengo_spinnaker.utils import collections as collections_ext
 from nengo_spinnaker.utils.keyspaces import KeyspaceContainer
 
@@ -357,7 +357,10 @@ class Model(object):
 
             sinks = collections_ext.flatinsertionlist()
             for sink in signal.sinks:
-                sinks.append(operator_vertices[sink])
+                if isinstance(sink, Vertex):
+                    sinks.append(sink)
+                else:
+                    sinks.append(operator_vertices[sink])
 
             # Create the net(s)
             for source in sources:
