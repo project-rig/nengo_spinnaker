@@ -30,6 +30,7 @@ class MulticastPacketSender(Vertex):
         ]
 
         # Make the vertex
+        self.resources[Cores] = 1
         self.resources[SDRAM] = regions.utils.sizeof_regions(self.regions,
                                                              slice(None))
 
