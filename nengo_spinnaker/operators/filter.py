@@ -48,8 +48,13 @@ class Filter(object):
         )
 
         # Create a combined output transform and set of keys
-        outgoing = model.get_signals_from_object(self)[OutputPort.standard]
-        transform, output_keys = get_transforms_and_keys(outgoing)
+        sigs = model.get_signals_from_object(self)
+        if OutputPort.standard in sigs:
+            outgoing = sigs[OutputPort.standard]
+            transform, output_keys = get_transforms_and_keys(outgoing)
+        else:
+            transform = np.array([[]])
+            output_keys = list()
 
         size_out = len(output_keys)
 
