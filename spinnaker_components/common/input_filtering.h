@@ -96,6 +96,9 @@ static inline void _if_filter_input(if_filter_t *filter,
 /* Simulate one step of a filter and reset its accumulator if necessary */
 static inline void _if_filter_step(if_filter_t* filter)
 {
+  // Disable interrupts to avoid a race condition
+  uint32_t cpsr = spin1_fiq_disable();
+
   // Apply the simulation step
   filter->step(filter->size, filter->input->value,
                filter->output, filter->state);
@@ -107,6 +110,9 @@ static inline void _if_filter_step(if_filter_t* filter)
     filter->input->value[n] = kbits(bitsk(filter->input->value[n]) &
                                     ~filter->input->mask);
   }
+
+  // Re-enable interrupts
+  spin1_mode_restore(cpsr);
 }
 
 /* A pseudo routing table entry which can be used to determine which input a
