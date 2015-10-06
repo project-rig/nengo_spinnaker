@@ -8,11 +8,18 @@ uint n_blocks;            // Number of blocks (in total)
 uint current_block;       // Current block
 value_t* blocks;             // Location of blocks in DRAM
 
+uint us_delay;
+
 void valsource_tick(uint ticks, uint arg1) {
   use(arg1);
   if (simulation_ticks != UINT32_MAX && ticks >= simulation_ticks) {
     spin1_exit(0);
   }
+
+  // Insert a short delay so that packet transmission occurs some time after
+  // the timer tick.  For shorter simulations this will hide the effect of
+  // clock drift for a short period.
+  spin1_delay_us(100);
 
   // Transmit a MC packet for each value in the current frame
   for (uint d = 0; d < pars.n_dims; d++) {
@@ -23,6 +30,8 @@ void valsource_tick(uint ticks, uint arg1) {
     {
       spin1_delay_us(1);
     }
+
+    spin1_delay_us(us_delay);
   }
 
   // Copy in the next block
@@ -138,6 +147,10 @@ void c_main(void) {
                    pars.n_dims * pars.partial_block * sizeof(value_t));
       slots.current->length = pars.partial_block;
     }
+
+    // Compute the us delay between packets, spread the packets out over around
+    // half the timestep.
+    us_delay = (pars.time_step - 100) / (pars.n_dims * 2);
 
     // Perform the simulation
     spin1_start(SYNC_WAIT);
