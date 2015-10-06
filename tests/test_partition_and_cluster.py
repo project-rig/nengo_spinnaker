@@ -70,6 +70,17 @@ class TestPartition(object):
             list(pac.partition(slice(100), constraints))
 
 
+@pytest.mark.parametrize(
+    "start, stop, n_items",
+    [(0, 10, 5), (0, 10, 4), (0, 10, 6)]
+)
+def test_divide_slice(start, stop, n_items):
+    slices = list(pac.divide_slice(slice(start, stop), n_items))
+    assert slices[0].start == start
+    assert slices[-1].stop == stop
+    assert len(slices) == n_items
+
+
 def test_identify_clusters():
     """Test the correct assignation of clusters, modification of vertex slices
     and net keyspaces.
