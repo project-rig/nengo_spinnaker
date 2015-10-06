@@ -119,13 +119,22 @@ def divide_slice(initial_slice, n_slices):
     :py:class:`slice`
         Slices which when combined would be equivalent to `initial_slice`.
     """
-    start = initial_slice.start
+    # Extract current position, start and stop
+    pos = start = initial_slice.start
     stop = initial_slice.stop
-    chunk = int(math.ceil((stop - start) / n_slices))
-    pos = start
 
-    while pos < stop:
-        yield slice(pos, min(pos + chunk, stop))
+    # Determine the chunk sizes
+    chunk = (stop - start) // n_slices
+    n_larger = (stop - start) % n_slices
+
+    # Yield the larger slices
+    for _ in range(n_larger):
+        yield slice(pos, pos + chunk + 1)
+        pos += chunk + 1
+
+    # Yield the standard sized slices
+    for _ in range(n_slices - n_larger):
+        yield slice(pos, pos + chunk)
         pos += chunk
 
 
