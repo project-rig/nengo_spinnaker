@@ -16,6 +16,9 @@ void valsource_tick(uint ticks, uint arg1) {
     spin1_exit(0);
   }
 
+  // Insert a short delay so that packet transmission occurs some time after
+  // the timer tick.  For shorter simulations this will hide the effect of
+  // clock drift for a short period.
   spin1_delay_us(100);
 
   // Transmit a MC packet for each value in the current frame
@@ -145,7 +148,8 @@ void c_main(void) {
       slots.current->length = pars.partial_block;
     }
 
-    // Compute the us delay between packets
+    // Compute the us delay between packets, spread the packets out over around
+    // half the timestep.
     us_delay = (pars.time_step - 100) / (pars.n_dims * 2);
 
     // Perform the simulation
