@@ -258,7 +258,7 @@ class Model(object):
 
         if not (source is None or sink is None):
             # Construct the signal parameters
-            signal_params = _make_signal_parameters(source, sink)
+            signal_params = _make_signal_parameters(source, sink, conn)
 
             # Add the connection to the connection map, this will automatically
             # merge connections which are equivalent.
@@ -414,7 +414,7 @@ class spec(collections.namedtuple("spec",
                                         weight, latching)
 
 
-def _make_signal_parameters(source_spec, sink_spec):
+def _make_signal_parameters(source_spec, sink_spec, connection):
     """Create parameters for a signal using specifications provided by the
     source and sink.
 
@@ -424,6 +424,8 @@ def _make_signal_parameters(source_spec, sink_spec):
         Signal specification parameters from the source of the signal.
     sink_spec : spec
         Signal specification parameters from the sink of the signal.
+    connection : nengo.Connection
+        The Connection for this signal
 
     Returns
     -------
@@ -434,9 +436,13 @@ def _make_signal_parameters(source_spec, sink_spec):
     if source_spec.keyspace is not None and sink_spec.keyspace is not None:
         raise NotImplementedError("Cannot merge keyspaces")
 
+    weight = max((0 or source_spec.weight,
+                  0 or sink_spec.weight,
+                  getattr(connection.post_obj, "size_in", 0)))
+
     # Create the signal parameters
     return model.SignalParameters(
         latching=source_spec.latching or sink_spec.latching,
-        weight=max((source_spec.weight, sink_spec.weight)),
+        weight=weight,
         keyspace=source_spec.keyspace or sink_spec.keyspace,
     )

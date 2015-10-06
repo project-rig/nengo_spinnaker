@@ -12,6 +12,16 @@ from nengo_spinnaker.builder.model import SignalParameters
 from nengo_spinnaker.netlist import Vertex, VertexSlice
 
 
+# used for testing _make_signal_parameters
+class DummyNode(object):
+    size_in = 0
+
+
+# used for testing _make_signal_parameters
+class DummyConnection(object):
+    post_obj = DummyNode()
+
+
 def test_model_init():
     """Test initialising a model, should be completely empty."""
     model = Model()
@@ -393,7 +403,7 @@ class TestMakeSignalParameters(object):
         b_spec = spec(None, latching=b_is_latching)
 
         # Make the signal parameters, check they are correct
-        sig_pars = _make_signal_parameters(a_spec, b_spec)
+        sig_pars = _make_signal_parameters(a_spec, b_spec, DummyConnection())
         assert sig_pars.latching is latching
 
     @pytest.mark.parametrize("source_weight, sink_weight",
@@ -405,7 +415,7 @@ class TestMakeSignalParameters(object):
         b_spec = spec(None, weight=sink_weight)
 
         # Make the signal parameters, check they are correct
-        sig_pars = _make_signal_parameters(a_spec, b_spec)
+        sig_pars = _make_signal_parameters(a_spec, b_spec, DummyConnection())
         assert sig_pars.weight == max((source_weight, sink_weight))
 
     def test_keyspace_from_source(self):
@@ -415,7 +425,7 @@ class TestMakeSignalParameters(object):
         b_spec = spec(None)
 
         # Make the signal parameters, check they are correct
-        sig_pars = _make_signal_parameters(a_spec, b_spec)
+        sig_pars = _make_signal_parameters(a_spec, b_spec, DummyConnection())
         assert sig_pars.keyspace is ks
 
     def test_keyspace_from_sink(self):
@@ -425,7 +435,7 @@ class TestMakeSignalParameters(object):
         b_spec = spec(None, keyspace=ks)
 
         # Make the signal parameters, check they are correct
-        sig_pars = _make_signal_parameters(a_spec, b_spec)
+        sig_pars = _make_signal_parameters(a_spec, b_spec, DummyConnection())
         assert sig_pars.keyspace is ks
 
     def test_keyspace_collision(self):
@@ -437,7 +447,7 @@ class TestMakeSignalParameters(object):
 
         # Make the signal parameters, this should raise an error
         with pytest.raises(NotImplementedError):
-            _make_signal_parameters(a_spec, b_spec)
+            _make_signal_parameters(a_spec, b_spec, DummyConnection())
 
 
 class TestMakeNetlist(object):
@@ -558,7 +568,6 @@ class TestMakeNetlist(object):
         assert set(netlist.load_functions) == set([load_fn_a, load_fn_b])
         assert netlist.before_simulation_functions == [pre_fn_a]
         assert netlist.after_simulation_functions == [post_fn_a]
-
 
     def test_multiple_sink_vertices(self):
         """Test that each of the vertices associated with a sink is correctly
