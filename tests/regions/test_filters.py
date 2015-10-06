@@ -235,8 +235,8 @@ def test_filter_routing_region():
     """Test creation of a filter routing region."""
     # Define some keyspaces
     ksc = KeyspaceContainer()
-    ks_a = ksc["nengo"](object=0, connection=3)
-    ks_b = ksc["nengo"](object=127, connection=255, cluster=63, index=15)
+    ks_a = ksc["nengo"](connection_id=3)
+    ks_b = ksc["nengo"](connection_id=255, cluster=63, index=15)
     ksc.assign_fields()
 
     # Define the filter routes, these map a keyspace to an integer

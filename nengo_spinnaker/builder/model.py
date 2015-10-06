@@ -73,15 +73,11 @@ class ConnectionMap(object):
         """Add a unique entry to all signals which have not yet been assigned a
         keyspace.
         """
-        # Create an object which can return a unique ID for each objects as we
-        # request it.
-        obj_ids = collections.defaultdict(counter())
+        # Hold the count of connection IDs
+        conn_id = counter()
 
         # For each source object
-        for obj, ports_params_and_sinks in iteritems(self._connections):
-            # Hold the count of connection IDs
-            conn_id = counter()
-
+        for ports_params_and_sinks in itervalues(self._connections):
             # For each transmission parameter, sinks pair
             for params_and_sinks in chain(*itervalues(ports_params_and_sinks)):
                 # If the signal parameter doesn't have a keyspace assign one
@@ -90,8 +86,7 @@ class ConnectionMap(object):
 
                 if sig_params.keyspace is None:
                     # Assign the keyspace
-                    sig_params.keyspace = keyspace(object=obj_ids[obj],
-                                                   connection=conn_id())
+                    sig_params.keyspace = keyspace(connection_id=conn_id())
 
     def get_signals_from_object(self, source_object):
         """Get the signals transmitted by a source object.
