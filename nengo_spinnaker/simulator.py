@@ -6,6 +6,7 @@ import numpy as np
 from rig.machine_control import MachineController
 from rig.machine_control.consts import AppState
 from rig.machine import Cores
+import rig.place_and_route
 import six
 import time
 
@@ -126,7 +127,14 @@ class Simulator(object):
 
         # Place & Route
         logger.info("Placing and routing")
-        self.netlist.place_and_route(machine)
+        self.netlist.place_and_route(
+            machine,
+            place=getconfig(network.config, Simulator,
+                             'placer', rig.place_and_route.place),
+            place_kwargs=getconfig(network.config, Simulator,
+                                    'placer_kwargs', {}),
+            )
+
 
         logger.info("{} cores in use".format(len(self.netlist.placements)))
         chips = set(six.itervalues(self.netlist.placements))
