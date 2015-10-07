@@ -130,11 +130,10 @@ class Simulator(object):
         self.netlist.place_and_route(
             machine,
             place=getconfig(network.config, Simulator,
-                             'placer', rig.place_and_route.place),
+                            'placer', rig.place_and_route.place),
             place_kwargs=getconfig(network.config, Simulator,
-                                    'placer_kwargs', {}),
-            )
-
+                                   'placer_kwargs', {}),
+        )
 
         logger.info("{} cores in use".format(len(self.netlist.placements)))
         chips = set(six.itervalues(self.netlist.placements))
