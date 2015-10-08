@@ -14,8 +14,8 @@ from rig.place_and_route import Cores, SDRAM
 from rig.place_and_route.constraints import SameChipConstraint
 import struct
 
-from nengo_spinnaker.builder.builder import netlistspec
 from nengo_spinnaker.builder.model import InputPort, OutputPort
+from nengo_spinnaker.builder.netlist import netlistspec
 from nengo_spinnaker.builder.ports import EnsembleInputPort
 from nengo_spinnaker.regions.filters import make_filter_regions
 from .. import regions

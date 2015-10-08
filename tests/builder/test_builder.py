@@ -6,10 +6,12 @@ import numpy as np
 import pytest
 
 from nengo_spinnaker.builder.builder import (
-    Model, spec, ObjectPort, netlistspec, _make_signal_parameters
+    Model, spec, ObjectPort, _make_signal_parameters
 )
 from nengo_spinnaker.builder.model import SignalParameters
+from nengo_spinnaker.builder.netlist import netlistspec
 from nengo_spinnaker.netlist import Vertex, VertexSlice
+from nengo_spinnaker import operators
 
 
 # used for testing _make_signal_parameters
@@ -460,14 +462,14 @@ class TestMakeNetlist(object):
         # map.
         default_ks = mock.Mock()
         model = Model(keyspaces={"nengo": default_ks})
-        model.connection_map = mock.Mock()
-        model.connection_map.get_signals.return_value = list()
 
         # Create the netlist, ensure that this results in a call to
         # `add_default_keyspace'
-        model.make_netlist()
-        model.connection_map.add_default_keyspace.assert_called_once_with(
-            default_ks)
+        with mock.patch.object(model.connection_map,
+                               "add_default_keyspace") as f:
+            model.make_netlist()
+
+        f.assert_called_once_with(default_ks)
 
     def test_single_vertices(self):
         """Test that operators which produce single vertices work correctly and
@@ -531,6 +533,40 @@ class TestMakeNetlist(object):
         assert set(netlist.load_functions) == set([load_fn_a, load_fn_b])
         assert netlist.before_simulation_functions == [pre_fn_a]
         assert netlist.after_simulation_functions == [post_fn_a]
+
+    def test_removes_sinkless_filters(self):
+        """Test that making a netlist correctly filters out passthrough Nodes
+        with no outgoing connections.
+        """
+        # Create the first operator
+        object_a = mock.Mock(name="object A")
+        vertex_a = mock.Mock(name="vertex A")
+        load_fn_a = mock.Mock(name="load function A")
+        pre_fn_a = mock.Mock(name="pre function A")
+        post_fn_a = mock.Mock(name="post function A")
+
+        operator_a = mock.Mock(name="operator A")
+        operator_a.make_vertices.return_value = \
+            netlistspec(vertex_a, load_fn_a, pre_fn_a, post_fn_a)
+
+        # Create the second operator
+        object_b = mock.Mock(name="object B")
+        operator_b = operators.Filter(16)  # Shouldn't need building
+
+        # Create the model, add the items and add an entry to the connection
+        # map.
+        model = Model()
+        model.object_operators[object_a] = operator_a
+        model.object_operators[object_b] = operator_b
+        model.connection_map.add_connection(
+            operator_a, None, SignalParameters(), None,
+            operator_b, None, None
+        )
+        netlist = model.make_netlist(1)
+
+        # The netlist should contain vertex a and no nets
+        assert netlist.nets == list()
+        assert netlist.vertices == [vertex_a]
 
     def test_extra_operators_and_signals(self):
         """Test the operators in the extra_operators list are included when

@@ -5,9 +5,9 @@ from rig.place_and_route.constraints import SameChipConstraint
 from six import iteritems
 import struct
 
-from nengo_spinnaker.builder.builder import netlistspec
 from nengo_spinnaker.builder.model import InputPort, OutputPort
 from nengo_spinnaker import regions
+from nengo_spinnaker.builder.netlist import netlistspec
 from nengo_spinnaker.regions.filters import make_filter_regions
 from nengo_spinnaker.netlist import Vertex
 from nengo_spinnaker.utils.application import get_application
