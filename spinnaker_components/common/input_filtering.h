@@ -144,32 +144,64 @@ typedef struct _if_collection_t
   value_t *output;       // Output vector (may be NULL)
 } if_collection_t;
 
-/* Include the value of a packet in a filter's input.  Returns true if the
- * packet matched any routing entries, otherwise returns false.
+/* Include the value of a packet in a filter's input after first subtracting an
+ * offset from the packet's index and ensuring that the packet is within a
+ * certain range of dimensions.  Returns true if the packet matched any routing
+ * entries, otherwise returns false.
+ *
+ * `dim_offset` is subtracted from the dimension reported by the packet.  If
+ * the result is less than or equal to `max_dim_sub_one` then the packet is
+ * handled as normal, otherwise it is deemed to have not matched the route.
  */
-static inline bool input_filtering_input(
-    if_collection_t* filters, uint32_t key, uint32_t payload)
+static inline bool input_filtering_input_with_dimension_offset(
+    if_collection_t* filters, uint32_t key, uint32_t payload,
+    uint32_t dim_offset, uint32_t max_dim_sub_one
+)
 {
-  if_route_t route;
+  bool handled = false;
 
   // Look at all the routing entries, if we match an entry then include the
   // packet in the indicated input vector.
   for (uint32_t n = 0; n < filters->n_routes; n++)
   {
-    // Get the routing entry
-    route = filters->routes[n];
+    // Get the routing entry and the filter referred to by the entry
+    if_route_t route = filters->routes[n];
+    if_filter_t *filter = &filters->filters[route.input_index];
 
     if ((key & route.mask) == route.key)
     {
-      // The packet matches this entry; include the contribution from the
-      // packet and return true.
-      _if_filter_input(&filters->filters[route.input_index],
-                       key & route.dimension_mask,
-                       kbits(payload));
-      return true;
+      // Get the dimension of the packet
+      // NOTE: if offset is 0 then the subtraction will be optimised out.
+      const uint32_t dim = (key & route.dimension_mask) - dim_offset;
+
+      // NOTE: If max_dim_sub_one is UINT32_MAX then the CMP is optimised out
+      // as all packets will match.
+      if (dim <= max_dim_sub_one)
+      {
+        // The packet matches this entry and is in the range of dimensions
+        // expected; include the contribution from the packet and indicate that
+        // we have handled the packet.
+        _if_filter_input(filter, dim, kbits(payload));
+        handled = true;
+      }
     }
   }
-  return false;
+
+  return handled;
+}
+
+/* Include the value of a packet in a filter's input.  Returns true if the
+ * packet matched any routing entries, otherwise returns false.
+ */
+static inline bool input_filtering_input(
+    if_collection_t* filters, uint32_t key, uint32_t payload
+)
+{
+  // Input with no dimensional offset, the given arguments result in an
+  // optimised version of the previous method being inlined.
+  return input_filtering_input_with_dimension_offset(
+    filters, key, payload, 0, UINT32_MAX
+  );
 }
 
 /* Apply all filter steps but DO NOT accumulate their outputs. */
