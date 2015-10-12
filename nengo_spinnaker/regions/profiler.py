@@ -14,7 +14,7 @@ class Profiler(Region):
     def __init__(self, n_samples):
         self.n_samples = n_samples
 
-    def sizeof(self, vertex_slice):
+    def sizeof(self, *args, **kwargs):
         # 1 word counter and 2 words per sample
         return 4 + (8 * self.n_samples)
 

@@ -309,8 +309,8 @@ class TestBuildFromEnsembleConnection(object):
 
         # Now build the connection and check that the params seem sensible
         tparams = ensemble.build_from_ensemble_connection(model, a_b)
-        assert tparams.decoders.shape == (200, 2)
-        assert np.all(tparams.decoders[:, 1] == 0.0)
+        assert tparams.decoders.shape == (2, 200)
+        assert np.all(tparams.decoders[1, :] == 0.0)
 
         # Check that the params stored in the model are correct
         params = model.params[a_b]
@@ -339,7 +339,7 @@ class TestBuildFromEnsembleConnection(object):
 
         # Now build the connection and check that the params seem sensible
         tparams = ensemble.build_from_ensemble_connection(model, a_b)
-        assert tparams.decoders.shape == (200, 1)
+        assert tparams.decoders.shape == (1, 200)
 
         # Check that the params stored in the model are correct
         params = model.params[a_b]

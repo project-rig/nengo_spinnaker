@@ -13,4 +13,6 @@ from .matrix import MatrixPartitioning, MatrixRegion
 from .keyspaces import KeyspacesRegion, KeyField, MaskField
 from .profiler import Profiler
 from .region import Region
+from .recording import (RecordingRegion, WordRecordingRegion,
+                        SpikeRecordingRegion, VoltageRecordingRegion)
 from . import utils
