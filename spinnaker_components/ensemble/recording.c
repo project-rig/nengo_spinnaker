@@ -2,10 +2,9 @@
 
 // Generic buffer initialisation
 bool record_buffer_initialise(recording_buffer_t *buffer, address_t region,
-                              uint32_t n_blocks, uint32_t block_length_words)
+                              uint32_t block_length_words)
 {
   // Store buffer parameters
-  buffer->n_blocks = n_blocks;
   buffer->block_length_words = block_length_words;
   buffer->_sdram_start = (uint32_t *) region;
   record_buffer_reset(buffer);
@@ -35,7 +34,6 @@ void record_buffer_reset(recording_buffer_t *buffer)
 bool record_buffer_initialise_spikes(
   recording_buffer_t *buffer,
   address_t region,
-  uint n_blocks,
   uint n_neurons
 )
 {
@@ -44,8 +42,7 @@ bool record_buffer_initialise_spikes(
   uint32_t block_length_words = (n_neurons / 32) + (n_neurons % 32 ? 1 : 0);
 
   // Use this to create the recording buffer
-  return record_buffer_initialise(buffer, region,
-                                  n_blocks, block_length_words);
+  return record_buffer_initialise(buffer, region, block_length_words);
 };
 
 /*****************************************************************************/
@@ -61,7 +58,6 @@ bool record_buffer_initialise_spikes(
 bool record_buffer_initialise_voltages(
   recording_buffer_t *buffer,
   address_t region,
-  uint n_blocks,
   uint n_neurons
 )
 {
@@ -70,6 +66,5 @@ bool record_buffer_initialise_voltages(
   uint32_t block_length_words = (n_neurons / 2) + (n_neurons % 2);
 
   // Use this to create the recording buffer
-  return record_buffer_initialise(buffer, region,
-                                  n_blocks, block_length_words);
+  return record_buffer_initialise(buffer, region, block_length_words);
 }

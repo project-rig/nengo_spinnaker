@@ -23,7 +23,6 @@ typedef struct _recording_buffer_t
 {
   uint32_t *buffer;             //!< The buffer to write to
   uint32_t block_length_words;  //!< Size of 1 block of the buffer
-  uint32_t n_blocks;            //!< Length of the buffer in blocks (= n_ticks)
 
   bool record;  //!< Whether or not to record the data in the buffer
 
@@ -65,7 +64,6 @@ static inline void record_buffer_flush(recording_buffer_t *buffer)
 bool record_buffer_initialise_spikes(
   recording_buffer_t *buffer,
   address_t region,
-  uint n_blocks,
   uint n_neurons
 );
 
@@ -92,7 +90,6 @@ static inline void record_spike(recording_buffer_t *buffer, uint32_t n_neuron)
 bool record_buffer_initialise_voltages(
   recording_buffer_t *buffer,
   address_t region,
-  uint n_blocks,
   uint n_neurons
 );
 
