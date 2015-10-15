@@ -4,12 +4,12 @@ class Region(object):
         """Get the size of the region in bytes."""
         raise NotImplementedError
 
-    def sizeof_padded(self, vertex_slice=None):
+    def sizeof_padded(self, *args, **kwargs):
         """Get the size of the region in bytes when padded to take an integral
         number of words.
         """
         # Call to get the number of bytes, then pad if necessary and return
-        n_bytes = self.sizeof(vertex_slice)
+        n_bytes = self.sizeof(*args, **kwargs)
         return n_bytes + (0 if (n_bytes % 4 == 0) else (4 - n_bytes % 4))
 
     def write_subregion_to_file(self, fp, vertex_slice=None,
