@@ -5,6 +5,8 @@ import threading
 
 from nengo_spinnaker.builder.builder import ObjectPort, spec, Model
 from nengo_spinnaker.builder.model import InputPort, OutputPort
+from .connection import (PassthroughNodeTransmissionParameters,
+                         NodeTransmissionParameters)
 from nengo_spinnaker.operators import Filter, ValueSink, ValueSource
 from nengo_spinnaker.utils.config import getconfig
 
@@ -291,58 +293,6 @@ def build_node_transmission_parameters(model, conn):
                                           transform)
     else:
         return PassthroughNodeTransmissionParameters(transform)
-
-
-class PassthroughNodeTransmissionParameters(object):
-    """Parameters describing connections which originate from pass through
-    Nodes.
-    """
-    def __init__(self, transform):
-        # Store the parameters, copying the transform
-        self.transform = np.array(transform)
-
-    def __ne__(self, other):
-        return not (self == other)
-
-    def __eq__(self, other):
-        # Equivalent if the same type
-        if type(self) is not type(other):
-            return False
-
-        # and the transforms are equivalent
-        if (self.transform.shape != other.transform.shape or
-                np.any(self.transform != other.transform)):
-            return False
-
-        return True
-
-
-class NodeTransmissionParameters(PassthroughNodeTransmissionParameters):
-    """Parameters describing connections which originate from Nodes."""
-    def __init__(self, pre_slice, function, transform):
-        # Store the parameters
-        super(NodeTransmissionParameters, self).__init__(transform)
-        self.pre_slice = pre_slice
-        self.function = function
-
-    def __hash__(self):
-        # Hash by ID
-        return hash(id(self))
-
-    def __eq__(self, other):
-        # Parent equivalence
-        if not super(NodeTransmissionParameters, self).__eq__(other):
-            return False
-
-        # Equivalent if the pre_slices are exactly the same
-        if self.pre_slice != other.pre_slice:
-            return False
-
-        # Equivalent if the functions are the same
-        if self.function is not other.function:
-            return False
-
-        return True
 
 
 class InputNode(nengo.Node):
