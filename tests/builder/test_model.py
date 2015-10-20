@@ -407,6 +407,7 @@ def test_remove_sinkless_objects():
     cm.add_connection(c, None, model.SignalParameters(), None, e, None, None)
     cm.add_connection(d, None, model.SignalParameters(), None, e, None, None)
     cm.add_connection(e, None, model.SignalParameters(), None, f, None, None)
+    cm._connections[f][None] = list()
 
     # Remove the sinkless filters
     removed = model.remove_sinkless_objects(cm, mock.Mock)

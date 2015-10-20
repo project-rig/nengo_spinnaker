@@ -59,21 +59,19 @@ def get_neurons_sink(model, connection):
     """Get the sink for connections into the neurons of an ensemble."""
     ens = model.object_operators[connection.post_obj.ensemble]
 
-    if isinstance(connection.pre_obj, nengo.ensemble.Neurons):
-        # Connections from Neurons can go straight to the Neurons
-        return spec(ObjectPort(ens, EnsembleInputPort.neurons))
-    elif np.all(connection.transform[1:] == connection.transform[0]):
+    if (connection.transform.ndim == 2 and
+            np.all(connection.transform[1:] == connection.transform[0])):
         # Connections from non-neurons to Neurons where the transform delivers
         # the same value to all neurons are treated as global inhibition
         # connection.
         # Return a signal to the correct port.
         return spec(ObjectPort(ens, EnsembleInputPort.global_inhibition))
     else:
-        # We don't support arbitrary connections into neurons
-        raise NotImplementedError(
-            "SpiNNaker does not support arbitrary connections into Neurons. "
-            "If this is a serious hindrance please open an issue on GitHub."
-        )
+        #  - Connections from Neurons can go straight to the Neurons.
+        #  - Otherwise we don't support arbitrary connections into neurons, but
+        #    we allow them because they may be optimised out later when we come
+        #    to remove passthrough nodes.
+        return spec(ObjectPort(ens, EnsembleInputPort.neurons))
 
 
 ensemble_builders = collections_ext.registerabledict()

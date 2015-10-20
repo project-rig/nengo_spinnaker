@@ -248,33 +248,26 @@ class TestNeuronSinks(object):
         assert sink.target.obj is b_ens
         assert sink.target.port is ensemble.EnsembleInputPort.global_inhibition
 
-    def test_arbitrary_neuron_sink(self):
-        """We have no plan to support arbitrary connections to neurons."""
-        with nengo.Network():
-            a = nengo.Ensemble(100, 2)
-            b = nengo.Ensemble(200, 4)
-
-            a_b = nengo.Connection(a, b.neurons,
-                                   transform=[[1.0, 0.5]]*199 + [[0.5, 1.0]])
-
-        # Create a model with the Ensemble for b in it
-        model = builder.Model()
-        b_ens = operators.EnsembleLIF(b)
-        model.object_operators[b] = b_ens
-
-        # This should fail
-        with pytest.raises(NotImplementedError):
-            ensemble.get_neurons_sink(model, a_b)
-
-    def test_neuron_sink(self):
+    @pytest.mark.parametrize("source", ("neurons", "value"))
+    def test_arbitrary_neuron_sink(self, source):
         """Test that standard connections to neurons return an appropriate
         sink.
+
+        We have no plan to support arbitrary connections to neurons, but we
+        allow them at this stage because they may later become global
+        inhibition connections when we optimise out passthrough Nodes.
         """
         with nengo.Network():
             a = nengo.Ensemble(100, 2)
             b = nengo.Ensemble(100, 4)
 
-            a_b = nengo.Connection(a.neurons, b.neurons, transform=np.eye(100))
+            if source == "neurons":
+                a_b = nengo.Connection(a.neurons, b.neurons,
+                                       transform=np.eye(100))
+            else:
+                a_b = nengo.Connection(a, b.neurons,
+                                       transform=[[1.0, 0.5]]*99 +
+                                                 [[0.5, 1.0]])
 
         # Create a model with the Ensemble for b in it
         model = builder.Model()
