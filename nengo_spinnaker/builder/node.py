@@ -1,4 +1,5 @@
 import nengo
+from nengo.processes import Process
 from nengo.utils.builder import full_transform
 import numpy as np
 import threading
@@ -112,11 +113,11 @@ class NodeIOController(object):
             # it.  Determine the period by looking in the config, if the output
             # is a constant then the period is dt (i.e., it repeats every
             # timestep).
-            if not callable(node.output):
-                period = model.dt
-            else:
+            if callable(node.output) or isinstance(node.output, Process):
                 period = getconfig(model.config, node,
                                    "function_of_time_period")
+            else:
+                period = model.dt
 
             vs = ValueSource(node.output, node.size_out, period)
             self._f_of_t_nodes[node] = vs

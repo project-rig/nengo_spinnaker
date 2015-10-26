@@ -119,6 +119,27 @@ class TestNodeIOController(object):
 
         assert model.extra_operators == list()
 
+    def test_build_node_process_is_not_constant(self):
+        """Test that building a Node with a process is not treated the same as
+        building a constant valued Node.
+        """
+        with nengo.Network() as net:
+            a = nengo.Node(nengo.processes.Process())
+
+        # Create the model
+        model = Model()
+        model.config = net.config
+
+        # Build the Node
+        nioc = NodeIOController()
+        nioc.build_node(model, a)
+
+        # Assert that this added a new operator to the model
+        assert model.object_operators[a].function is a.output
+        assert model.object_operators[a].period is None
+
+        assert model.extra_operators == list()
+
     def test_build_node_probe(self):
         """Test that building a Probe of a Node results in adding a new object
         to the model and tries to build a new connection from the Node to the
