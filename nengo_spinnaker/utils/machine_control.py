@@ -43,3 +43,19 @@ def test_and_boot(controller, hostname, machine_width, machine_height):
     logger.info(
         "Board is booted with {} v{:.2f}".format(sver.version_string,
                                                  sver.version))
+
+
+def calloc_sdram(controller, size, **kwargs):
+    """Allocate and clear a region of SDRAM.
+
+    Returns
+    -------
+    int
+        Address of the cleared and allocated space in SDRAM.
+    """
+    # Allocate the region in SDRAM, store the start address and clear the
+    # memory.
+    mem = controller.sdram_alloc_as_filelike(size, **kwargs)
+    addr = mem.address
+    mem.write(b'\x00' * size)
+    return addr

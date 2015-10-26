@@ -7,6 +7,24 @@ from rig.machine_control.scp_connection import TimeoutError
 from nengo_spinnaker.utils import machine_control
 
 
+@pytest.mark.parametrize("n_bytes", [100, 123])
+def test_calloc_sdram(n_bytes):
+    """Test allocating and zeroing a region of SDRAM."""
+    # Create a mock machine controller
+    cn = mock.Mock()
+    mem = cn.sdram_alloc_as_filelike.return_value = mock.Mock()
+    mem.address = 0x67800000
+
+    # Check that calling calloc_sdram() calls the controller correctly
+    addr = machine_control.calloc_sdram(cn, n_bytes)
+
+    # Assert that the returned address is correct
+    assert addr == mem.address
+
+    # Check that sufficient zeroes were written
+    mem.write.assert_called_once_with(b'\x00' * n_bytes)
+
+
 class TestTestAndBoot(object):
     def test_board_is_checked(self):
         """Test that we're happy if the board responds to an sver."""
