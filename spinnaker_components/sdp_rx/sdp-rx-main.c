@@ -8,6 +8,7 @@ void sdp_rx_tick(uint ticks, uint arg1) {
   use(arg1);
   if (simulation_ticks != UINT32_MAX && ticks >= simulation_ticks) {
     spin1_exit(0);
+    return;
   }
 
   for (uint d = 0; d < g_sdp_rx.n_dimensions; d++) {
