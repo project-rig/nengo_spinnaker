@@ -516,7 +516,7 @@ class TestMakeNetlist(object):
         # Check that the netlist is as expected
         assert len(netlist.nets) == 1
         for net in netlist.nets:
-            assert net.source is vertex_a
+            assert net.sources[0] is vertex_a
             assert net.sinks == [vertex_b]
             assert net.keyspace is keyspace
             assert net.weight == signal_ab_parameters.weight
@@ -613,7 +613,7 @@ class TestMakeNetlist(object):
         assert set(netlist.vertices) == set([vertex_a, vertex_b0, vertex_b1])
         assert len(netlist.nets) == 1
         for net in netlist.nets:
-            assert net.source is vertex_a
+            assert net.sources[0] is vertex_a
             assert net.sinks == [vertex_b0, vertex_b1]
             assert net.keyspace is keyspace
             assert net.weight == signal_ab_parameters.weight
@@ -663,9 +663,9 @@ class TestMakeNetlist(object):
 
         # Check that the netlist is as expected
         assert set(netlist.vertices) == set([vertex_a0, vertex_a1, vertex_b])
-        assert len(netlist.nets) == 2
+        assert len(netlist.nets) == 1
         for net in netlist.nets:
-            assert net.source in [vertex_a0, vertex_a1]
+            assert net.sources == [vertex_a0, vertex_a1]
             assert net.sinks == [vertex_b]
 
         assert netlist.groups == [set([vertex_a0, vertex_a1])]

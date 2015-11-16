@@ -1,11 +1,7 @@
-"""Tools for partitioning large vertices and then dealing with clusters of the
-resulting subvertices.
-"""
+"""Tools for partitioning large vertices.  """
 import collections
 import math
-from six import iteritems, itervalues
-
-from .utils.keyspaces import is_nengo_keyspace
+from six import iteritems
 
 
 class Constraint(collections.namedtuple("Constraint",
@@ -140,89 +136,3 @@ def divide_slice(initial_slice, n_slices):
 
 class UnpartitionableError(Exception):
     """Indicates that a given partitioning problem cannot be solved."""
-
-
-def identify_clusters(placed_vertices, nets, groups):
-    """Group vertex slices in clusters (based on chip assignation) and assign
-    the cluster ID to nets which originate from these subvertices.
-
-    A vertex may be partitioned into a number of vertex slices which are placed
-    onto the cores of two SpiNNaker chips.  The vertex slices on these chips
-    form two clusters; packets from these clusters need to be differentiated in
-    order to route packets correctly.  For example::
-
-       +--------+                      +--------+
-       |        | ------- (a) ------>  |        |
-       |   (A)  |                      |   (B)  |
-       |        | <------ (b) -------  |        |
-       +--------+                      +--------+
-
-    Packets traversing `(a)` need to be differentiated from packets traversing
-    `(b)`.  This can be done by including an additional field in the packet
-    keys which indicates which chip the packet was sent from - in this case a
-    single bit will suffice with packets from `(A)` using a key with the bit
-    not set and packets from `(B)` setting the bit.
-
-    This method will assign a unique ID to each cluster of vertex slices (e.g.,
-    `(A)` and `(B)`) by assigning the index to the `cluster` attribute of each
-    subvertex and will ensure the same cluster ID is present in the keyspace of
-    all nets originating from the cluster (and using the standard Nengo
-    keyspace).
-
-    Parameters
-    ----------
-    placed_vertices : {vertex: (x, y), ...}
-        Vertex placements (as produced by
-        :py:func:`rig.place_and_route.place`).
-    nets : [:py:class:`nengo_spinnaker.netlist.Net`, ...]
-    groups : [{Vertex, ...}, ...]
-        List of groups of vertices. This is used to identify objects which may
-        be joined into a cluster.
-    """
-    class Cluster(object):
-        """Internal representation of a cluster."""
-        __slots__ = ["vertices", "nets"]
-
-        def __init__(self):
-            self.vertices = list()
-            self.nets = list()
-
-    # For each group of vertices perform clustering
-    for group in groups:
-        # Build a map of placements to vertices, this will be used to identify
-        # clusters.
-        # Maps co-ordinate to cluster
-        clusters = collections.defaultdict(Cluster)
-
-        # For each vertex in the group add it to a cluster
-        for vertex in group:
-            coord = placed_vertices[vertex]
-            clusters[coord].vertices.append(vertex)
-
-        # Look through all of the nets, add them to clusters based on their
-        # originating vertex.
-        for net in nets:
-            # If the net uses the default keyspace
-            if is_nengo_keyspace(net.keyspace):
-                if net.source in group:
-                    # Then include it in the cluster if its originating vertex
-                    # is a vertex slice
-                    coord = placed_vertices[net.source]
-                    clusters[coord].nets.append(net)
-
-        # Iterate through the clusters of the group
-        for cluster_id, cluster in enumerate(itervalues(clusters)):
-            # Assign the cluster ID to the vertex slices
-            for vertex in cluster.vertices:
-                vertex.cluster = cluster_id
-
-            # Assign the cluster ID to the nets
-            for net in cluster.nets:
-                net.keyspace = net.keyspace(cluster=cluster_id)
-
-    # Assign a cluster ID of zero to all other nets
-    for net in nets:
-        # If the net uses the default keyspace
-        if is_nengo_keyspace(net.keyspace):
-            if net.keyspace.cluster is None:
-                net.keyspace = net.keyspace(cluster=0)

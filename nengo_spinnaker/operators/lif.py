@@ -19,7 +19,7 @@ from nengo_spinnaker.builder.ports import EnsembleInputPort
 from nengo_spinnaker.regions.filters import make_filter_regions
 from .. import regions
 from nengo_spinnaker.netlist import VertexSlice
-from nengo_spinnaker import partition_and_cluster as partition
+from nengo_spinnaker import partition
 from nengo_spinnaker.utils.application import get_application
 from nengo_spinnaker.utils.config import getconfig
 from nengo_spinnaker.utils import type_casts as tp

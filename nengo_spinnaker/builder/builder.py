@@ -347,17 +347,14 @@ class Model(object):
         for signal in self.connection_map.get_signals():
             # Get the source and sink vertices
             sources = operator_vertices[signal.source]
-            if not isinstance(sources, collections.Iterable):
-                sources = (sources, )
 
             sinks = collections_ext.flatinsertionlist()
             for sink in signal.sinks:
                 sinks.append(operator_vertices[sink])
 
             # Create the net(s)
-            for source in sources:
-                nets.append(Net(source, list(sinks),
-                            signal.weight, signal.keyspace))
+            nets.append(Net(sources, list(sinks),
+                        signal.weight, signal.keyspace))
 
         # Return a netlist
         return Netlist(

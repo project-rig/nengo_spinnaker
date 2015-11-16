@@ -10,7 +10,7 @@ from nengo.utils import numpy as npext
 from nengo_spinnaker.builder.builder import netlistspec
 from nengo_spinnaker.builder.model import OutputPort
 from nengo_spinnaker.netlist import VertexSlice
-from nengo_spinnaker import partition_and_cluster as partition
+from nengo_spinnaker import partition
 from nengo_spinnaker import regions
 from nengo_spinnaker.utils.application import get_application
 from nengo_spinnaker.utils.type_casts import np_to_fix
