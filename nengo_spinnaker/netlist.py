@@ -9,7 +9,6 @@ from rig.place_and_route.utils import (build_application_map,
                                        build_routing_tables)
 from rig.machine import Cores
 from rig.machine_control.utils import sdram_alloc_for_vertices
-from six import iteritems
 
 from .partition_and_cluster import identify_clusters
 from .utils.itertools import flatten
@@ -258,13 +257,6 @@ class Netlist(object):
         self.vertices_memory = sdram_alloc_for_vertices(
             controller, self.placements, self.allocations
         )
-
-        # Inform the vertices of where that chunk of memory is
-        for vertex, memory in iteritems(self.vertices_memory):
-            x, y = self.placements[vertex]
-            p = self.allocations[vertex][Cores].start
-            controller.write_vcpu_struct_field(
-                "user0", memory.address, x, y, p)
 
         # Call each loading function in turn
         logger.debug("Loading data")
