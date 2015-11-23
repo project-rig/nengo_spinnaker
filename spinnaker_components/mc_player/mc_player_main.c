@@ -27,7 +27,7 @@ void transmit_packet_region(uint* packets_region) {
 void tick(uint ticks, uint arg1) {
   use(arg1);
 
-  if (simulation_ticks != UINT32_MAX && ticks >= simulation_ticks) {
+  if (simulation_ticks != UINT32_MAX && ticks > simulation_ticks) {
     // Transmit all packets assigned to be sent after the end of the simulation
     transmit_packet_region(end_packets);
     spin1_exit(0);
