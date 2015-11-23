@@ -1,5 +1,6 @@
 import collections
 import numpy as np
+from rig.machine_control.consts import SCP_PORT
 from rig.machine_control.packets import SCPPacket
 from rig.machine import Cores
 from six import iteritems
@@ -121,18 +122,11 @@ class Ethernet(NodeIOController):
             c_value = np.dot(transmission_params.transform, c_value)
 
             # Transmit the packet
-            packet_data = bytes(tp.np_to_fix(c_value).data)
-            packet = SCPPacket(
-                reply_expected=False, tag=0xff,
-                dest_port=1, dest_cpu=p,
-                src_port=7, src_cpu=31,
-                dest_x=x, dest_y=y,
-                src_x=0, src_y=0,
-                cmd_rc=0, seq=0, arg1=0, arg2=0, arg3=0,
-                data=packet_data
-            )
+            data = bytes(tp.np_to_fix(c_value).data)
+            packet = SCPPacket(dest_port=1, dest_cpu=p, dest_x=x, dest_y=y,
+                               cmd_rc=0, arg1=0, arg2=0, arg3=0, data=data)
             self.out_socket.sendto(packet.bytestring,
-                                   (self._hostname, 17893))
+                                   (self._hostname, SCP_PORT))
 
     def spawn(self):
         """Get a new thread which will manage transmitting and receiving Node
