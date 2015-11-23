@@ -8,7 +8,7 @@ if_collection_t g_input;
 
 void sink_update(uint ticks, uint arg1) {
   use(arg1);
-  if (simulation_ticks != UINT32_MAX && ticks >= simulation_ticks) {
+  if (simulation_ticks != UINT32_MAX && ticks > simulation_ticks) {
     spin1_exit(0);
     return;
   }
