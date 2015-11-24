@@ -14,7 +14,6 @@ from .builder import Model
 from .node_io import Ethernet
 from .rc import rc
 from .utils.config import getconfig
-from .utils.machine_control import test_and_boot
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +69,7 @@ class Simulator(object):
         machine_height = rc.getint("spinnaker_machine", "height")
 
         self.controller = MachineController(hostname)
-        test_and_boot(self.controller, hostname, machine_width, machine_height)
+        self.controller.boot(machine_width, machine_height)
 
         # Create the IO controller
         io_cls = getconfig(network.config, Simulator, "node_io", Ethernet)
