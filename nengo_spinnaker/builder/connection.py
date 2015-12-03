@@ -18,13 +18,14 @@ def generic_sink_getter(model, conn):
 
 
 @Model.reception_parameter_builders.register(nengo.base.NengoObject)
+@Model.reception_parameter_builders.register(nengo.connection.LearningRule)
 @Model.reception_parameter_builders.register(nengo.ensemble.Neurons)
 def build_generic_reception_params(model, conn):
     """Build parameters necessary for receiving packets that simulate this
     connection.
     """
     # Just extract the synapse from the connection.
-    return ReceptionParameters(conn.synapse, conn.post_obj.size_in)
+    return ReceptionParameters(conn.synapse, conn.post_obj.size_in, conn.learning_rule)
 
 
 class EnsembleTransmissionParameters(object):

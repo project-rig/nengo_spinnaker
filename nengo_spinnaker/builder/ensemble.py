@@ -10,8 +10,8 @@ import numpy as np
 
 from .builder import BuiltConnection, Model, ObjectPort, spec
 from .connection import EnsembleTransmissionParameters
-from .model import InputPort
-from .ports import EnsembleInputPort
+from .model import InputPort, OutputPort
+from .ports import EnsembleInputPort, EnsembleOutputPort
 from .. import operators
 from ..utils import collections as collections_ext
 
@@ -96,7 +96,7 @@ def get_learning_rule_sink(model, connection):
                 "rules on connections from ensembles"
             )
     # Otherwise, if it modifies encoders
-    elif learning_rule.learning_rule_type.modifies is not "encoders":
+    elif learning_rule.learning_rule_type.modifies == "encoders":
         # If connections ends at an ensemble
         if isinstance(learnt_connection.post_obj, nengo.Ensemble):
             # Sink connection into unique port on post-synaptic
@@ -229,7 +229,7 @@ def build_from_ensemble_connection(model, conn):
             np.all(transform[0, :] == transform[1:, :])):
         transform = np.array([transform[0]])
 
-    return EnsembleTransmissionParameters(decoders, transform)
+    return EnsembleTransmissionParameters(decoders, transform, conn.learning_rule)
 
 
 @Model.transmission_parameter_builders.register(nengo.ensemble.Neurons)

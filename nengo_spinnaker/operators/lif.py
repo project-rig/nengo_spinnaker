@@ -8,16 +8,21 @@ appropriate sized slices.
 
 import collections
 import enum
+import math
 from nengo.base import ObjView
+from nengo.connection import LearningRule
+from nengo.learning_rules import PES, Voja
 import numpy as np
 from rig.machine import Cores, SDRAM
 from rig.place_and_route.constraints import SameChipConstraint
+from six import iteritems
 import struct
 
 from nengo_spinnaker.builder.builder import netlistspec
 from nengo_spinnaker.builder.model import InputPort, OutputPort
-from nengo_spinnaker.builder.ports import EnsembleInputPort
-from nengo_spinnaker.regions.filters import make_filter_regions
+from nengo_spinnaker.builder.ports import EnsembleInputPort, EnsembleOutputPort
+from nengo_spinnaker.regions.filters import (FilterRegion, FilterRoutingRegion,
+                                             add_filters, make_filter_regions)
 from .. import regions
 from nengo_spinnaker.netlist import Vertex
 from nengo_spinnaker import partition
@@ -41,9 +46,17 @@ class EnsembleRegions(enum.IntEnum):
     input_routing = 10
     inhibition_filters = 11
     inhibition_routing = 12
-    profiler = 13
-    spikes = 14
-    voltages = 15
+    modulatory_filters = 13
+    modulatory_routing = 14
+    learnt_encoder_filters = 15
+    learnt_encoder_routing = 16
+    pes = 17
+    voja = 18
+    filtered_activity = 19
+    profiler = 20
+    spike_recording = 21
+    voltage_recording = 22
+    encoder_recording = 23
 
 
 class EnsembleLIF(object):
@@ -57,6 +70,7 @@ class EnsembleLIF(object):
         self.profiled = False
         self.record_spikes = False
         self.record_voltages = False
+        self.record_encoders = False
 
     def make_vertices(self, model, n_steps):
         """Construct the data which can be loaded into the memory of a
@@ -66,29 +80,13 @@ class EnsembleLIF(object):
         params = model.params[self.ensemble]
         ens_regions = dict()
 
-        # Convert the encoders combined with the gain to S1615 before creating
-        # the region.
-        encoders_with_gain = params.scaled_encoders
-        ens_regions[EnsembleRegions.encoders] = regions.MatrixRegion(
-            tp.np_to_fix(encoders_with_gain),
-            sliced_dimension=regions.MatrixPartitioning.rows)
-
-        # Combine the direct input with the bias before converting to S1615 and
-        # creating the region.
-        bias_with_di = params.bias + np.dot(encoders_with_gain,
-                                            self.direct_input)
-        assert bias_with_di.ndim == 1
-        ens_regions[EnsembleRegions.bias] = regions.MatrixRegion(
-            tp.np_to_fix(bias_with_di),
-            sliced_dimension=regions.MatrixPartitioning.rows)
-
-        # Convert the gains to S1615 before creating the region
-        ens_regions[EnsembleRegions.gain] = regions.MatrixRegion(
-            tp.np_to_fix(params.gain),
-            sliced_dimension=regions.MatrixPartitioning.rows)
-
         # Extract all the filters from the incoming connections
         incoming = model.get_signals_to_object(self)
+
+        # Filter out incoming modulatory connections
+        incoming_modulatory = {port: signal
+                               for (port, signal) in iteritems(incoming)
+                               if isinstance(port, LearningRule)}
 
         (ens_regions[EnsembleRegions.input_filters],
          ens_regions[EnsembleRegions.input_routing]) = make_filter_regions(
@@ -112,6 +110,87 @@ class EnsembleLIF(object):
         else:
             decoders = np.array([])
             output_keys = list()
+
+
+        # Extract pre-scaled encoders from parameters
+        encoders_with_gain = params.scaled_encoders
+
+        # Create filtered activity region
+        ens_regions[EnsembleRegions.filtered_activity] =\
+            FilteredActivityRegion(model.dt)
+
+        # Create, initially empty, PES region
+        ens_regions[EnsembleRegions.pes] = PESRegion(self.ensemble.n_neurons)
+
+        # Loop through outgoing learnt connections
+        mod_filters = list()
+        mod_keyspace_routes = list()
+        learnt_encoder_filters = list()
+        learnt_encoder_routes = list()
+        for sig, t_params in outgoing[EnsembleOutputPort.learnt]:
+            l_rule = t_params.learning_rule
+            l_rule_type = t_params.learning_rule.learning_rule_type
+
+            # If this learning rule is PES
+            if isinstance(l_rule_type, PES):
+                # If there is a modulatory connection
+                # associated with the learning rule
+                if l_rule in incoming_modulatory:
+                    e = incoming_modulatory[l_rule]
+
+                    # Cache the index of the input filter containing
+                    # the error signal and the offset into the decoder
+                    # where the learning rule should operate
+                    error_filter_index = len(mod_filters)
+                    decoder_offset = decoders.shape[0]
+
+                    # Get new decoders and output keys for learnt connection
+                    learnt_decoders, learnt_output_keys = \
+                        get_decoders_and_keys([(sig, t_params)], False)
+
+                    # If there are no existing decodes, hstacking doesn't
+                    # work so set decoders to new learnt decoder matrix
+                    if decoder_offset == 0:
+                        decoders = learnt_decoders
+                    # Otherwise, stack learnt decoders alongside existing matrix
+                    else:
+                        decoders = np.vstack((decoders, learnt_decoders))
+
+                    # Also add output keys to list
+                    output_keys.extend(learnt_output_keys)
+
+                    # Add error connection to lists
+                    # of modulatory filters and routes
+                    mod_filters, mod_keyspace_routes = add_filters(
+                        mod_filters, mod_keyspace_routes, e, minimise=False)
+
+                    # Either add a new filter to the filtered activity
+                    # region or get the index of the existing one
+                    activity_filter_index = \
+                        ens_regions[EnsembleRegions.filtered_activity].add_get_filter(
+                            l_rule_type.pre_tau)
+
+                    # Add a new learning rule to the PES region
+                    # **NOTE** divide learning rate by dt
+                    # to account for activity scaling
+                    ens_regions[EnsembleRegions.pes].learning_rules.append(
+                        PESLearningRule(
+                            learning_rate=l_rule_type.learning_rate / model.dt,
+                            error_filter_index=error_filter_index,
+                            decoder_offset=decoder_offset,
+                            activity_filter_index=activity_filter_index))
+                # Otherwise raise an error - PES requires a modulatory signal
+                else:
+                    raise ValueError(
+                        "Ensemble %s has outgoing connection with PES "
+                        "learning, but no corresponding modulatory "
+                        "connection" % self.ensemble.label
+                    )
+            else:
+                raise NotImplementedError(
+                    "SpiNNaker does not support %s learning rule." % l_type
+                )
+
         size_out = decoders.shape[0]
 
         ens_regions[EnsembleRegions.decoders] = regions.MatrixRegion(
@@ -122,6 +201,111 @@ class EnsembleLIF(object):
             fields=[regions.KeyField({'cluster': 'cluster'})],
             partitioned_by_atom=True
         )
+
+        # Create, initially empty, Voja region, passing in scaling factor
+        # used, with gain, to scale activities to match encoders
+        ens_regions[EnsembleRegions.voja] = VojaRegion(1.0 / self.ensemble.radius)
+
+        # Loop through incoming learnt connections
+        for sig, t_params in incoming[EnsembleInputPort.learnt]:
+            # If this learning rule is Voja
+            l_rule = t_params.learning_rule
+            l_rule_type = t_params.learning_rule.learning_rule_type
+            if isinstance(l_rule_type, Voja):
+                # If there is a modulatory connection
+                # associated with the learning rule
+                if l_rule in incoming_modulatory:
+                    l = incoming_modulatory[l_rule]
+
+                    # Cache the index of the input filter
+                    # containing the learning signal
+                    learn_sig_filter_index = len(mod_filters)
+
+                    # Add learning connection to lists
+                    # of modulatory filters and routes
+                    mod_filters, mod_keyspace_routes = add_filters(
+                        mod_filters, mod_keyspace_routes, l, minimise=False)
+                # Otherwise, learning is always on so
+                # invalidate learning signal index
+                else:
+                    learn_sig_filter_index = -1
+
+                # Cache the index of the input filter containing
+                # the input signal and the offset into the encoder
+                # where the learning rule should operate
+                decoded_input_filter_index = len(learnt_encoder_filters)
+                encoder_offset = encoders_with_gain.shape[1]
+
+                # Create a duplicate copy of the original size_in columns of
+                # the encoder matrix for modification by this learning rule
+                base_encoders = encoders_with_gain[:, :self.ensemble.size_in]
+                encoders_with_gain = np.hstack((encoders_with_gain,
+                                                base_encoders))
+
+                # Add learnt connection to list of filters
+                # and routes with learnt encoders
+                learnt_encoder_filters, learnt_encoder_routes = add_filters(
+                    learnt_encoder_filters, learnt_encoder_routes,
+                    [(sig, t_params)], minimise=False)
+
+                # Either add a new filter to the filtered activity
+                # region or get the index of the existing one
+                activity_filter_index = \
+                    ens_regions[EnsembleRegions.filtered_activity].add_get_filter(
+                        l_rule_type.post_tau)
+
+                # Add a new learning rule to the Voja region
+                # **NOTE** divide learning rate by dt
+                # to account for activity scaling
+                ens_regions[EnsembleRegions.voja].learning_rules.append(
+                    VojaLearningRule(
+                        learning_rate=l_rule_type.learning_rate,
+                        learning_signal_filter_index=learn_sig_filter_index,
+                        encoder_offset=encoder_offset,
+                        decoded_input_filter_index=decoded_input_filter_index,
+                        activity_filter_index=activity_filter_index))
+            else:
+                raise NotImplementedError(
+                    "SpiNNaker does not support %s learning rule." % l_rule_type
+                )
+
+        # Create encoders region
+        ens_regions[EnsembleRegions.encoders] = regions.MatrixRegion(
+            tp.np_to_fix(encoders_with_gain),
+            sliced_dimension=regions.MatrixPartitioning.rows)
+
+        # Tile direct input across all encoder copies (used for learning)
+        tiled_direct_input = np.tile(
+            self.direct_input,
+            encoders_with_gain.shape[1] // self.ensemble.size_in)
+
+        # Combine the direct input with the bias before converting to S1615 and
+        # creating the region.
+        bias_with_di = params.bias + np.dot(encoders_with_gain,
+                                            tiled_direct_input)
+        assert bias_with_di.ndim == 1
+        ens_regions[EnsembleRegions.bias] = regions.MatrixRegion(
+            tp.np_to_fix(bias_with_di),
+            sliced_dimension=regions.MatrixPartitioning.rows)
+
+        # Convert the gains to S1615 before creating the region
+        ens_regions[EnsembleRegions.gain] = regions.MatrixRegion(
+            tp.np_to_fix(params.gain),
+            sliced_dimension=regions.MatrixPartitioning.rows)
+
+         # Create modulatory filter and routing regions
+        ens_regions[EnsembleRegions.modulatory_filters] =\
+            FilterRegion(mod_filters, model.dt)
+        ens_regions[EnsembleRegions.modulatory_routing] =\
+            FilterRoutingRegion(mod_keyspace_routes,
+                                model.keyspaces.filter_routing_tag)
+
+        # Create learnt encoder filter and routing regions
+        ens_regions[EnsembleRegions.learnt_encoder_filters] =\
+            FilterRegion(learnt_encoder_filters, model.dt)
+        ens_regions[EnsembleRegions.learnt_encoder_routing] =\
+            FilterRoutingRegion(learnt_encoder_routes,
+                                model.keyspaces.filter_routing_tag)
 
         # The population length region stores information about groups of
         # co-operating cores.
@@ -164,6 +348,8 @@ class EnsembleLIF(object):
                 self.record_spikes = True
             elif probe.attr == "voltage":
                 self.record_voltages = True
+            elif probe.attr == "scaled_encoders":
+                self.record_encoders = True
             else:
                 raise NotImplementedError(
                     "Cannot probe {} on Ensembles".format(probe.attr)
@@ -174,12 +360,20 @@ class EnsembleLIF(object):
             self.record_spikes
         ens_regions[EnsembleRegions.ensemble].record_voltages = \
             self.record_voltages
+        ens_regions[EnsembleRegions.ensemble].record_encoders = \
+            self.record_encoders
 
         # Create the probe recording regions
-        ens_regions[EnsembleRegions.spikes] = regions.SpikeRecordingRegion(
-            n_steps if self.record_spikes else 0)
-        ens_regions[EnsembleRegions.voltages] = regions.VoltageRecordingRegion(
-            n_steps if self.record_voltages else 0)
+        encoder_dims = encoders_with_gain.shape[1] - self.ensemble.size_in
+        ens_regions[EnsembleRegions.spike_recording] =\
+            regions.SpikeRecordingRegion(n_steps if self.record_spikes
+                                         else 0)
+        ens_regions[EnsembleRegions.voltage_recording] =\
+            regions.VoltageRecordingRegion(n_steps if self.record_voltages
+                                           else 0)
+        ens_regions[EnsembleRegions.encoder_recording] =\
+            regions.EncoderRecordingRegion(n_steps if self.record_encoders
+                                           else 0, encoder_dims)
 
         # Create constraints against which to partition, initially assume that
         # we can devote 16 cores to every problem.
@@ -566,11 +760,11 @@ class EnsembleSlice(Vertex):
 
     def get_spike_data(self, n_steps):
         """Retrieve spike data from the simulation."""
-        return self.get_probe_data(EnsembleRegions.spikes, n_steps)
+        return self.get_probe_data(EnsembleRegions.spike_recording, n_steps)
 
     def get_voltage_data(self, n_steps):
         """Retrieve voltage data from the simulation."""
-        return self.get_probe_data(EnsembleRegions.voltages, n_steps)
+        return self.get_probe_data(EnsembleRegions.voltage_recording, n_steps)
 
 
 class EnsembleRegion(regions.Region):
@@ -579,12 +773,14 @@ class EnsembleRegion(regions.Region):
     Python representation of `ensemble_parameters_t`.
     """
     def __init__(self, machine_timestep, size_in, n_profiler_samples=0,
-                 record_spikes=False, record_voltages=False):
+                 record_spikes=False, record_voltages=False,
+                 record_encoders=False):
         self.machine_timestep = machine_timestep
         self.size_in = size_in
         self.n_profiler_samples = n_profiler_samples
         self.record_spikes = record_spikes
         self.record_voltages = record_voltages
+        self.record_encoders = record_encoders
 
     def sizeof(self, *args, **kwargs):
         # Always 15 words
@@ -631,7 +827,8 @@ class EnsembleRegion(regions.Region):
         # Add the flags
         flags = 0x0
         for i, predicate in enumerate((self.record_spikes,
-                                       self.record_voltages)):
+                                       self.record_voltages,
+                                       self.record_encoders)):
             if predicate:
                 flags |= 1 << i
 
@@ -689,6 +886,114 @@ class LIFRegion(regions.Region):
             int(self.tau_ref // self.dt)
         ))
 
+PESLearningRule = collections.namedtuple(
+    "PESLearningRule",
+    "learning_rate, error_filter_index, decoder_offset, activity_filter_index")
+
+
+class PESRegion(regions.Region):
+    """Region representing parameters for PES learning rules.
+    """
+    def __init__(self, n_neurons):
+        self.learning_rules = []
+        self.n_neurons = n_neurons
+
+    def sizeof(self, *args):
+        return 4 + (len(self.learning_rules) * 16)
+
+    def write_subregion_to_file(self, fp):
+        # Write number of learning rules
+        fp.write(struct.pack("<I", len(self.learning_rules)))
+
+        # Write learning rules
+        for l in self.learning_rules:
+            data = struct.pack(
+                "<3Ii",
+                tp.value_to_fix(l.learning_rate / float(self.n_neurons)),
+                l.error_filter_index,
+                l.decoder_offset,
+                l.activity_filter_index
+            )
+            fp.write(data)
+
+VojaLearningRule = collections.namedtuple(
+    "VojaLearningRule",
+    "learning_rate, learning_signal_filter_index, encoder_offset, "
+    "decoded_input_filter_index, activity_filter_index")
+
+
+class VojaRegion(regions.Region):
+    """Region representing parameters for PES learning rules.
+    """
+    def __init__(self, one_over_radius):
+        self.learning_rules = []
+        self.one_over_radius = one_over_radius
+
+    def sizeof(self):
+        return 8 + (len(self.learning_rules) * 20)
+
+    def write_subregion_to_file(self, fp):
+        # Write number of learning rules and scaling factor
+        fp.write(struct.pack(
+            "<2I",
+            len(self.learning_rules),
+            tp.value_to_fix(self.one_over_radius)
+        ))
+
+        # Write learning rules
+        for l in self.learning_rules:
+            data = struct.pack(
+                "<Ii2Ii",
+                tp.value_to_fix(l.learning_rate),
+                l.learning_signal_filter_index,
+                l.encoder_offset,
+                l.decoded_input_filter_index,
+                l.activity_filter_index
+            )
+            fp.write(data)
+
+class FilteredActivityRegion(regions.Region):
+    def __init__(self, dt):
+        self.filter_propogators = []
+        self.dt = dt
+
+    def add_get_filter(self, time_constant):
+        # If time constant is none or less than dt,
+        # a filter is not required so return -1
+        if time_constant is None or time_constant < self.dt:
+            return -1
+        # Otherwise
+        else:
+            # Calculate propogator
+            propogator = math.exp(-float(self.dt) / float(time_constant))
+
+            # Convert to fixed-point
+            propogator_fixed = tp.value_to_fix(propogator)
+
+            # If there is already a filter with the same fixed-point
+            # propogator in the list, return its index
+            if propogator_fixed in self.filter_propogators:
+                return self.filter_propogators.index(propogator_fixed)
+            # Otherwise add propogator to list and return its index
+            else:
+                self.filter_propogators.append(propogator_fixed)
+                return (len(self.filter_propogators) - 1)
+
+    def sizeof(self):
+        return 4 + (8 * len(self.filter_propogators))
+
+    def write_subregion_to_file(self, fp):
+        # Write number of learning rules
+        fp.write(struct.pack("<I", len(self.filter_propogators)))
+
+        # Write filters
+        for f in self.filter_propogators:
+            data = struct.pack(
+                "<ii",
+                f,
+                tp.value_to_fix(1.0) - f,
+            )
+            fp.write(data)
 
 def get_decoders_and_keys(signals_connections, minimise=False):
     """Get a combined decoder matrix and a list of keys to use to transmit
@@ -741,8 +1046,9 @@ def _get_basic_region_arguments(neuron_slice, output_slice, cluster_slices):
     for r in (EnsembleRegions.encoders,
               EnsembleRegions.bias,
               EnsembleRegions.gain,
-              EnsembleRegions.spikes,
-              EnsembleRegions.voltages):
+              EnsembleRegions.spike_recording,
+              EnsembleRegions.voltage_recording,
+              EnsembleRegions.encoder_recording):
         region_arguments[r] = Args(neuron_slice)
 
     # Regions sliced by output

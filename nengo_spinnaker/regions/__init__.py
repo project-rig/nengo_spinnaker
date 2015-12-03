@@ -14,5 +14,6 @@ from .keyspaces import KeyspacesRegion, KeyField, MaskField
 from .profiler import Profiler
 from .region import Region
 from .recording import (RecordingRegion, WordRecordingRegion,
-                        SpikeRecordingRegion, VoltageRecordingRegion)
+                        SpikeRecordingRegion, VoltageRecordingRegion,
+                        EncoderRecordingRegion)
 from . import utils

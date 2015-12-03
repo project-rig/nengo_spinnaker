@@ -87,3 +87,13 @@ class VoltageRecordingRegion(RecordingRegion):
         # Recast back to float
         data_fp = NumpyFixToFloatConverter(15)(data[:, 0:n_neurons])
         return data_fp
+
+class EncoderRecordingRegion(RecordingRegion):
+    """Region used to record learnt encoders."""
+    def __init__(self, n_steps, n_dimensions):
+        self.n_steps = n_steps
+        self.n_dimensions = n_dimensions
+
+    def bytes_per_frame(self, n_neurons):
+        words_per_frame = n_neurons * self.n_dimensions
+        return 4 * words_per_frame
