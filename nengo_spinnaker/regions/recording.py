@@ -88,6 +88,7 @@ class VoltageRecordingRegion(RecordingRegion):
         data_fp = NumpyFixToFloatConverter(15)(data[:, 0:n_neurons])
         return data_fp
 
+
 class EncoderRecordingRegion(RecordingRegion):
     """Region used to record learnt encoders."""
     def __init__(self, n_steps, n_dimensions):
@@ -108,10 +109,9 @@ class EncoderRecordingRegion(RecordingRegion):
         # Read in neuron slice of fixed point
         # values and convert to float
         fp = mem.read(n_steps * framelength)
-        slice_encoders = tp.fix_to_np(fp)
+        slice_encoders = NumpyFixToFloatConverter(15)(fp)
 
         # Reshape and return
-        n_neurons = vertex.slice.stop - vertex.slice.start
         slice_encoders = np.reshape(
             slice_encoders,
             (

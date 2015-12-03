@@ -115,6 +115,7 @@ def get_learning_rule_sink(model, connection):
             "which modify 'decoders' or 'encoders'"
         )
 
+
 @Model.sink_getters.register(nengo.ensemble.Neurons)
 def get_neurons_sink(model, connection):
     """Get the sink for connections into the neurons of an ensemble."""

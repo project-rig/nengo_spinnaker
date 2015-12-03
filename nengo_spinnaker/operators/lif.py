@@ -111,7 +111,6 @@ class EnsembleLIF(object):
             decoders = np.array([])
             output_keys = list()
 
-
         # Extract pre-scaled encoders from parameters
         encoders_with_gain = params.scaled_encoders
 
@@ -152,7 +151,8 @@ class EnsembleLIF(object):
                     # work so set decoders to new learnt decoder matrix
                     if decoder_offset == 0:
                         decoders = learnt_decoders
-                    # Otherwise, stack learnt decoders alongside existing matrix
+                    # Otherwise, stack learnt decoders
+                    # alongside existing matrix
                     else:
                         decoders = np.vstack((decoders, learnt_decoders))
 
@@ -188,7 +188,8 @@ class EnsembleLIF(object):
                     )
             else:
                 raise NotImplementedError(
-                    "SpiNNaker does not support %s learning rule." % l_type
+                    "SpiNNaker does not support %s learning rule."
+                    % l_rule_type
                 )
 
         size_out = decoders.shape[0]
@@ -266,7 +267,8 @@ class EnsembleLIF(object):
                         activity_filter_index=activity_filter_index))
             else:
                 raise NotImplementedError(
-                    "SpiNNaker does not support %s learning rule." % l_rule_type
+                    "SpiNNaker does not support %s learning rule."
+                    % l_rule_type
                 )
 
         # Create encoders region
@@ -293,7 +295,7 @@ class EnsembleLIF(object):
             tp.np_to_fix(params.gain),
             sliced_dimension=regions.MatrixPartitioning.rows)
 
-         # Create modulatory filter and routing regions
+        # Create modulatory filter and routing regions
         ens_regions[Regions.modulatory_filters] =\
             FilterRegion(mod_filters, model.dt)
         ens_regions[Regions.modulatory_routing] =\
@@ -360,12 +362,15 @@ class EnsembleLIF(object):
         # Create the probe recording regions
         self.learnt_enc_dims = (encoders_with_gain.shape[1] -
                                 self.ensemble.size_in)
-        ens_regions[Regions.spike_recording] = regions.SpikeRecordingRegion(
-            n_steps if self.record_spikes else 0)
-        ens_regions[Regions.voltage_recording] = regions.VoltageRecordingRegion(
-            n_steps if self.record_voltages else 0)
-        ens_regions[Regions.encoder_recording] = regions.EncoderRecordingRegion(
-            n_steps if self.record_encoders else 0, self.learnt_enc_dims)
+        ens_regions[Regions.spike_recording] =\
+            regions.SpikeRecordingRegion(n_steps if self.record_spikes
+                                         else 0)
+        ens_regions[Regions.voltage_recording] =\
+            regions.VoltageRecordingRegion(n_steps if self.record_voltages
+                                           else 0)
+        ens_regions[Regions.encoder_recording] =\
+            regions.EncoderRecordingRegion(n_steps if self.record_encoders
+                                           else 0, self.learnt_enc_dims)
 
         # Create constraints against which to partition, initially assume that
         # we can devote 16 cores to every problem.
@@ -969,6 +974,7 @@ class VojaRegion(regions.Region):
             )
             fp.write(data)
 
+
 class FilteredActivityRegion(regions.Region):
     def __init__(self, dt):
         self.filter_propogators = []
@@ -1011,6 +1017,7 @@ class FilteredActivityRegion(regions.Region):
                 tp.value_to_fix(1.0) - f,
             )
             fp.write(data)
+
 
 def get_decoders_and_keys(signals_connections, minimise=False):
     """Get a combined decoder matrix and a list of keys to use to transmit

@@ -96,7 +96,7 @@ def make_filter_regions(specs, dt, minimise=False,
     """
     # Create filters and keyspaces
     filters, keyspace_routes = make_filters(specs, minimise=minimise,
-    										width=width)
+                                            width=width)
 
     # Create the regions
     filter_region = FilterRegion(filters, dt)
