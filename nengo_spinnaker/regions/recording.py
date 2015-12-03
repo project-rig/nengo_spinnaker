@@ -97,3 +97,27 @@ class EncoderRecordingRegion(RecordingRegion):
     def bytes_per_frame(self, n_neurons):
         words_per_frame = n_neurons * self.n_dimensions
         return 4 * words_per_frame
+
+    def to_array(self, mem, vertex_slice, n_steps):
+        mem.seek(0)
+
+        # Determine how many bytes to read
+        n_neurons = vertex_slice.stop - vertex_slice.start
+        framelength = self.bytes_per_frame(n_neurons)
+
+        # Read in neuron slice of fixed point
+        # values and convert to float
+        fp = mem.read(n_steps * framelength)
+        slice_encoders = tp.fix_to_np(fp)
+
+        # Reshape and return
+        n_neurons = vertex.slice.stop - vertex.slice.start
+        slice_encoders = np.reshape(
+            slice_encoders,
+            (
+                n_steps,
+                n_neurons,
+                self.encoder_recording_region.n_dimensions
+            )
+        )
+        return slice_encoders

@@ -364,7 +364,8 @@ class EnsembleLIF(object):
             self.record_encoders
 
         # Create the probe recording regions
-        encoder_dims = encoders_with_gain.shape[1] - self.ensemble.size_in
+        self.learnt_enc_dims = (encoders_with_gain.shape[1] -
+                                self.ensemble.size_in)
         ens_regions[EnsembleRegions.spike_recording] =\
             regions.SpikeRecordingRegion(n_steps if self.record_spikes
                                          else 0)
@@ -373,7 +374,7 @@ class EnsembleLIF(object):
                                            else 0)
         ens_regions[EnsembleRegions.encoder_recording] =\
             regions.EncoderRecordingRegion(n_steps if self.record_encoders
-                                           else 0, encoder_dims)
+                                           else 0, self.learnt_enc_dims)
 
         # Create constraints against which to partition, initially assume that
         # we can devote 16 cores to every problem.
@@ -481,6 +482,20 @@ class EnsembleLIF(object):
                 for neurons, data in cl.get_voltage_data(n_steps):
                     voltages[:, neurons] = data
 
+        # If (learnt) encoders were recorded
+        if self.record_encoders:
+            # Create empty matrix to hold probed data
+            encoders = np.empty((
+                n_steps,
+                self.ensemble.n_neurons,
+                self.learnt_enc_dims))
+
+            # For each cluster read back the voltage data
+            for cl in self.clusters:
+                # For each neuron slice copy in the encoder data
+                for neurons, data in cl.get_encoder_data(n_steps):
+                    encoders[:, neurons] = data
+
         # Store the data associated with probes
         for p in self.local_probes:
             # Get the neuron slice applied by the probe
@@ -493,13 +508,15 @@ class EnsembleLIF(object):
             if p.sample_every is not None:
                 sample_every = int(p.sample_every / simulator.dt)
 
-            # Get the probe data
+            # Copy desired slice of recorded data into simulator
             if p.attr in ("output", "spikes"):
                 # Spike data
                 probe_data = spike_vals[::sample_every, neuron_slice]
             elif p.attr == "voltage":
                 # Voltage data
                 probe_data = voltages[::sample_every, neuron_slice]
+            elif p.attr == "scaled_encoders":
+                probe_data = encoders[::sample_every, neuron_slice, :]
 
             # Store the probe data
             if p in simulator.data:
@@ -638,6 +655,11 @@ class EnsembleCluster(object):
             # Get the data and yield a new entry
             yield vertex.neuron_slice, vertex.get_voltage_data(n_steps)
 
+    def get_encoder_data(self, n_steps):
+        """Retrieved (learnt) encoder data from the simulation."""
+        for vertex in self.vertices:
+            yield vertex.neuron_slice, vertex.get_encoder_data(n_steps)
+
 
 class EnsembleSlice(Vertex):
     """Represents a single instance of the Ensemble APLX."""
@@ -765,6 +787,10 @@ class EnsembleSlice(Vertex):
     def get_voltage_data(self, n_steps):
         """Retrieve voltage data from the simulation."""
         return self.get_probe_data(EnsembleRegions.voltage_recording, n_steps)
+
+    def get_encoder_data(self, n_steps):
+        """Retrieve (learnt) encoder data from the simulation."""
+        return self.get_probe_data(EnsembleRegions.encoder_recording, n_steps)
 
 
 class EnsembleRegion(regions.Region):
