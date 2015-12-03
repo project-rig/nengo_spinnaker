@@ -12,8 +12,8 @@
  * 
  */
 
-#include "ensemble_voja.h"
-#include "ensemble_filtered_activity.h"
+#include "voja.h"
+#include "filtered_activity.h"
 
 #include <string.h>
 

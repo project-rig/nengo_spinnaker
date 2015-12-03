@@ -15,8 +15,8 @@
  */
 
 
-#ifndef __ENSEMBLE_PES_H__
-#define __ENSEMBLE_PES_H__
+#ifndef __PES_H_
+#define __PES_H_
 
 #include "ensemble.h"
 
@@ -91,4 +91,4 @@ void pes_step();
 
 /** @} */
 
-#endif  // __ENSEMBLE_PES_H__
+#endif  // __PES_H__

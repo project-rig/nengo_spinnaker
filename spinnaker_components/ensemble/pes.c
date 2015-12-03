@@ -12,8 +12,8 @@
  * 
  */
 
-#include "ensemble_pes.h"
-#include "ensemble_filtered_activity.h"
+#include "pes.h"
+#include "filtered_activity.h"
 
 #include <string.h>
 

@@ -15,8 +15,8 @@
  */
 
 
-#ifndef __ENSEMBLE_VOJA_H__
-#define __ENSEMBLE_VOJA_H__
+#ifndef __VOJA_H__
+#define __VOJA_H__
 
 #include "ensemble.h"
 
@@ -124,4 +124,4 @@ void voja_step();
 
 /** @} */
 
-#endif  // __ENSEMBLE_VOJA_H__
+#endif  // __VOJA_H__

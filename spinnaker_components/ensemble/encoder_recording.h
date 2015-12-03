@@ -1,5 +1,22 @@
-#ifndef RECORD_LEARNT_ENCODERS_H
-#define RECORD_LEARNT_ENCODERS_H
+/**
+ * Ensemble - Encoder recording
+ * -----------------------------
+ * Functions to perform recording of encoder learning in action
+ *
+ * Authors:
+ *   - James Knight <knightj@cs.man.ac.uk>
+ *
+ * Copyright:
+ *   - Advanced Processor Technologies, School of Computer Science,
+ *      University of Manchester
+ *
+ * \addtogroup ensemble
+ * @{
+ */
+
+
+#ifndef __ENCODER_RECORDING_H__
+#define __ENCODER_RECORDING_H__
 
 #include <stdbool.h>
 #include <string.h>
@@ -49,4 +66,4 @@ bool record_learnt_encoders_initialise(encoder_recording_buffer_t *buffer, addre
 
 void record_learnt_encoders_reset(encoder_recording_buffer_t *buffer);
 
-#endif  // RECORD_LEARNT_ENCODERS_H
+#endif  // __ENCODER_RECORDING_H__

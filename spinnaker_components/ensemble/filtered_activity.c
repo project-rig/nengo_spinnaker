@@ -12,7 +12,7 @@
  * 
  */
 
-#include "ensemble_filtered_activity.h"
+#include "filtered_activity.h"
 
 #include <string.h>
 

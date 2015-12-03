@@ -1,4 +1,4 @@
-#include "record_learnt_encoders.h"
+#include "encoder_recording.h"
 
 //-----------------------------------------------------------------------------
 // Global functions

@@ -1,22 +1,22 @@
 /**
  * Ensemble - Filtered activity
- * ----------------------------------------------------------------------------
- * Functions to provide filtered neuron activity for use with learning rules
- * 
+ * -----------------------------
+ * Functions to perform filtering of neuron activity for use in learning rules
+ *
  * Authors:
  *   - James Knight <knightj@cs.man.ac.uk>
- * 
+ *
  * Copyright:
  *   - Advanced Processor Technologies, School of Computer Science,
  *      University of Manchester
- * 
+ *
  * \addtogroup ensemble
  * @{
  */
 
 
-#ifndef __ENSEMBLE_FILTERED_ACTIVITY_H__
-#define __ENSEMBLE_FILTERED_ACTIVITY_H__
+#ifndef __FILTERED_ACTIVITY_H__
+#define __FILTERED_ACTIVITY_H__
 
 #include "ensemble.h"
 
@@ -70,4 +70,4 @@ void filtered_activity_step();
 
 /** @} */
 
-#endif  // __ENSEMBLE_FILTERED_ACTIVITY_H__
+#endif  // __FILTERED_ACTIVITY_H__
