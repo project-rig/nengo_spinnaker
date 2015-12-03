@@ -32,7 +32,7 @@ from nengo_spinnaker.utils import type_casts as tp
 from nengo_spinnaker.utils import neurons as neuron_utils
 
 
-class EnsembleRegions(enum.IntEnum):
+class Regions(enum.IntEnum):
     """Region names, corresponding to those defined in `ensemble.h`"""
     ensemble = 1  # General ensemble settings
     neuron = 2  # Neuron specific parameters
@@ -88,14 +88,14 @@ class EnsembleLIF(object):
                                for (port, signal) in iteritems(incoming)
                                if isinstance(port, LearningRule)}
 
-        (ens_regions[EnsembleRegions.input_filters],
-         ens_regions[EnsembleRegions.input_routing]) = make_filter_regions(
+        (ens_regions[Regions.input_filters],
+         ens_regions[Regions.input_routing]) = make_filter_regions(
             incoming[InputPort.standard], model.dt, True,
             model.keyspaces.filter_routing_tag,
             width=self.ensemble.size_in
         )
-        (ens_regions[EnsembleRegions.inhibition_filters],
-         ens_regions[EnsembleRegions.inhibition_routing]) = \
+        (ens_regions[Regions.inhibition_filters],
+         ens_regions[Regions.inhibition_routing]) = \
             make_filter_regions(
                 incoming[EnsembleInputPort.global_inhibition], model.dt, True,
                 model.keyspaces.filter_routing_tag, width=1
@@ -116,11 +116,11 @@ class EnsembleLIF(object):
         encoders_with_gain = params.scaled_encoders
 
         # Create filtered activity region
-        ens_regions[EnsembleRegions.filtered_activity] =\
+        ens_regions[Regions.filtered_activity] =\
             FilteredActivityRegion(model.dt)
 
         # Create, initially empty, PES region
-        ens_regions[EnsembleRegions.pes] = PESRegion(self.ensemble.n_neurons)
+        ens_regions[Regions.pes] = PESRegion(self.ensemble.n_neurons)
 
         # Loop through outgoing learnt connections
         mod_filters = list()
@@ -167,13 +167,13 @@ class EnsembleLIF(object):
                     # Either add a new filter to the filtered activity
                     # region or get the index of the existing one
                     activity_filter_index = \
-                        ens_regions[EnsembleRegions.filtered_activity].add_get_filter(
+                        ens_regions[Regions.filtered_activity].add_get_filter(
                             l_rule_type.pre_tau)
 
                     # Add a new learning rule to the PES region
                     # **NOTE** divide learning rate by dt
                     # to account for activity scaling
-                    ens_regions[EnsembleRegions.pes].learning_rules.append(
+                    ens_regions[Regions.pes].learning_rules.append(
                         PESLearningRule(
                             learning_rate=l_rule_type.learning_rate / model.dt,
                             error_filter_index=error_filter_index,
@@ -193,10 +193,10 @@ class EnsembleLIF(object):
 
         size_out = decoders.shape[0]
 
-        ens_regions[EnsembleRegions.decoders] = regions.MatrixRegion(
+        ens_regions[Regions.decoders] = regions.MatrixRegion(
             tp.np_to_fix(decoders / model.dt),
             sliced_dimension=regions.MatrixPartitioning.rows)
-        ens_regions[EnsembleRegions.keys] = regions.KeyspacesRegion(
+        ens_regions[Regions.keys] = regions.KeyspacesRegion(
             output_keys,
             fields=[regions.KeyField({'cluster': 'cluster'})],
             partitioned_by_atom=True
@@ -204,7 +204,7 @@ class EnsembleLIF(object):
 
         # Create, initially empty, Voja region, passing in scaling factor
         # used, with gain, to scale activities to match encoders
-        ens_regions[EnsembleRegions.voja] = VojaRegion(1.0 / self.ensemble.radius)
+        ens_regions[Regions.voja] = VojaRegion(1.0 / self.ensemble.radius)
 
         # Loop through incoming learnt connections
         for sig, t_params in incoming[EnsembleInputPort.learnt]:
@@ -251,13 +251,13 @@ class EnsembleLIF(object):
                 # Either add a new filter to the filtered activity
                 # region or get the index of the existing one
                 activity_filter_index = \
-                    ens_regions[EnsembleRegions.filtered_activity].add_get_filter(
+                    ens_regions[Regions.filtered_activity].add_get_filter(
                         l_rule_type.post_tau)
 
                 # Add a new learning rule to the Voja region
                 # **NOTE** divide learning rate by dt
                 # to account for activity scaling
-                ens_regions[EnsembleRegions.voja].learning_rules.append(
+                ens_regions[Regions.voja].learning_rules.append(
                     VojaLearningRule(
                         learning_rate=l_rule_type.learning_rate,
                         learning_signal_filter_index=learn_sig_filter_index,
@@ -270,7 +270,7 @@ class EnsembleLIF(object):
                 )
 
         # Create encoders region
-        ens_regions[EnsembleRegions.encoders] = regions.MatrixRegion(
+        ens_regions[Regions.encoders] = regions.MatrixRegion(
             tp.np_to_fix(encoders_with_gain),
             sliced_dimension=regions.MatrixPartitioning.rows)
 
@@ -284,40 +284,39 @@ class EnsembleLIF(object):
         bias_with_di = params.bias + np.dot(encoders_with_gain,
                                             tiled_direct_input)
         assert bias_with_di.ndim == 1
-        ens_regions[EnsembleRegions.bias] = regions.MatrixRegion(
+        ens_regions[Regions.bias] = regions.MatrixRegion(
             tp.np_to_fix(bias_with_di),
             sliced_dimension=regions.MatrixPartitioning.rows)
 
         # Convert the gains to S1615 before creating the region
-        ens_regions[EnsembleRegions.gain] = regions.MatrixRegion(
+        ens_regions[Regions.gain] = regions.MatrixRegion(
             tp.np_to_fix(params.gain),
             sliced_dimension=regions.MatrixPartitioning.rows)
 
          # Create modulatory filter and routing regions
-        ens_regions[EnsembleRegions.modulatory_filters] =\
+        ens_regions[Regions.modulatory_filters] =\
             FilterRegion(mod_filters, model.dt)
-        ens_regions[EnsembleRegions.modulatory_routing] =\
+        ens_regions[Regions.modulatory_routing] =\
             FilterRoutingRegion(mod_keyspace_routes,
                                 model.keyspaces.filter_routing_tag)
 
         # Create learnt encoder filter and routing regions
-        ens_regions[EnsembleRegions.learnt_encoder_filters] =\
+        ens_regions[Regions.learnt_encoder_filters] =\
             FilterRegion(learnt_encoder_filters, model.dt)
-        ens_regions[EnsembleRegions.learnt_encoder_routing] =\
+        ens_regions[Regions.learnt_encoder_routing] =\
             FilterRoutingRegion(learnt_encoder_routes,
                                 model.keyspaces.filter_routing_tag)
 
         # The population length region stores information about groups of
         # co-operating cores.
-        ens_regions[EnsembleRegions.population_length] = \
-            regions.ListRegion("I")
+        ens_regions[Regions.population_length] = regions.ListRegion("I")
 
         # The ensemble region contains basic information about the ensemble
-        ens_regions[EnsembleRegions.ensemble] = EnsembleRegion(
-            model.machine_timestep, self.ensemble.size_in)
+        ens_regions[Regions.ensemble] = EnsembleRegion(model.machine_timestep,
+                                                       self.ensemble.size_in)
 
         # The neuron region contains information specific to the neuron type
-        ens_regions[EnsembleRegions.neuron] = LIFRegion(
+        ens_regions[Regions.neuron] = LIFRegion(
             model.dt, self.ensemble.neuron_type.tau_rc,
             self.ensemble.neuron_type.tau_ref
         )
@@ -337,10 +336,8 @@ class EnsembleLIF(object):
                                       n_steps * 2)
 
         # Create profiler region
-        ens_regions[EnsembleRegions.profiler] = regions.Profiler(
-            n_profiler_samples)
-        ens_regions[EnsembleRegions.ensemble].n_profiler_samples = \
-            n_profiler_samples
+        ens_regions[Regions.profiler] = regions.Profiler(n_profiler_samples)
+        ens_regions[Regions.ensemble].n_profiler_samples = n_profiler_samples
 
         # Manage probes
         for probe in self.local_probes:
@@ -356,25 +353,19 @@ class EnsembleLIF(object):
                 )
 
         # Set the flags
-        ens_regions[EnsembleRegions.ensemble].record_spikes = \
-            self.record_spikes
-        ens_regions[EnsembleRegions.ensemble].record_voltages = \
-            self.record_voltages
-        ens_regions[EnsembleRegions.ensemble].record_encoders = \
-            self.record_encoders
+        ens_regions[Regions.ensemble].record_spikes = self.record_spikes
+        ens_regions[Regions.ensemble].record_voltages = self.record_voltages
+        ens_regions[Regions.ensemble].record_encoders = self.record_encoders
 
         # Create the probe recording regions
         self.learnt_enc_dims = (encoders_with_gain.shape[1] -
                                 self.ensemble.size_in)
-        ens_regions[EnsembleRegions.spike_recording] =\
-            regions.SpikeRecordingRegion(n_steps if self.record_spikes
-                                         else 0)
-        ens_regions[EnsembleRegions.voltage_recording] =\
-            regions.VoltageRecordingRegion(n_steps if self.record_voltages
-                                           else 0)
-        ens_regions[EnsembleRegions.encoder_recording] =\
-            regions.EncoderRecordingRegion(n_steps if self.record_encoders
-                                           else 0, self.learnt_enc_dims)
+        ens_regions[Regions.spike_recording] = regions.SpikeRecordingRegion(
+            n_steps if self.record_spikes else 0)
+        ens_regions[Regions.voltage_recording] = regions.VoltageRecordingRegion(
+            n_steps if self.record_voltages else 0)
+        ens_regions[Regions.encoder_recording] = regions.EncoderRecordingRegion(
+            n_steps if self.record_encoders else 0, self.learnt_enc_dims)
 
         # Create constraints against which to partition, initially assume that
         # we can devote 16 cores to every problem.
@@ -705,7 +696,7 @@ class EnsembleSlice(Vertex):
         )
 
         # Add some other arguments for the ensemble region
-        self.region_arguments[EnsembleRegions.ensemble].kwargs.update({
+        self.region_arguments[Regions.ensemble].kwargs.update({
             "population_id": vertex_index,
             "input_slice": input_slice,
             "neuron_slice": self.neuron_slice,
@@ -713,13 +704,13 @@ class EnsembleSlice(Vertex):
         })
 
         # Compute the SDRAM usage
-        sdram_usage = regions.utils.sizeof_regions_named(
-            self.regions, self.region_arguments)
+        sdram_usage = regions.utils.sizeof_regions_named(self.regions,
+                                                         self.region_arguments)
 
         # Prepare the vertex
         application = "ensemble"
 
-        if ens_regions[EnsembleRegions.profiler].n_samples > 0:
+        if ens_regions[Regions.profiler].n_samples > 0:
             # If profiling then use the profiled version of the application
             application += "_profiled"
 
@@ -741,15 +732,15 @@ class EnsembleSlice(Vertex):
                            ("shared_spike_vector", shared_spike_vector),
                            ("sema_input", sema_input),
                            ("sema_spikes", sema_spikes)):
-            self.region_arguments[EnsembleRegions.ensemble].kwargs[kwarg] = val
+            self.region_arguments[Regions.ensemble].kwargs[kwarg] = val
 
         # Modify the keyword arguments to the keys region to include the
         # cluster index.
-        self.region_arguments[EnsembleRegions.keys].kwargs["cluster"] = \
+        self.region_arguments[Regions.keys].kwargs["cluster"] = \
             self.cluster
 
         # Write each region into memory
-        for key in EnsembleRegions:
+        for key in Regions:
             # Get the arguments and the memory
             args, kwargs = self.region_arguments[key]
             mem = self.region_memory[key]
@@ -763,11 +754,11 @@ class EnsembleSlice(Vertex):
     def get_profiler_data(self):
         """Retrieve profiler data from the simulation."""
         # Get the profiler output memory block
-        mem = self.region_memory[EnsembleRegions.profiler]
+        mem = self.region_memory[Regions.profiler]
         mem.seek(0)
 
         # Read profiler data from memory and put somewhere accessible
-        profiler = self.regions[EnsembleRegions.profiler]
+        profiler = self.regions[Regions.profiler]
         return profiler.read_from_mem(mem, self.profiler_tag_names)
 
     def get_probe_data(self, region_name, n_steps):
@@ -782,15 +773,15 @@ class EnsembleSlice(Vertex):
 
     def get_spike_data(self, n_steps):
         """Retrieve spike data from the simulation."""
-        return self.get_probe_data(EnsembleRegions.spike_recording, n_steps)
+        return self.get_probe_data(Regions.spike_recording, n_steps)
 
     def get_voltage_data(self, n_steps):
         """Retrieve voltage data from the simulation."""
-        return self.get_probe_data(EnsembleRegions.voltage_recording, n_steps)
+        return self.get_probe_data(Regions.voltage_recording, n_steps)
 
     def get_encoder_data(self, n_steps):
         """Retrieve (learnt) encoder data from the simulation."""
-        return self.get_probe_data(EnsembleRegions.encoder_recording, n_steps)
+        return self.get_probe_data(Regions.encoder_recording, n_steps)
 
 
 class EnsembleRegion(regions.Region):
@@ -1069,24 +1060,24 @@ def _get_basic_region_arguments(neuron_slice, output_slice, cluster_slices):
     region_arguments = collections.defaultdict(Args)
 
     # Regions sliced by neuron
-    for r in (EnsembleRegions.encoders,
-              EnsembleRegions.bias,
-              EnsembleRegions.gain,
-              EnsembleRegions.spike_recording,
-              EnsembleRegions.voltage_recording,
-              EnsembleRegions.encoder_recording):
+    for r in (Regions.encoders,
+              Regions.bias,
+              Regions.gain,
+              Regions.spike_recording,
+              Regions.voltage_recording,
+              Regions.encoder_recording):
         region_arguments[r] = Args(neuron_slice)
 
     # Regions sliced by output
-    for r in [EnsembleRegions.decoders, EnsembleRegions.keys]:
+    for r in [Regions.decoders, Regions.keys]:
         region_arguments[r] = Args(output_slice)
 
     # Population lengths
     pop_lengths = [p.stop - p.start for p in cluster_slices]
-    region_arguments[EnsembleRegions.population_length] = Args(pop_lengths)
+    region_arguments[Regions.population_length] = Args(pop_lengths)
 
     # Ensemble region arguments
-    region_arguments[EnsembleRegions.ensemble].kwargs.update({
+    region_arguments[Regions.ensemble].kwargs.update({
         "n_populations": len(pop_lengths),
         "n_neurons_in_population": sum(pop_lengths),
     })
