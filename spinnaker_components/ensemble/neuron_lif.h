@@ -1,10 +1,10 @@
 // Leaky integrate and fire neurons
 
-#include "ensemble.h"
-#include "recording.h"
-
 #ifndef __NEURON_LIF_H__
 #define __NEURON_LIF_H__
+
+#include "ensemble.h"
+#include "recording.h"
 
 /*****************************************************************************/
 // State variables for an ensemble of LIF neurons

@@ -27,7 +27,7 @@ value_t g_voja_one_over_radius = 1.0k;
 //-----------------------------------------------------------------------------
 // Global functions
 //-----------------------------------------------------------------------------
-bool get_voja(address_t address)
+bool voja_initialise(address_t address)
 {
   // Read number of Voja learning rules that are configured and the scaling factor
   g_num_voja_learning_rules = address[0];
@@ -56,7 +56,8 @@ bool get_voja(address_t address)
   return true;
 }
 //-----------------------------------------------------------------------------
-void voja_step()
+/*void voja_step(const if_collection_t *modulatory_filters,
+               const if_collection_t *learnt_encoder_filters)
 {
   // Loop through all the learning rules
   for(uint32_t l = 0; l < g_num_voja_learning_rules; l++)
@@ -66,11 +67,11 @@ void voja_step()
     if(parameters->activity_filter_index != -1)
     {
       // Get learning rate
-      const value_t learning_rate = voja_get_learning_rate(parameters);
+      const value_t learning_rate = voja_get_learning_rate(parameters, modulatory_filters);
 
       // Extract decoded input signal from filter
-      const filtered_input_buffer_t *decoded_input = g_input_learnt_encoder.filters[parameters->decoded_input_filter_index];
-      const value_t *decoded_input_signal = decoded_input->filtered;
+      const if_filter_t *decoded_input = &learnt_encoder_filters->filters[parameters->decoded_input_filter_index];
+      const value_t *decoded_input_signal = decoded_input->output;
 
       // Extract filtered activity vector indexed by learning rule
       const value_t *filtered_activity = g_filtered_activities[parameters->activity_filter_index];
@@ -86,11 +87,11 @@ void voja_step()
         const value_t input_scale = encoder_scale * g_ensemble.gain[n] * g_voja_one_over_radius;
 
         // Loop through input dimensions
-        for(uint d = 0; d < decoded_input->d_in; d++)
+        for(uint d = 0; d < decoded_input->size; d++)
         {
           encoder_vector[d] += (input_scale * decoded_input_signal[d]) - (encoder_scale * encoder_vector[d]);
         }
       }
     }
   }
-}
+}*/

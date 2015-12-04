@@ -18,6 +18,10 @@
 #ifndef __FILTERED_ACTIVITY_H__
 #define __FILTERED_ACTIVITY_H__
 
+// Common includes
+#include "common-typedefs.h"
+
+// Ensemble includes
 #include "ensemble.h"
 
 //-----------------------------------------------------------------------------
@@ -45,10 +49,10 @@ activity_filter_parameters_t *g_activity_filter_params;
 /**
 * \brief apply effect of neuron spiking to all filtered activities
 */
-static inline void filtered_activity_neuron_spiked(uint n)
+static inline void filtered_activity_neuron_spiked(uint32_t n)
 {
   // Loop through filters and add n_filter to activites
-  for(uint f = 0; f < g_num_activity_filters; f++)
+  for(uint32_t f = 0; f < g_num_activity_filters; f++)
   {
     g_filtered_activities[f][n] += g_activity_filter_params[f].n_filter;
   }
@@ -61,7 +65,7 @@ static inline void filtered_activity_neuron_spiked(uint n)
 * \brief Copy in data controlling filtered activities
 * from the filtered activity region of the Ensemble.
 */
-bool get_filtered_activity(address_t address);
+bool filtered_activity_initialise(address_t address, uint32_t n_neurons);
 
 /**
 * \brief Apply decay to all filtered activities

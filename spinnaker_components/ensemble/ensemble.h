@@ -9,21 +9,29 @@
 
 /*****************************************************************************/
 // Region indices
-#define ENSEMBLE_REGION           1
-#define NEURON_REGION             2
-#define ENCODER_REGION            3
-#define BIAS_REGION               4
-#define GAIN_REGION               5
-#define DECODER_REGION            6
-#define KEYS_REGION               7
-#define POPULATION_LENGTH_REGION  8
-#define INPUT_FILTERS_REGION      9
-#define INPUT_ROUTING_REGION     10
-#define INHIB_FILTERS_REGION     11
-#define INHIB_ROUTING_REGION     12
-#define PROFILER_REGION          13
-#define REC_SPIKES_REGION        14
-#define REC_VOLTAGES_REGION      15
+#define ENSEMBLE_REGION               1
+#define NEURON_REGION                 2
+#define ENCODER_REGION                3
+#define BIAS_REGION                   4
+#define GAIN_REGION                   5
+#define DECODER_REGION                6
+#define KEYS_REGION                   7
+#define POPULATION_LENGTH_REGION      8
+#define INPUT_FILTERS_REGION          9
+#define INPUT_ROUTING_REGION          10
+#define INHIB_FILTERS_REGION          11
+#define INHIB_ROUTING_REGION          12
+#define MODULATORY_FILTERS_REGION     13
+#define MODULATORY_ROUTING_REGION     14
+#define LEARNT_ENCODER_FILTERS_REGION 15
+#define LEARNT_ENCODER_ROUTING_REGION 16
+#define PES_REGION                    17
+#define VOJA_REGION                   18
+#define FILTERED_ACTIVITY_REGION      19
+#define PROFILER_REGION               20
+#define REC_SPIKES_REGION             21
+#define REC_VOLTAGES_REGION           22
+#define REC_ENCODERS_REGION           23
 /*****************************************************************************/
 
 /*****************************************************************************/
@@ -37,8 +45,9 @@
 // Flags
 enum
 {
-  RECORD_SPIKES =   1 << 0,
-  RECORD_VOLTAGES = 1 << 1,
+  RECORD_SPIKES   = (1 << 0),
+  RECORD_VOLTAGES = (1 << 1),
+  RECORD_ENCODERS = (1 << 2),
 } flags;
 /*****************************************************************************/
 

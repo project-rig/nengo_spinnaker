@@ -1,19 +1,42 @@
 #include "ensemble.h"
 
+// Standard includes
+#include "string.h"
+
+// SpiNNaker includes
 #include "spin1_api.h"
+
+// Common includes
 #include "input_filtering.h"
 #include "nengo-common.h"
 #include "fixed_point.h"
 #include "common-impl.h"
 
-#include "string.h"
-
+// Ensemble includes
+#include "encoder_recording.h"
+#include "filtered_activity.h"
 #include "neuron_lif.h"
+#include "pes.h"
+#include "recording.h"
+#include "voja.h"
 
 /*****************************************************************************/
 // Global variables
 ensemble_state_t ensemble;  // Global state
-if_collection_t input_filters, inhibition_filters;
+
+// Input filters and buffers for general and inhibitory inputs. Their outputs
+// are summed into accumulators which are used to drive the standard neural input
+if_collection_t input_filters;
+if_collection_t inhibition_filters;
+
+// Input filters and buffers for modulatory signals. Their
+// outputs are left seperate for use by learning rules
+if_collection_t modulatory_filters;
+
+// Input filters and buffers for signals to be encoded by learnt encoders.
+// Each output is encoded by a seperate encoder so these are also left seperate
+if_collection_t learnt_encoder_filters;
+
 
 value_t *sdram_input_vector_local;   // Our portion of the shared input vector
 uint32_t *sdram_spikes_vector_local; // Our portion of the shared spike vector
@@ -22,6 +45,9 @@ uint32_t unpadded_spike_vector_size;
 uint spikes_write_size;
 
 recording_buffer_t record_spikes, record_voltages;  // Recording buffers
+
+encoder_recording_buffer_t record_encoders;
+
 /*****************************************************************************/
 
 /*****************************************************************************/
@@ -48,9 +74,41 @@ void simulate_neurons(
   // Update each neuron in turn
   for (uint32_t n = 0; n < ensemble->parameters.n_neurons; n++)
   {
-    // If the neuron is in its refractory period then decrement the refractory
-    // counter and progress to the next neuron.
-    if (neuron_refractory(n, ensemble->state))
+    // Get this neuron's encoder vector
+    value_t *encoder_vector = &ensemble->encoders[n_dims * n];
+
+    // Is this neuron in its refractory period
+    bool in_refractory_period = neuron_refractory(n, ensemble->state);
+
+    // Loop through learnt input signals and encoder slices
+    uint32_t f = 0;
+    uint32_t e = n_dims;
+    value_t neuron_input = 0.0k;
+    for(; f < learnt_encoder_filters.n_filters; f++, e += n_dims)
+    {
+      // Extract input signal from learnt encoder filter
+      const if_filter_t *filtered_input = &learnt_encoder_filters.filters[f];
+
+      // Get encoder vector for this neuron offset for correct learnt encoder
+      const value_t *learnt_encoder_vector = encoder_vector + e;
+
+      // Record learnt encoders
+      // **NOTE** idea here is that by interspersing these between encoding
+      // operations, write buffer should have time to be written out
+      record_learnt_encoders(&record_encoders,
+        n_dims, learnt_encoder_vector);
+
+      // If neuron's not in refractory period,
+      // apply input encoded by learnt encoders
+      if(!in_refractory_period)
+      {
+        neuron_input += dot_product(n_dims, learnt_encoder_vector,
+                                    filtered_input->output);
+      }
+    }
+
+    // If the neuron's in its refractory period, decrement the refractory counter
+    if (in_refractory_period)
     {
       neuron_refractory_decrement(n, ensemble->state);
     }
@@ -58,11 +116,9 @@ void simulate_neurons(
     {
       // Compute the neuron input, this is a combination of (a) the bias, (b)
       // the inhibitory input times the gain and (c) the encoded input.
-      value_t neuron_input = ensemble->bias[n];
+      neuron_input += ensemble->bias[n];
       neuron_input += inhib_input * ensemble->gain[n];
-      neuron_input += dot_product(n_dims,
-                                  &ensemble->encoders[n_dims * n],
-                                  input);
+      neuron_input += dot_product(n_dims, encoder_vector, input);
 
       // Perform the neuron update
       if (neuron_step(n, neuron_input, ensemble->state, &record_voltages))
@@ -71,6 +127,14 @@ void simulate_neurons(
         // constructing.
         local_spikes |= bit;
         record_spike(&record_spikes, n);
+
+        // Apply effect of neuron spiking to filtered activities
+        //filtered_activity_neuron_spiked(n);
+
+        // Update non-filtered learning rules
+        pes_neuron_spiked(n, &modulatory_filters);
+        voja_neuron_spiked(encoder_vector, ensemble->gain[n],
+                           &modulatory_filters, &learnt_encoder_filters);
       }
     }
 
@@ -152,8 +216,15 @@ void mcpl_received(uint key, uint payload)
   input_filtering_input_with_dimension_offset(&input_filters, key, payload,
                                               offset, max_dim_sub_one);
 
+  // Learnt encoder input
+  input_filtering_input_with_dimension_offset(&learnt_encoder_filters, key, payload,
+                                              offset, max_dim_sub_one);
+
   // Inhibitory
   input_filtering_input(&inhibition_filters, key, payload);
+
+  // Modulatory
+  input_filtering_input(&modulatory_filters, key, payload);
 }
 /*****************************************************************************/
 
@@ -262,6 +333,8 @@ void timer_tick(uint ticks, uint arg1)
 
   input_filtering_step(&input_filters);
   input_filtering_step(&inhibition_filters);
+  input_filtering_step_no_accumulate(&modulatory_filters);
+  input_filtering_step_no_accumulate(&learnt_encoder_filters);
 
   profiler_write_entry(PROFILER_EXIT | PROFILER_INPUT_FILTER);
 
@@ -312,7 +385,7 @@ void c_main(void)
   // Store an offset into the input vector
   ensemble.input_local =
     &ensemble.input[ensemble.parameters.input_subspace.offset];
-  sdram_input_vector_local =&ensemble.parameters.sdram_input_vector[
+  sdram_input_vector_local = &ensemble.parameters.sdram_input_vector[
     ensemble.parameters.input_subspace.offset
   ];
 
@@ -339,6 +412,15 @@ void c_main(void)
   inhibition_filters.output_size = 1;
   inhibition_filters.output = &ensemble.inhibitory_input;
 
+  input_filtering_get_filters(&modulatory_filters,
+                              region_start(MODULATORY_FILTERS_REGION, address));
+  input_filtering_get_routes(&modulatory_filters,
+                             region_start(MODULATORY_ROUTING_REGION, address));
+
+  input_filtering_get_filters(&learnt_encoder_filters,
+                              region_start(LEARNT_ENCODER_FILTERS_REGION, address));
+  input_filtering_get_routes(&learnt_encoder_filters,
+                             region_start(LEARNT_ENCODER_ROUTING_REGION, address));
   // Copy in encoders
   uint encoder_size = sizeof(value_t) * ensemble.parameters.n_neurons *
                       ensemble.parameters.n_dims;
@@ -401,6 +483,24 @@ void c_main(void)
   // Prepare the neuron state
   lif_prepare_state(&ensemble, region_start(NEURON_REGION, address));
 
+  // Initialise learning rule regions
+  if(!pes_initialise(region_start(PES_REGION, address)))
+  {
+    return;
+  }
+
+  if(!voja_initialise(region_start(VOJA_REGION, address)))
+  {
+    return;
+  }
+
+  // Initialise filtered activity region
+  /*if(!filtered_activity_initialise(
+    region_start(FILTERED_ACTIVITY_REGION, address)))
+  {
+    return;
+  }*/
+
   // Prepare the profiler
   profiler_read_region(region_start(PROFILER_REGION, address));
   profiler_init(ensemble.parameters.n_profiler_samples);
@@ -414,6 +514,14 @@ void c_main(void)
     return;
   }
 
+  record_encoders.record = ensemble.parameters.flags & RECORD_ENCODERS;
+  if (!record_buffer_initialise_spikes(
+        &record_spikes, region_start(REC_SPIKES_REGION, address),
+        ensemble.parameters.n_neurons))
+  {
+    return;
+  }
+
   record_spikes.record = ensemble.parameters.flags & RECORD_SPIKES;
   if (!record_buffer_initialise_spikes(
         &record_spikes, region_start(REC_SPIKES_REGION, address),
@@ -421,6 +529,14 @@ void c_main(void)
   {
     return;
   }
+
+  record_encoders.record = ensemble.parameters.flags & RECORD_ENCODERS;
+  if (!record_learnt_encoders_initialise(&record_encoders,
+        region_start(REC_ENCODERS_REGION, address)))
+  {
+    return;
+  }
+
   // --------------------------------------------------------------------------
 
   // --------------------------------------------------------------------------

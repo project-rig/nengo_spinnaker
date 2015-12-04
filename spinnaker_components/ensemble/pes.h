@@ -18,6 +18,11 @@
 #ifndef __PES_H_
 #define __PES_H_
 
+// Common includes
+#include "common-typedefs.h"
+#include "input_filtering.h"
+
+// Ensemble includes
 #include "ensemble.h"
 
 //----------------------------------
@@ -52,7 +57,7 @@ extern pes_parameters_t *g_pes_learning_rules;
 /**
 * \brief When using non-filtered activity, applies PES when neuron spikes
 */
-static inline void pes_neuron_spiked(uint n)
+static inline void pes_neuron_spiked(uint n, const if_collection_t *modulatory_filters)
 {
   // Loop through all the learning rules
   for(uint32_t l = 0; l < g_num_pes_learning_rules; l++)
@@ -61,15 +66,15 @@ static inline void pes_neuron_spiked(uint n)
     const pes_parameters_t *parameters = &g_pes_learning_rules[l];
     if(parameters->activity_filter_index == -1)
     {
-      // Extract input signal from filter
-      const filtered_input_buffer_t *filtered_input = g_input_modulatory.filters[parameters->error_signal_filter_index];
-      const value_t *filtered_error_signal = filtered_input->filtered;
+      // Extract input signal from filter's output
+      const if_filter_t *filtered_input = &modulatory_filters->filters[parameters->error_signal_filter_index];
+      const value_t *filtered_error_signal = filtered_input->output;
 
       // Get filtered activity of this neuron and it's decoder vector
       value_t *decoder_vector = neuron_decoder_vector(n);
 
       // Loop through output dimensions and apply PES to decoder values offset by output offset
-      for(uint d = 0; d < filtered_input->d_in; d++)
+      for(uint d = 0; d < filtered_input->size; d++)
       {
         decoder_vector[d + parameters->decoder_output_offset] -= (parameters->learning_rate * filtered_error_signal[d]);
       }
@@ -84,10 +89,10 @@ static inline void pes_neuron_spiked(uint n)
 * \brief Copy in data controlling the PES learning 
 * rule from the PES region of the Ensemble.
 */
-bool get_pes(address_t address);
+bool pes_initialise(address_t address);
 
 
-void pes_step();
+//void pes_step(const if_collection_t *modulatory_filters);
 
 /** @} */
 

@@ -18,6 +18,11 @@
 #ifndef __VOJA_H__
 #define __VOJA_H__
 
+// Common includes
+#include "common-typedefs.h"
+#include "input_filtering.h"
+
+// Ensemble includes
 #include "ensemble.h"
 
 //----------------------------------
@@ -58,13 +63,15 @@ extern value_t g_voja_one_over_radius;
 /**
 * \brief Helper to get the Voja learning rate - can be modified at runtime with a signal
 */
-static inline value_t voja_get_learning_rate(const voja_parameters_t *parameters)
+static inline value_t voja_get_learning_rate(const voja_parameters_t *parameters,
+                                             const if_collection_t *modulatory_filters)
 {
     // If a learning signal filter index is specified, read the value
     // from it's first dimension and multiply by the constant error rate
     if(parameters->learning_signal_filter_index != -1)
     {
-      value_t positive_learning_rate = 1.0k + g_input_modulatory.filters[parameters->learning_signal_filter_index]->filtered[0];
+      const if_filter_t *decoded_learning_input = &modulatory_filters->filters[parameters->learning_signal_filter_index];
+      value_t positive_learning_rate = 1.0k + decoded_learning_input->output[0];
       return parameters->learning_rate * positive_learning_rate;
     }
     // Otherwise, just return the constant learning rate
@@ -77,7 +84,9 @@ static inline value_t voja_get_learning_rate(const voja_parameters_t *parameters
 /**
 * \brief When using non-filtered activity, applies Voja when neuron spikes
 */
-static inline void voja_neuron_spiked(uint n)
+static inline void voja_neuron_spiked(value_t *encoder_vector, value_t gain,
+                                      const if_collection_t *modulatory_filters,
+                                      const if_collection_t *learnt_encoder_filters)
 {
   // Loop through all the learning rules
   for(uint32_t l = 0; l < g_num_voja_learning_rules; l++)
@@ -87,22 +96,22 @@ static inline void voja_neuron_spiked(uint n)
     if(parameters->activity_filter_index == -1)
     {
       // Get learning rate
-      const value_t learning_rate = voja_get_learning_rate(parameters);
+      const value_t learning_rate = voja_get_learning_rate(parameters, modulatory_filters);
 
       // Extract decoded input signal from filter
-      const filtered_input_buffer_t *decoded_input = g_input_learnt_encoder.filters[parameters->decoded_input_filter_index];
-      const value_t *decoded_input_signal = decoded_input->filtered;
+      const if_filter_t *decoded_input = &learnt_encoder_filters->filters[parameters->decoded_input_filter_index];
+      const value_t *decoded_input_signal = decoded_input->output;
 
       // Get this neuron's encoder vector, offset by the encoder offset
-      value_t *encoder_vector = neuron_encoder_vector(n) + parameters->encoder_offset;
+      value_t *learnt_encoder_vector = encoder_vector + parameters->encoder_offset;
 
       // Calculate scaling factor for input
-      const value_t input_scale = learning_rate * g_ensemble.gain[n] * g_voja_one_over_radius;
+      const value_t input_scale = learning_rate * gain * g_voja_one_over_radius;
 
       // Loop through input dimensions
-      for(uint d = 0; d < decoded_input->d_in; d++)
+      for(uint d = 0; d < decoded_input->size; d++)
       {
-        encoder_vector[d] += (input_scale * decoded_input_signal[d]) - (learning_rate * encoder_vector[d]);
+        encoder_vector[d] += (input_scale * decoded_input_signal[d]) - (learning_rate * learnt_encoder_vector[d]);
       }
     }
   }
@@ -115,12 +124,14 @@ static inline void voja_neuron_spiked(uint n)
 * \brief Copy in data controlling the Voja learning
 * rule from the Voja region of the Ensemble.
 */
-bool get_voja(address_t address);
+bool voja_initialise(address_t address);
 
 /**
 * \brief Apply voja learning to encoders
 */
-void voja_step();
+//void voja_step(const if_collection_t *modulatory_filters,
+//               const if_collection_t *learnt_encoder_filters,
+//               const value_t *gain);
 
 /** @} */
 
