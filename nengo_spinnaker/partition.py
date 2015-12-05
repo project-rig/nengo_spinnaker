@@ -2,6 +2,7 @@
 import collections
 import math
 from six import iteritems
+from six.moves import zip
 
 
 class Constraint(collections.namedtuple("Constraint",
@@ -54,7 +55,38 @@ def partition(initial_slice, constraints_and_getters):
     Yields
     ------
     :py:class:`slice`
-        Slices which meet satisfy all the constraints.
+        Slices which satisfy all the constraints.
+
+    Raises
+    ------
+    UnpartitionableError
+        If the given problem cannot be solved by this partitioner.
+    """
+    # Partition using `partition_multiple` and return the first (and only)
+    # element of each of the resulting tuples of slices.
+    for sl, in partition_multiple((initial_slice, ), constraints_and_getters):
+        yield sl
+
+
+def partition_multiple(initial_slices, constraints_and_getters):
+    """Construct a list of slices which satisfy a set of constraints.
+
+    Parameters
+    ----------
+    initial_slices : (:py:class:`slice`, ...)
+        Tuple of slices to partition
+    constraints_and_getters : {:py:class:`~.Constraint`: func, ...}
+        Dictionary mapping constraints to functions which will accept slices
+        and return the current usage of the resource for the given slices.
+
+    ..note::
+        It is assumed that the object being sliced is homogeneous, i.e., there
+        is no difference in usage for `slice(0, 10)` and `slice(10, 20)`.
+
+    Yields
+    ------
+    (:py:class:`slice`, ...)
+        Slices which satisfy all the constraints.
 
     Raises
     ------
@@ -64,23 +96,23 @@ def partition(initial_slice, constraints_and_getters):
     def constraints_unsatisfied(slices, constraints):
         for s in slices:
             for constraint, usage in iteritems(constraints):
-                yield constraint.max_usage < usage(s)
+                yield constraint.max_usage < usage(*s)
 
     # Normalise the slice
-    if initial_slice.start is None:
-        initial_slice = slice(0, initial_slice.stop)
+    initial_slices = tuple(slice(0, sl.stop) if sl.start is None else sl
+                           for sl in initial_slices)
 
     # While any of the slices fail to satisfy a constraint we partition further
     n_cuts = 1
-    max_cuts = initial_slice.stop - initial_slice.start
-    slices = [initial_slice]
+    max_cuts = max(sl.stop - sl.start for sl in initial_slices)
+    slices = [initial_slices]
 
     while any(constraints_unsatisfied(slices, constraints_and_getters)):
         if n_cuts == 1:
             # If we haven't performed any partitioning then we get the first
             # number of cuts to make.
             n_cuts = max(
-                int(math.ceil(usage(initial_slice) / c.max_usage)) for
+                int(math.ceil(usage(*initial_slices) / c.max_usage)) for
                 c, usage in iteritems(constraints_and_getters)
             )
         else:
@@ -93,11 +125,10 @@ def partition(initial_slice, constraints_and_getters):
             raise UnpartitionableError
 
         # Partition
-        slices = divide_slice(initial_slice, n_cuts)
+        slices = zip(*(divide_slice(sl, n_cuts) for sl in initial_slices))
 
     # Yield the partitioned slices
-    for s in divide_slice(initial_slice, n_cuts):
-        yield s
+    return zip(*(divide_slice(sl, n_cuts) for sl in initial_slices))
 
 
 def divide_slice(initial_slice, n_slices):
