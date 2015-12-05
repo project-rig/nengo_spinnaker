@@ -70,6 +70,76 @@ class TestPartition(object):
             list(pac.partition(slice(100), constraints))
 
 
+class TestPartitionMultiple(object):
+    """Test partitioning multiple slices simultaneously."""
+    def test_no_partitioning(self):
+        # Create the constraint
+        constraint = pac.Constraint(100, 0.9)
+
+        # Create the constraint -> usage mapping
+        def cons(*slices):
+            return sum(sl.stop - sl.start for sl in slices) + 10
+
+        constraints = {constraint: cons}
+
+        # Perform the partitioning
+        assert (
+            list(pac.partition_multiple((slice(0, 40), slice(0, 30)),
+                                        constraints)) ==
+            list(pac.partition_multiple((slice(40), slice(30)),
+                                        constraints)) ==
+            [(slice(0, 40), slice(0, 30))]
+        )
+
+    def test_single_partition_step(self):
+        # Create the constraint
+        constraint = pac.Constraint(50)
+
+        # Create the constraint -> usage mapping
+        def cons(*slices):
+            return sum(sl.stop - sl.start for sl in slices)
+
+        constraints = {constraint: cons}
+
+        # Perform the partitioning
+        assert (
+            list(pac.partition_multiple((slice(80), slice(20)), constraints))
+            == [(slice(0, 40), slice(0, 10)), (slice(40, 80), slice(10, 20))]
+        )
+
+    def test_multiple_partition_steps(self):
+        # Create the constraint
+        constraint = pac.Constraint(50)
+
+        # Create the constraint -> usage mapping
+        def cons(*slices):
+            return sum(sl.stop - sl.start for sl in slices) + 10
+
+        constraints = {constraint: cons}
+
+        # Perform the partitioning
+        assert (
+            list(pac.partition_multiple((slice(60), slice(30)), constraints))
+            == [(slice(0, 20), slice(0, 10)),
+                (slice(20, 40), slice(10, 20)),
+                (slice(40, 60), slice(20, 30))]
+        )
+
+    def test_unpartitionable(self):
+        # Create the constraint
+        constraint = pac.Constraint(50)
+
+        # Create the constraint -> usage mapping
+        def cons(*slices):
+            return sum(sl.stop - sl.start for sl in slices) + 50
+
+        constraints = {constraint: cons}
+
+        # Perform the partitioning
+        with pytest.raises(pac.UnpartitionableError):
+            list(pac.partition_multiple((slice(10), slice(2)), constraints))
+
+
 @pytest.mark.parametrize(
     "start, stop, n_items",
     [(0, 10, 5), (0, 10, 4), (0, 10, 6)]
