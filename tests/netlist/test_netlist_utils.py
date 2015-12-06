@@ -1,20 +1,22 @@
 import pytest
 
 from nengo_spinnaker.utils.keyspaces import KeyspaceContainer
-from nengo_spinnaker.netlist import Net, Vertex, utils
+from nengo_spinnaker.netlist import NMNet, Vertex, utils
 
 
 def test_get_nets_for_placement():
     """Test that Rig nets can be generated to be used during the placement."""
     # Create the vertices
-    a = [object(), object()]
-    b = [object(), object()]
+    a = object()
+    b = object()
     c = object()
+    d = object()
+    e = object()
 
     # Create the nets
-    ab = Net(a, b, 1.0, None)
-    bc = Net(b[0], c, 2.0, None)
-    nets = [ab, bc]
+    ab_cd = NMNet([a, b], [c, d], 1.0, None)
+    c_e = NMNet(c, e, 2.0, None)
+    nets = [ab_cd, c_e]
 
     # Get the placement nets
     placement_nets = list(utils.get_nets_for_placement(nets))
@@ -29,32 +31,36 @@ def test_get_nets_for_placement():
         seen_sources.add(net.source)
 
         # Check the source matches the sink
-        if net.sinks == b:
-            assert net.source in set(a)
-            assert net.weight == ab.weight
+        if net.sinks == [c, d]:
+            assert net.source in set([a, b])
+            assert net.weight == ab_cd.weight
         else:
-            assert net.source is b[0]
-            assert net.sinks == [c]
-            assert net.weight == bc.weight
+            assert net.source is c
+            assert net.sinks == [e]
+            assert net.weight == c_e.weight
+
+    assert seen_sources == set([a, b, c])
 
 
 def test_get_nets_for_routing():
     """Test that Rig nets can be generated to be used during the routing."""
     # Create the vertices
-    a = [object(), object()]
-    b = [object(), object()]
+    a = object()
+    b = object()
     c = object()
+    d = object()
+    e = object()
 
     # Create the nets
-    ab = Net(a, b, 1.0, None)
-    bc = Net(b, c, 2.0, None)
-    nets = [ab, bc]
+    ab_cd = NMNet([a, b], [c, d], 1.0, None)
+    cd_e = NMNet([c, d], e, 2.0, None)
+    nets = [ab_cd, cd_e]
 
     # Create some placements:
-    #  - A[0, 1] placed on the same chip
-    #  - B[0, 1] placed on different chips
-    placements = {a[0]: (0, 0), a[1]: (0, 0),
-                  b[0]: (1, 0), b[1]: (0, 1), c: (1, 1)}
+    #  - a and b placed on the same chip
+    #  - c and d placed on different chips
+    placements = {a: (0, 0), b: (0, 0),
+                  c: (1, 0), d: (0, 1), e: (1, 1)}
 
     # Get the routing nets
     routing_nets, extended_placements, derived_nets = \
@@ -62,40 +68,43 @@ def test_get_nets_for_routing():
 
     # Check that the routing nets are sane
     assert len(routing_nets) == 3
-    seen_b_placements = set()
-    expected_b_placements = {placements[b[0]], placements[b[1]]}
+    seen_cd_placements = set()
+    expected_cd_placements = {placements[c], placements[d]}
 
     for net in routing_nets:
-        if net.sinks == b:
-            assert net.weight == ab.weight
+        if net.sinks == [c, d]:
+            assert net.weight == ab_cd.weight
 
-            # Source should have been A, check the extended placement is
+            # Source should have been a and b, check the extended placement is
             # correct
             assert net.source not in placements
-            assert extended_placements[net.source] == placements[a[0]]
+            assert extended_placements[net.source] == placements[a]
+            assert extended_placements[net.source] == placements[b]
 
             # Check that the net is correctly identified in the derived nets
             # mapping.
-            assert derived_nets[ab][placements[a[0]]] is net
+            assert derived_nets[ab_cd][placements[a]] is net
         else:
-            assert net.sinks == [c]
-            assert net.weight == bc.weight
+            assert net.sinks == [e]
+            assert net.weight == cd_e.weight
 
-            # Source should have been one of the Bs, check that the placement
+            # Source should have been one of c or d, check that the placement
             # is appropriate.
             assert net.source not in placements
             placement = extended_placements[net.source]
-            assert placement in expected_b_placements
-            assert placement not in seen_b_placements
-            seen_b_placements.add(placement)
+            assert placement in expected_cd_placements
+            assert placement not in seen_cd_placements
+            seen_cd_placements.add(placement)
 
             # Check that the net is correctly identified in the derived nets
             # mapping.
-            assert derived_nets[bc][placement] is net
+            assert derived_nets[cd_e][placement] is net
+
+    assert seen_cd_placements == expected_cd_placements
 
     # Check that the original vertices are still present in the extended
     # placements.
-    for v in [a[0], a[1], b[0], b[1], c]:
+    for v in [a, b, c, d, e]:
         assert extended_placements[v] == placements[v]
 
 
@@ -146,9 +155,9 @@ def test_get_net_keyspaces():
 
     # Create the nets
     nets = [
-        Net(vertex_A, vertex_B, 1.0, ksc["nengo"](object=0, connection=0)),
-        Net(vertex_B, vertex_A, 2.0, ksc["nengo"](object=1, connection=0)),
-        Net(vertex_A, vertex_A, 3.0, ksc["spam"]),
+        NMNet(vertex_A, vertex_B, 1.0, ksc["nengo"](object=0, connection=0)),
+        NMNet(vertex_B, vertex_A, 2.0, ksc["nengo"](object=1, connection=0)),
+        NMNet(vertex_A, vertex_A, 3.0, ksc["spam"]),
     ]
 
     # Identify groups
@@ -203,9 +212,9 @@ def test_get_net_keyspaces_fails_for_inconsistent_cluster():
 
     # Create the nets
     nets = [
-        Net(vertex_A, vertex_B, 1.0, ksc["nengo"](object=0, connection=0)),
-        Net(vertex_B, vertex_A, 2.0, ksc["nengo"](object=1, connection=0)),
-        Net(vertex_A, vertex_A, 3.0, ksc["spam"]),
+        NMNet(vertex_A, vertex_B, 1.0, ksc["nengo"](object=0, connection=0)),
+        NMNet(vertex_B, vertex_A, 2.0, ksc["nengo"](object=1, connection=0)),
+        NMNet(vertex_A, vertex_A, 3.0, ksc["spam"]),
     ]
 
     # Identify groups

@@ -8,7 +8,7 @@ import numpy as np
 from six import itervalues
 
 from . import model
-from nengo_spinnaker.netlist import Net, Netlist
+from nengo_spinnaker.netlist import NMNet, Netlist
 from nengo_spinnaker.utils import collections as collections_ext
 from nengo_spinnaker.utils.keyspaces import KeyspaceContainer
 
@@ -353,8 +353,8 @@ class Model(object):
                 sinks.append(operator_vertices[sink])
 
             # Create the net(s)
-            nets.append(Net(sources, list(sinks),
-                        signal.weight, signal.keyspace))
+            nets.append(NMNet(sources, list(sinks),
+                              signal.weight, signal.keyspace))
 
         # Return a netlist
         return Netlist(

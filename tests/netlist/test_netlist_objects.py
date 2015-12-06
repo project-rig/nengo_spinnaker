@@ -2,7 +2,7 @@ import pytest
 import random
 from rig import machine
 
-from nengo_spinnaker.netlist.objects import Vertex, VertexSlice, Net
+from nengo_spinnaker.netlist.objects import Vertex, VertexSlice, NMNet
 
 
 def test_vertex():
@@ -41,7 +41,7 @@ def test_net(single_source, single_sink):
     keyspace = object()
 
     # Create the net
-    net = Net(sources, sinks, weight, keyspace)
+    net = NMNet(sources, sinks, weight, keyspace)
 
     # Check the net
     if single_source:

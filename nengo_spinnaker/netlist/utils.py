@@ -11,7 +11,7 @@ def get_nets_for_placement(nets):
 
     Parameters
     ----------
-    nets : [:py:class:`~nengo_spinnaker.netlist.Net`, ...]
+    nets : [:py:class:`~nengo_spinnaker.netlist.NMNet`, ...]
         N:M nets to convert
 
     Yields
@@ -31,7 +31,7 @@ def get_nets_for_routing(nets, placements):
 
     Parameters
     ----------
-    nets : [:py:class:`~nengo_spinnaker.netlist.Net`, ...]
+    nets : [:py:class:`~nengo_spinnaker.netlist.NMNet`, ...]
     placements : {vertex: (x, y), ...}
 
     Returns
@@ -41,7 +41,7 @@ def get_nets_for_routing(nets, placements):
     {vertex: (x, y), ...}
         An extended copy of the placements dictionary which must be used when
         performing routing with the returned nets.
-    {:py:class:`~nengo_spinnaker.netlist.Net`:
+    {:py:class:`~nengo_spinnaker.netlist.NMNet`:
             {(x, y): :py:class:`~rig.netlist.Net`, ...}, ...}
         Map from original nets to co-ordinates and the derived nets which
         originate from them.
@@ -132,7 +132,7 @@ def get_net_keyspaces(placements, derived_nets):
     Parameters
     ----------
     placements : {vertex: (x, y), ...}
-    derived_nets : {:py:class:`~nengo_spinnaker.netlist.Net`:
+    derived_nets : {:py:class:`~nengo_spinnaker.netlist.NMNet`:
                     {(x, y): :py:class:`~rig.netlist.Net`, ...}, ...}
         Map from original nets to co-ordinates and the derived nets which
         originate from them as, returned by :py:func:`~.get_routing_nets`.

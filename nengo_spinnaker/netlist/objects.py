@@ -1,4 +1,4 @@
-class Net(object):
+class NMNet(object):
     """A net represents connectivity from many to many vertices.
 
     Attributes

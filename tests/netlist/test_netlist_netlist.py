@@ -11,7 +11,7 @@ from nengo_spinnaker.utils.itertools import flatten
 
 
 def test_load_application():
-    """Test the steps involved in loading an application to a SpiNNaker
+    """Test the steps involved in loading an application onto a SpiNNaker
     machine.
 
      - Building and loading routing tables
@@ -44,7 +44,7 @@ def test_load_application():
     keyspace.get_mask.side_effect = get_mask
     keyspace.get_value.side_effect = get_value
 
-    # net = netlist.Net(v1, [v2a, v2b], 1, keyspace)
+    # net = netlist.NMNet(v1, [v2a, v2b], 1, keyspace)
     net = object()
 
     groups = [(v2a, v2b)]
