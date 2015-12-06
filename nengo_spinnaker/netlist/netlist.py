@@ -118,8 +118,12 @@ class Netlist(object):
         utils.identify_clusters(self.groups, self.placements)
 
         # Get the nets for routing
-        route_nets, extended_placements, derived_nets = \
-            utils.get_nets_for_routing(self.nets, self.placements)
+        (route_nets,
+         vertices_resources,  # Can safely overwrite the resource dictionary
+         extended_placements,
+         extended_allocations,
+         derived_nets) = utils.get_nets_for_routing(
+            vertices_resources, self.nets, self.placements, self.allocations)
 
         # Get a map from the nets we will route with to keyspaces
         self.net_keyspaces = utils.get_net_keyspaces(self.placements,
@@ -128,10 +132,11 @@ class Netlist(object):
         # Fix all keyspaces
         self.keyspaces.assign_fields()
 
-        # Finally, route all nets using the extended placements
+        # Finally, route all nets using the extended resource dictionary,
+        # placements and allocations.
         self.routes = route(vertices_resources, route_nets, machine,
                             self.constraints, extended_placements,
-                            self.allocations, **route_kwargs)
+                            extended_allocations, **route_kwargs)
 
     def load_application(self, controller):
         """Load the netlist to a SpiNNaker machine.

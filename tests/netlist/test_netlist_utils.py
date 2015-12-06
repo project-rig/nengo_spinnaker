@@ -1,4 +1,5 @@
 import pytest
+from rig.machine import Cores
 
 from nengo_spinnaker.utils.keyspaces import KeyspaceContainer
 from nengo_spinnaker.netlist import NMNet, Vertex, utils
@@ -62,9 +63,24 @@ def test_get_nets_for_routing():
     placements = {a: (0, 0), b: (0, 0),
                   c: (1, 0), d: (0, 1), e: (1, 1)}
 
+    # Create some resource requirements
+    vertices_resources = {a: {Cores: 1},
+                          b: {Cores: 2},
+                          c: {Cores: 3},
+                          d: {Cores: 4},
+                          e: {Cores: 5}}
+
+    # And create some sample allocations
+    allocations = {a: {Cores: slice(1, 2)},
+                   b: {Cores: slice(2, 4)},
+                   c: {Cores: slice(1, 4)},
+                   d: {Cores: slice(1, 5)},
+                   e: {Cores: slice(1, 6)}}
+
     # Get the routing nets
-    routing_nets, extended_placements, derived_nets = \
-        utils.get_nets_for_routing(nets, placements)
+    (routing_nets, extended_resources, extended_placements,
+     extended_allocations, derived_nets) = utils.get_nets_for_routing(
+        vertices_resources, nets, placements, allocations)
 
     # Check that the routing nets are sane
     assert len(routing_nets) == 3
@@ -72,6 +88,10 @@ def test_get_nets_for_routing():
     expected_cd_placements = {placements[c], placements[d]}
 
     for net in routing_nets:
+        # Check the sources is in the extended allocations and resources.
+        assert extended_resources[net.source] == dict()
+        assert extended_allocations[net.source] == dict()
+
         if net.sinks == [c, d]:
             assert net.weight == ab_cd.weight
 
@@ -106,6 +126,8 @@ def test_get_nets_for_routing():
     # placements.
     for v in [a, b, c, d, e]:
         assert extended_placements[v] == placements[v]
+        assert extended_resources[v] == vertices_resources[v]
+        assert extended_allocations[v] == allocations[v]
 
 
 def test_identify_clusters():
@@ -149,6 +171,8 @@ def test_get_net_keyspaces():
         vertex_A[2]: (0, 1), vertex_A[3]: (0, 1),
         vertex_B: (0, 0)
     }
+    resources = {v: {} for v in placements}
+    allocations = {v: {} for v in placements}
 
     # Create a container for the keyspaces
     ksc = KeyspaceContainer()
@@ -168,7 +192,8 @@ def test_get_net_keyspaces():
     assert vertex_B.cluster is None  # Not clustered
 
     # Get the routing nets
-    _, _, derived_nets = utils.get_nets_for_routing(nets, placements)
+    _, _, _, _, derived_nets = utils.get_nets_for_routing(
+        resources, nets, placements, allocations)
 
     # Get the net keyspaces
     net_keyspaces = utils.get_net_keyspaces(placements, derived_nets)
@@ -206,6 +231,8 @@ def test_get_net_keyspaces_fails_for_inconsistent_cluster():
         vertex_A[2]: (0, 1), vertex_A[3]: (0, 1),
         vertex_B: (0, 0)
     }
+    resources = {v: {} for v in placements}
+    allocations = {v: {} for v in placements}
 
     # Create a container for the keyspaces
     ksc = KeyspaceContainer()
@@ -227,7 +254,8 @@ def test_get_net_keyspaces_fails_for_inconsistent_cluster():
     vertex_A[3].cluster = 3
 
     # Get the routing nets
-    _, _, derived_nets = utils.get_nets_for_routing(nets, placements)
+    _, _, _, _, derived_nets = utils.get_nets_for_routing(
+        resources, nets, placements, allocations)
 
     # Get the net keyspaces
     with pytest.raises(AssertionError):

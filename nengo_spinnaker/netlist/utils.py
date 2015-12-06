@@ -25,21 +25,29 @@ def get_nets_for_placement(nets):
             yield rig.netlist.Net(source, net.sinks, net.weight)
 
 
-def get_nets_for_routing(nets, placements):
+def get_nets_for_routing(resources, nets, placements, allocations):
     """Convert a list of N:M nets into a list of Rig nets suitable for
     performing routing.
 
     Parameters
     ----------
+    resources : {vertex: {resource: requirement}, ...}
     nets : [:py:class:`~nengo_spinnaker.netlist.NMNet`, ...]
     placements : {vertex: (x, y), ...}
+    allocations : {vertex: {resource: :py:class:`slice`}, ...}
 
     Returns
     -------
     [:py:class:`~rig.netlist.Net`, ...]
         1:M net suitable for use with Rig for routing purposes.
+    {vertex: {resource: requirement}, ...}
+        An extended copy of the resources dictionary which must be used when
+        performing routing with the returned nets.
     {vertex: (x, y), ...}
         An extended copy of the placements dictionary which must be used when
+        performing routing with the returned nets.
+    {vertex: {resource: :py:class:`slice`}, ...}
+        An extended copy of the allocations dictionary which must be used when
         performing routing with the returned nets.
     {:py:class:`~nengo_spinnaker.netlist.NMNet`:
             {(x, y): :py:class:`~rig.netlist.Net`, ...}, ...}
@@ -47,7 +55,9 @@ def get_nets_for_routing(nets, placements):
         originate from them.
     """
     routing_nets = list()  # Nets with which to perform routing
+    extended_resources = dict(resources)  # New requirements will be added
     extended_placements = dict(placements)  # New placements will be added
+    extended_allocations = dict(allocations)  # New allocations will be added
     derived_nets = collections.defaultdict(dict)  # {Net: {placement: rig.Net}}
 
     # For each Net build a set of all the co-ordinates from which the net now
@@ -61,6 +71,8 @@ def get_nets_for_routing(nets, placements):
             # Create a new source vertex and place it at the given placement
             vertex = object()
             extended_placements[vertex] = placement
+            extended_resources[vertex] = dict()
+            extended_allocations[vertex] = dict()
 
             # Create a new Rig Net using the new start vertex; add the new Net
             # to the dictionary of derived nets and the list of nets with which
@@ -69,7 +81,8 @@ def get_nets_for_routing(nets, placements):
             routing_nets.append(new_net)
             derived_nets[net][placement] = new_net
 
-    return routing_nets, extended_placements, derived_nets
+    return (routing_nets, extended_resources, extended_placements,
+            extended_allocations, derived_nets)
 
 
 def identify_clusters(groups, placements):
