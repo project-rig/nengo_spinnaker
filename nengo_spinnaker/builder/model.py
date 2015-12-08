@@ -156,14 +156,14 @@ class ConnectionMap(object):
         # For each source object and set of sinks yield a new signal
         for source, port_conns in iteritems(self._connections):
             # For each connection look at the sinks and the signal parameters
-            for (sig_pars, _), par_sinks in chain(*itervalues(port_conns)):
+            for (sig_pars, transmission_pars), par_sinks in \
+                    chain(*itervalues(port_conns)):
                 # Create a signal using these parameters
-                yield Signal(
-                    source,
-                    (ps.sink_object for ps in par_sinks),  # Extract the sinks
-                    sig_pars.keyspace,
-                    sig_pars.weight
-                )
+                yield (Signal(source,
+                              (ps.sink_object for ps in par_sinks),  # Sinks
+                              sig_pars.keyspace,
+                              sig_pars.weight),
+                       transmission_pars)
 
 
 class OutputPort(enum.Enum):

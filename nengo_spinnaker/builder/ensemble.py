@@ -9,6 +9,7 @@ from nengo.utils import numpy as npext
 import numpy as np
 
 from .builder import BuiltConnection, Model, ObjectPort, spec
+from .connection import EnsembleTransmissionParameters
 from .model import InputPort
 from .ports import EnsembleInputPort
 from .. import operators
@@ -137,37 +138,6 @@ def build_lif(model, ens):
     model.object_operators[ens] = operators.EnsembleLIF(ens)
 
 
-class EnsembleTransmissionParameters(object):
-    """Transmission parameters for a connection originating at an Ensemble.
-
-    Attributes
-    ----------
-    decoders : array
-        Decoders to use for the connection (including the transform).
-    """
-    def __init__(self, decoders):
-        # Copy the decoders
-        self.decoders = np.array(decoders)
-
-    def __ne__(self, other):
-        return not (self == other)
-
-    def __eq__(self, other):
-        # Equal iff. the objects are of the same type
-        if type(self) is not type(other):
-            return False
-
-        # Equal iff. the decoders are the same shape
-        if self.decoders.shape != other.decoders.shape:
-            return False
-
-        # Equal iff. the decoder values are the same
-        if np.any(self.decoders != other.decoders):
-            return False
-
-        return True
-
-
 @Model.transmission_parameter_builders.register(nengo.Ensemble)
 def build_from_ensemble_connection(model, conn):
     """Build the parameters object for a connection from an Ensemble."""
@@ -198,10 +168,7 @@ def build_from_ensemble_connection(model, conn):
             np.all(transform[0, :] == transform[1:, :])):
         transform = np.array([transform[0]])
 
-    # Multiply the decoders by the transform and return this as the
-    # transmission parameters.
-    full_decoders = np.dot(transform, decoders.T).T
-    return EnsembleTransmissionParameters(full_decoders)
+    return EnsembleTransmissionParameters(decoders, transform)
 
 
 @Model.transmission_parameter_builders.register(nengo.ensemble.Neurons)

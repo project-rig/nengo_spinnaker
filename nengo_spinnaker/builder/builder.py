@@ -344,13 +344,43 @@ class Model(object):
 
         # Construct nets from the signals
         nets = list()
-        for signal in self.connection_map.get_signals():
+        for signal, transmission_parameters in \
+                self.connection_map.get_signals():
             # Get the source and sink vertices
-            sources = operator_vertices[signal.source]
+            original_sources = operator_vertices[signal.source]
+            if not isinstance(original_sources, collections.Iterable):
+                original_sources = (original_sources, )
+
+            # Filter out any sources which have an `accepts_signal` method and
+            # return False when this is called with the signal and transmission
+            # parameters.
+            sources = list()
+            for source in original_sources:
+                # For each source which either doesn't have a
+                # `transmits_signal` method or returns True when this is called
+                # with the signal and transmission parameters add a new net to
+                # the netlist.
+                if (hasattr(source, "transmits_signal") and not
+                        source.transmits_signal(signal,
+                                                transmission_parameters)):
+                    pass  # This source is ignored
+                else:
+                    # Add the source to the final list of sources
+                    sources.append(source)
 
             sinks = collections_ext.flatinsertionlist()
             for sink in signal.sinks:
-                sinks.append(operator_vertices[sink])
+                # Get all the sink vertices
+                sink_vertices = operator_vertices[sink]
+                if not isinstance(sink_vertices, collections.Iterable):
+                    sink_vertices = (sink_vertices, )
+
+                # Include any sinks which either don't have an `accepts_signal`
+                # method or return true when this is called with the signal and
+                # transmission parameters.
+                sinks.append(s for s in sink_vertices if
+                             not hasattr(s, "accepts_signal") or
+                             s.accepts_signal(signal, transmission_parameters))
 
             # Create the net(s)
             nets.append(NMNet(sources, list(sinks),
