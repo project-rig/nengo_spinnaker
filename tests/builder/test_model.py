@@ -291,23 +291,26 @@ class TestConnectionMap(object):
 
         # Add the connections
         cm = model.ConnectionMap()
+        tp_a = mock.Mock(name="Transmission Parameters A")
+        tp_b = mock.Mock(name="Transmission Parameters B")
+
         cm.add_connection(
             obj_a, None, model.SignalParameters(weight=3, keyspace=ks_abc),
-            None, obj_b, None, None
+            tp_a, obj_b, None, None
         )
         cm.add_connection(
             obj_a, None, model.SignalParameters(weight=3, keyspace=ks_abc),
-            None, obj_c, None, None
+            tp_a, obj_c, None, None
         )
         cm.add_connection(
             obj_c, None, model.SignalParameters(weight=5, keyspace=ks_cb),
-            None, obj_b, None, None
+            tp_b, obj_b, None, None
         )
 
         # Get the signals, this should be a list of two signals
         signals = list(cm.get_signals())
         assert len(signals) == 2
-        for signal in signals:
+        for signal, transmission_params in signals:
             if signal.source is obj_a:
                 # Assert the sinks are correct
                 assert len(signal.sinks) == 2
@@ -319,9 +322,15 @@ class TestConnectionMap(object):
 
                 # Assert the weight is correct
                 assert signal.weight == 3
+
+                # Assert the correct paired transmission parameters are used.
+                assert transmission_params is tp_a
             else:
                 # Source should be C, sink B
                 assert signal.source is obj_c
                 assert signal.sinks == [obj_b]
                 assert signal.keyspace is ks_cb
                 assert signal.weight == 5
+
+                # Assert the correct paired transmission parameters are used.
+                assert transmission_params is tp_b
