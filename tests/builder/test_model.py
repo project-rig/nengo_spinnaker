@@ -165,26 +165,25 @@ class TestConnectionMap(object):
         # Add the default keyspace
         ks = mock.Mock()
         kss = {
-            (0, 0): mock.Mock(name="Keyspace00"),
-            (0, 1): mock.Mock(name="Keyspace01"),
-            (1, 0): mock.Mock(name="Keyspace20"),
-            (1, 1): mock.Mock(name="Keyspace21"),
+            0: mock.Mock(name="Keyspace00"),
+            1: mock.Mock(name="Keyspace01"),
+            2: mock.Mock(name="Keyspace20"),
+            3: mock.Mock(name="Keyspace21"),
         }
-        ks.side_effect = lambda object, connection: kss[(object, connection)]
+        ks.side_effect = lambda connection_id: kss[connection_id]
 
         cm.add_default_keyspace(ks)
 
         # Ensure that the correct calls were made to "ks" in the correct order.
-        ks.assert_has_calls([mock.call(object=i, connection=j)
-                             for i in range(2) for j in range(2)])
+        ks.assert_has_calls([mock.call(connection_id=j) for j in range(4)])
 
         # Assert that the correct keyspaces were assigned to the correct
         # objects.
-        assert sp00.keyspace is kss[(0, 0)]
-        assert sp01.keyspace is kss[(0, 1)]
+        assert sp00.keyspace is kss[0]
+        assert sp01.keyspace is kss[1]
         assert sp10.keyspace is ks10
-        assert sp20.keyspace is kss[(1, 0)]
-        assert sp21.keyspace is kss[(1, 1)]
+        assert sp20.keyspace is kss[2]
+        assert sp21.keyspace is kss[3]
 
     def test_get_signals_from_object(self):
         # Create two ports

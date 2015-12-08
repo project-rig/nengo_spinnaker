@@ -30,7 +30,7 @@ def test_Keyspaces_and_is_nengo_keyspace():
     kss = keyspaces.KeyspaceContainer()
 
     default_ks = kss["nengo"]
-    default_ks(object=0, cluster=0, connection=0, index=0)
+    default_ks(connection_id=0, cluster=0, index=0)
 
     other_ks = kss["other"]
 

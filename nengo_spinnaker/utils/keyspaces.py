@@ -109,11 +109,9 @@ class KeyspaceContainer(collections.defaultdict):
 
         # Add the default keyspace
         nengo_ks = self["nengo"]
-        nengo_ks.add_field("object", tags=[self.routing_tag,
-                                           self.filter_routing_tag])
+        nengo_ks.add_field("connection_id", tags=[self.routing_tag,
+                                                  self.filter_routing_tag])
         nengo_ks.add_field("cluster", tags=[self.routing_tag])
-        nengo_ks.add_field("connection", tags=[self.routing_tag,
-                                               self.filter_routing_tag])
         nengo_ks.add_field("index", start_at=0)
 
     def assign_fields(self):

@@ -179,8 +179,8 @@ def test_get_net_keyspaces():
 
     # Create the nets
     nets = [
-        NMNet(vertex_A, vertex_B, 1.0, ksc["nengo"](object=0, connection=0)),
-        NMNet(vertex_B, vertex_A, 2.0, ksc["nengo"](object=1, connection=0)),
+        NMNet(vertex_A, vertex_B, 1.0, ksc["nengo"](connection_id=0)),
+        NMNet(vertex_B, vertex_A, 2.0, ksc["nengo"](connection_id=1)),
         NMNet(vertex_A, vertex_A, 3.0, ksc["spam"]),
     ]
 
@@ -239,8 +239,8 @@ def test_get_net_keyspaces_fails_for_inconsistent_cluster():
 
     # Create the nets
     nets = [
-        NMNet(vertex_A, vertex_B, 1.0, ksc["nengo"](object=0, connection=0)),
-        NMNet(vertex_B, vertex_A, 2.0, ksc["nengo"](object=1, connection=0)),
+        NMNet(vertex_A, vertex_B, 1.0, ksc["nengo"](connection_id=0)),
+        NMNet(vertex_B, vertex_A, 2.0, ksc["nengo"](connection_id=1)),
         NMNet(vertex_A, vertex_A, 3.0, ksc["spam"]),
     ]
 
