@@ -287,28 +287,6 @@ class TestNeuronSinks(object):
         assert sink.target.port is ensemble.EnsembleInputPort.neurons
 
 
-class TestEnsembleTransmissionParameters(object):
-    def test_eq_ne(self):
-        """Create a series of EnsembleTransmissionParameters and ensure that
-        they only report equal when they are.
-        """
-        class MyETP(ensemble.EnsembleTransmissionParameters):
-            pass
-
-        tp1 = ensemble.EnsembleTransmissionParameters(np.ones((3, 3)))
-        tp2 = ensemble.EnsembleTransmissionParameters(np.ones((1, 1)))
-        tp3 = ensemble.EnsembleTransmissionParameters(np.eye(3))
-        tp4 = MyETP(np.ones((3, 3)))
-
-        assert tp1 != tp2
-        assert tp1 != tp3
-        assert tp1 != tp4
-
-        tp5 = ensemble.EnsembleTransmissionParameters(np.ones((3, 3)))
-
-        assert tp1 == tp5
-
-
 class TestBuildFromEnsembleConnection(object):
     """Test the construction of parameters that describe connections from
     Ensembles.

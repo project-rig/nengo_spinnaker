@@ -8,8 +8,8 @@ from nengo_spinnaker import add_spinnaker_params
 from nengo_spinnaker.builder import Model
 from nengo_spinnaker.builder.model import OutputPort, InputPort
 from nengo_spinnaker.builder.node import (
-    NodeIOController, InputNode, OutputNode, NodeTransmissionParameters,
-    PassthroughNodeTransmissionParameters, build_node_transmission_parameters
+    NodeIOController, InputNode, OutputNode,
+    build_node_transmission_parameters
 )
 from nengo_spinnaker.operators import ValueSink
 
@@ -603,36 +603,6 @@ class TestBuildNodeTransmissionParameters(object):
         # Build the transmission parameters
         params = build_node_transmission_parameters(model, a_b)
         assert params.transform.shape == (1, 5)
-
-
-class TestNodeTransmissionParameters(object):
-    def test_eq_ne(self):
-        class MyNTP(NodeTransmissionParameters):
-            pass
-
-        # NodeTransmissionParameters are only equivalent if they are of the
-        # same type, they share the same pre_slice and transform.
-        pars = [
-            (NodeTransmissionParameters, (slice(0, 5), None, np.ones((5, 5)))),
-            (NodeTransmissionParameters, (slice(None), None, np.ones((5, 5)))),
-            (NodeTransmissionParameters, (slice(0, 5), None, np.eye(5))),
-            (NodeTransmissionParameters, (slice(0, 5), None, np.ones((1, 1)))),
-            (NodeTransmissionParameters,
-             (slice(0, 5), lambda x: x, np.ones((5, 5)))),
-            (MyNTP, (slice(0, 5), None, np.ones((5, 5)))),
-        ]
-        ntps = [cls(*args) for cls, args in pars]
-
-        # Check the inequivalence works
-        for a in ntps:
-            for b in ntps:
-                if a is not b:
-                    assert a != b
-
-        # Check that equivalence works
-        for a, b in zip(ntps, [cls(*args) for cls, args in pars]):
-            assert a is not b
-            assert a == b
 
 
 class TestInputNode(object):
