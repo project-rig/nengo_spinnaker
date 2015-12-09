@@ -41,17 +41,18 @@ class MulticastPacketSender(Vertex):
         """Load data to the machine."""
         # Get the memory
         region_mem = regions.utils.create_app_ptr_and_region_files(
-            netlist.vertices_memory[self.vertex], self.regions, None)
+            netlist.vertices_memory[self], self.regions, None)
 
         # Write the regions into memory
         for region, mem in zip(self.regions, region_mem):
-            region.write_subregion_to_file(mem, slice(None))
+            if region is not None:
+                region.write_subregion_to_file(mem, slice(None))
 
 
 class Packet(collections.namedtuple("Packet", "key, payload")):
     """Multicast Packet"""
     def __new__(cls, key, payload=None):
-        super(Packet, cls).__new__(cls, key, payload)
+        return super(Packet, cls).__new__(cls, key, payload)
 
 
 class PacketRegion(regions.Region):
@@ -69,8 +70,9 @@ class PacketRegion(regions.Region):
         data = struct.pack("<I", len(self.packets))
 
         for packet in self.packets:
-            data += struct.pack("<4I", 0x0, packet.key, packet.payload or 0x0,
+            print packet.key.get_value()
+            data += struct.pack("<4I", 0x0, packet.key.get_value(), packet.payload or 0x0,
                                 0x0 if packet.payload is None else 0x1)
-
+        print ",".join("{:02x}".format(ord(b)) for b in data)
         # Write the data to file
         fp.write(data)

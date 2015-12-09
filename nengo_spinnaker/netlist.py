@@ -287,9 +287,12 @@ class Netlist(object):
         # Write into memory the duration of the simulation
         for vertex in self.vertices:
             x, y = self.placements[vertex]
-            p = self.allocations[vertex][Cores].start
-            simulator.controller.write_vcpu_struct_field("user1", n_steps,
-                                                         x, y, p)
+
+            # If this vertex is located on a core i.e. it's not external
+            if Cores in self.allocations[vertex]:
+                p = self.allocations[vertex][Cores].start
+                simulator.controller.write_vcpu_struct_field("user1", n_steps,
+                                                            x, y, p)
 
         # Call all the "before simulation" functions
         for fn in self.before_simulation_functions:
