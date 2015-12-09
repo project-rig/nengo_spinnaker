@@ -18,6 +18,7 @@
 #include "neuron_lif.h"
 #include "pes.h"
 #include "recording.h"
+#include "spike_vector_processor.h"
 #include "voja.h"
 
 /*****************************************************************************/
@@ -167,7 +168,7 @@ void simulate_neurons(
 static value_t decode_spike_train(
   const uint32_t n_populations,        // Number of populations
   const uint32_t *population_lengths,  // Length of the populations
-  const value_t *decoder,              // Decoder to use
+  const value_t *decoder_row,          // Decoder to use
   const uint32_t *spikes               // Spike vector
 )
 {
@@ -204,13 +205,13 @@ static value_t decode_spike_train(
         if (skip < n)
         {
           // Skip until we reach the next neuron which fired
-          decoder += skip;
+          decoder_row += skip;
 
           // Decode the given neuron
-          output += *decoder;
+          output += *decoder_row;
 
           // Prepare to test the neuron after the one we just processed.
-          decoder++;
+          decoder_row++;
           skip++;              // Also skip the neuron we just decoded
           pop_length -= skip;  // Reduce the number of neurons left
           n -= skip;           // and the number left in this word.
@@ -219,7 +220,7 @@ static value_t decode_spike_train(
         else
         {
           // There are no neurons left in this word
-          decoder += n;     // Point at the decoder for the next neuron
+          decoder_row += n;     // Point at the decoder for the next neuron
           pop_length -= n;  // Reduce the number left in the population
           n = 0;            // No more neurons left to process
         }
@@ -236,11 +237,11 @@ static value_t decode_spike_train(
 // Apply the decoder to a spike vector and transmit multicast packets
 // representing the decoded vector.  This function will also apply any decoder
 // learning rules.
-static inline void decode_output_and_transmit(const ensemble_state_t *ensemble)
+void decode_output_and_transmit(const ensemble_state_t *ensemble)
 {
   profiler_write_entry(PROFILER_ENTER | PROFILER_DECODE);
 
-  // Extract parameters
+  // Extract parametersvalue_t output =
   uint32_t n_neurons_total = ensemble->parameters.n_neurons_total;
   uint32_t n_populations = ensemble->parameters.n_populations;
   uint32_t *pop_lengths = ensemble->population_lengths;
@@ -257,11 +258,18 @@ static inline void decode_output_and_transmit(const ensemble_state_t *ensemble)
   for (uint32_t d = 0; d < n_decoder_rows; d++)
   {
     // Get the row of the decoder
-    value_t *row = &decoder[d * n_neurons_total];
+    const value_t *row = &decoder[d * n_neurons_total];
 
-    // Compute the decoded value
-    value_t output = decode_spike_train(n_populations, pop_lengths,
-                                        row, spike_vector);
+    void advance(uint n) { row += n; }
+    // 'Lambda' function to apply current row entry to output
+    value_t output = 0.0k;
+    void apply() { output += *row; }
+
+    // Process spike vector using lambda functions
+    PROCESS_SPIKE_VECTOR(n_populations, pop_lengths, spike_vector,
+      advance,
+      apply);
+    //value_t output = decode_spike_train(n_populations, pop_lengths, row, spike_vector);
 
     //pes_neuron_spiked(d, &modulatory_filters);
 
