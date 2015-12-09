@@ -67,9 +67,10 @@ def get_ensemble_sink(model, connection):
         ens.direct_input += np.dot(transform, val)
     else:
         # If this connection has a learning rule
-        if conn.learning_rule is not None:
+        if connection.learning_rule is not None:
             # If the rule modifies encoders, sink it into learnt input port
-            if conn.learning_rule.learning_rule_type.modifies == "encoders":
+            modifies = connection.learning_rule.learning_rule_type.modifies
+            if modifies == "encoders":
                 return spec(ObjectPort(ens, EnsembleInputPort.learnt))
 
         # Otherwise we just sink into the Ensemble

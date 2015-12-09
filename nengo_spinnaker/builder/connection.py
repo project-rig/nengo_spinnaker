@@ -36,10 +36,13 @@ class EnsembleTransmissionParameters(object):
     decoders : array
         Decoders to use for the connection.
     """
-    def __init__(self, decoders, transform):
+    def __init__(self, decoders, transform, learning_rule):
         # Copy the decoders
         self.untransformed_decoders = np.array(decoders)
         self.transform = np.array(transform)
+
+        # Cache learning rule
+        self.learning_rule = learning_rule
 
         # Compute and store the transformed decoders
         self.decoders = np.dot(transform, decoders.T)
@@ -55,6 +58,10 @@ class EnsembleTransmissionParameters(object):
     def __eq__(self, other):
         # Equal iff. the objects are of the same type
         if type(self) is not type(other):
+            return False
+
+        # Equal iff. neither connection has a learning rule
+        if self.learning_rule is not None or other.learning_rule is not None:
             return False
 
         # Equal iff. the decoders are the same shape
