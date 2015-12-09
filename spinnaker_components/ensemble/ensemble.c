@@ -131,8 +131,7 @@ void simulate_neurons(
         // Apply effect of neuron spiking to filtered activities
         //filtered_activity_neuron_spiked(n);
 
-        // Update non-filtered learning rules
-        pes_neuron_spiked(n, &modulatory_filters);
+        // Update non-filtered Voja learning
         voja_neuron_spiked(encoder_vector, ensemble->gain[n],
                            &modulatory_filters, &learnt_encoder_filters);
       }
@@ -164,6 +163,76 @@ void simulate_neurons(
 /*****************************************************************************/
 
 /*****************************************************************************/
+// Decode a spike train to produce a single value
+static value_t decode_spike_train(
+  const uint32_t n_populations,        // Number of populations
+  const uint32_t *population_lengths,  // Length of the populations
+  const value_t *decoder,              // Decoder to use
+  const uint32_t *spikes               // Spike vector
+)
+{
+  // Resultant decoded value
+  value_t output = 0.0k;
+
+  // For each population
+  for (uint32_t p = 0; p < n_populations; p++)
+  {
+    // Get the number of neurons in this population
+    uint32_t pop_length = population_lengths[p];
+
+    // While we have neurons left to process
+    while (pop_length)
+    {
+      // Determine how many neurons are in the next word of the spike vector.
+      uint32_t n = (pop_length > 32) ? 32 : pop_length;
+
+      // Load the next word of the spike vector
+      uint32_t data = *(spikes++);
+
+      // Include the contribution from each neuron
+      while (n)  // While there are still neurons left
+      {
+        // Work out how many neurons we can skip
+        // XXX: The GCC documentation claims that `__builtin_clz(0)` is
+        // undefined, but the ARM instruction it uses is defined such that:
+        // CLZ 0x00000000 is 32
+        uint32_t skip = __builtin_clz(data);
+
+        // If `skip` is NOT less than `n` then there are either no firing
+        // neurons left in the word (`skip` == 32) or the first `1` in the word
+        // is beyond the range of bits we care about anyway.
+        if (skip < n)
+        {
+          // Skip until we reach the next neuron which fired
+          decoder += skip;
+
+          // Decode the given neuron
+          output += *decoder;
+
+          // Prepare to test the neuron after the one we just processed.
+          decoder++;
+          skip++;              // Also skip the neuron we just decoded
+          pop_length -= skip;  // Reduce the number of neurons left
+          n -= skip;           // and the number left in this word.
+          data <<= skip;       // Shift out processed neurons
+        }
+        else
+        {
+          // There are no neurons left in this word
+          decoder += n;     // Point at the decoder for the next neuron
+          pop_length -= n;  // Reduce the number left in the population
+          n = 0;            // No more neurons left to process
+        }
+      }
+    }
+  }
+
+  // Return the decoded value
+  return output;
+}
+/*****************************************************************************/
+
+/*****************************************************************************/
 // Apply the decoder to a spike vector and transmit multicast packets
 // representing the decoded vector.  This function will also apply any decoder
 // learning rules.
@@ -185,17 +254,19 @@ static inline void decode_output_and_transmit(const ensemble_state_t *ensemble)
   // Apply the decoder and transmit multicast packets.
   // Each decoder row is applied in turn to get the output value, which is then
   // transmitted.
-  for (uint32_t n = 0; n < n_decoder_rows; n++)
+  for (uint32_t d = 0; d < n_decoder_rows; d++)
   {
     // Get the row of the decoder
-    value_t *row = &decoder[n * n_neurons_total];
+    value_t *row = &decoder[d * n_neurons_total];
 
     // Compute the decoded value
     value_t output = decode_spike_train(n_populations, pop_lengths,
                                         row, spike_vector);
 
+    //pes_neuron_spiked(d, &modulatory_filters);
+
     // Transmit this value (keep trying until it sends)
-    while(!spin1_send_mc_packet(keys[n], bitsk(output), WITH_PAYLOAD))
+    while(!spin1_send_mc_packet(keys[d], bitsk(output), WITH_PAYLOAD))
     {
     }
   }
