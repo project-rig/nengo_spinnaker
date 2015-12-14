@@ -479,20 +479,23 @@ class TestMakeNetlist(object):
         load_fn_a = mock.Mock(name="load function A")
         pre_fn_a = mock.Mock(name="pre function A")
         post_fn_a = mock.Mock(name="post function A")
+        constraint_a = mock.Mock(name="Constraint B")
 
         object_a = mock.Mock(name="object A")
         operator_a = mock.Mock(name="operator A")
         operator_a.make_vertices.return_value = \
-            netlistspec(vertex_a, load_fn_a, pre_fn_a, post_fn_a)
+            netlistspec(vertex_a, load_fn_a, pre_fn_a, post_fn_a,
+                        constraint_a)
 
         # Create the second operator
         vertex_b = mock.Mock(name="vertex B")
         load_fn_b = mock.Mock(name="load function B")
+        constraint_b = mock.Mock(name="Constraint B")
 
         object_b = mock.Mock(name="object B")
         operator_b = mock.Mock(name="operator B")
         operator_b.make_vertices.return_value = \
-            netlistspec(vertex_b, load_fn_b)
+            netlistspec(vertex_b, load_fn_b, constraints=[constraint_b])
 
         # Create a signal between the operators
         keyspace = mock.Mock(name="keyspace")
@@ -516,7 +519,7 @@ class TestMakeNetlist(object):
         # Check that the netlist is as expected
         assert len(netlist.nets) == 1
         for net in netlist.nets:
-            assert net.source is vertex_a
+            assert net.sources == [vertex_a]
             assert net.sinks == [vertex_b]
             assert net.keyspace is keyspace
             assert net.weight == signal_ab_parameters.weight
@@ -524,6 +527,7 @@ class TestMakeNetlist(object):
         assert set(netlist.vertices) == set([vertex_a, vertex_b])
         assert netlist.keyspaces is model.keyspaces
         assert netlist.groups == list()
+        assert set(netlist.constraints[:-1]) == set([constraint_a, constraint_b])
         assert set(netlist.load_functions) == set([load_fn_a, load_fn_b])
         assert netlist.before_simulation_functions == [pre_fn_a]
         assert netlist.after_simulation_functions == [post_fn_a]
@@ -565,6 +569,7 @@ class TestMakeNetlist(object):
         assert set(netlist.vertices) == set([vertex_a, vertex_b])
         assert netlist.keyspaces is model.keyspaces
         assert netlist.groups == list()
+        assert len(netlist.constraints) == 1
         assert set(netlist.load_functions) == set([load_fn_a, load_fn_b])
         assert netlist.before_simulation_functions == [pre_fn_a]
         assert netlist.after_simulation_functions == [post_fn_a]
@@ -631,13 +636,15 @@ class TestMakeNetlist(object):
             [vertex_a, vertex_b0, vertex_b1, vertex_c])
         assert len(netlist.nets) == 1
         for net in netlist.nets:
-            assert net.source is vertex_a
+            assert net.sources == [vertex_a]
             assert net.sinks == [vertex_b0, vertex_b1]
             assert net.keyspace is keyspace
             assert net.weight == signal_ab_parameters.weight
 
         # Check that the groups are correct
         assert netlist.groups == [set([vertex_b0, vertex_b1])]
+
+        assert len(netlist.constraints) == 1
 
     def test_multiple_source_vertices(self):
         """Test that each of the vertices associated with a source is correctly
@@ -694,12 +701,13 @@ class TestMakeNetlist(object):
         # Check that the netlist is as expected
         assert set(netlist.vertices) == set([vertex_a0, vertex_a1,
                                              vertex_a2, vertex_b])
-        assert len(netlist.nets) == 2
+        assert len(netlist.nets) == 1
         for net in netlist.nets:
-            assert net.source in [vertex_a0, vertex_a1]
+            assert net.sources == [vertex_a0, vertex_a1]
             assert net.sinks == [vertex_b]
 
         assert netlist.groups == [set([vertex_a0, vertex_a1, vertex_a2])]
+        assert len(netlist.constraints) == 1
 
         # Check that `transmit_signal` was called correctly
         sig, tp = vertex_a2.args

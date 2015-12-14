@@ -8,7 +8,7 @@ import numpy as np
 from six import itervalues
 
 from . import model
-from nengo_spinnaker.netlist import Net, Netlist
+from nengo_spinnaker.netlist import NMNet, Netlist
 from nengo_spinnaker.utils import collections as collections_ext
 from nengo_spinnaker.utils.keyspaces import KeyspaceContainer
 
@@ -320,10 +320,11 @@ class Model(object):
         load_functions = collections_ext.noneignoringlist()
         before_simulation_functions = collections_ext.noneignoringlist()
         after_simulation_functions = collections_ext.noneignoringlist()
+        constraints = collections_ext.flatinsertionlist()
 
         for op in itertools.chain(itervalues(self.object_operators),
                                   self.extra_operators):
-            vxs, load_fn, pre_fn, post_fn = op.make_vertices(
+            vxs, load_fn, pre_fn, post_fn, constraint = op.make_vertices(
                 self, *args, **kwargs
             )
 
@@ -333,6 +334,9 @@ class Model(object):
             load_functions.append(load_fn)
             before_simulation_functions.append(pre_fn)
             after_simulation_functions.append(post_fn)
+
+            if constraint is not None:
+                constraints.append(constraint)
 
         # Construct the groups set
         groups = list()
@@ -347,9 +351,26 @@ class Model(object):
         for signal, transmission_parameters in \
                 self.connection_map.get_signals():
             # Get the source and sink vertices
-            sources = operator_vertices[signal.source]
-            if not isinstance(sources, collections.Iterable):
-                sources = (sources, )
+            original_sources = operator_vertices[signal.source]
+            if not isinstance(original_sources, collections.Iterable):
+                original_sources = (original_sources, )
+
+            # Filter out any sources which have an `accepts_signal` method and
+            # return False when this is called with the signal and transmission
+            # parameters.
+            sources = list()
+            for source in original_sources:
+                # For each source which either doesn't have a
+                # `transmits_signal` method or returns True when this is called
+                # with the signal and transmission parameters add a new net to
+                # the netlist.
+                if (hasattr(source, "transmits_signal") and not
+                        source.transmits_signal(signal,
+                                                transmission_parameters)):
+                    pass  # This source is ignored
+                else:
+                    # Add the source to the final list of sources
+                    sources.append(source)
 
             sinks = collections_ext.flatinsertionlist()
             for sink in signal.sinks:
@@ -366,18 +387,8 @@ class Model(object):
                              s.accepts_signal(signal, transmission_parameters))
 
             # Create the net(s)
-            for source in sources:
-                # For each source which either doesn't have a
-                # `transmits_signal` method or returns True when this is called
-                # with the signal and transmission parameters add a new net to
-                # the netlist.
-                if (hasattr(source, "transmits_signal") and not
-                        source.transmits_signal(signal,
-                                                transmission_parameters)):
-                    continue  # No net for this source
-
-                nets.append(Net(source, list(sinks),
-                            signal.weight, signal.keyspace))
+            nets.append(NMNet(sources, list(sinks),
+                              signal.weight, signal.keyspace))
 
         # Return a netlist
         return Netlist(
@@ -385,6 +396,7 @@ class Model(object):
             vertices=vertices,
             keyspaces=self.keyspaces,
             groups=groups,
+            constraints=constraints,
             load_functions=load_functions,
             before_simulation_functions=before_simulation_functions,
             after_simulation_functions=after_simulation_functions
@@ -393,14 +405,14 @@ class Model(object):
 
 class netlistspec(collections.namedtuple(
         "netlistspec", "vertices, load_function, before_simulation_function, "
-                       "after_simulation_function")):
+                       "after_simulation_function, constraints")):
     """Specification of how an operator should be added to a netlist."""
     def __new__(cls, vertices, load_function=None,
                 before_simulation_function=None,
-                after_simulation_function=None):
+                after_simulation_function=None, constraints=None):
         return super(netlistspec, cls).__new__(
             cls, vertices, load_function, before_simulation_function,
-            after_simulation_function
+            after_simulation_function, constraints
         )
 
 

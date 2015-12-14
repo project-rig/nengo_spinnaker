@@ -1,7 +1,4 @@
-"""Higher and lower level netlist items.
-"""
 import logging
-import rig.netlist
 from rig import place_and_route  # noqa : F401
 from rig.place_and_route.constraints import ReserveResourceConstraint
 
@@ -9,110 +6,11 @@ from rig.place_and_route.utils import (build_application_map,
                                        build_routing_tables)
 from rig.machine import Cores
 from rig.machine_control.utils import sdram_alloc_for_vertices
+from six import iteritems
 
-from .partition_and_cluster import identify_clusters
-from .utils.itertools import flatten
+from nengo_spinnaker.netlist import utils
 
 logger = logging.getLogger(__name__)
-
-
-class Net(rig.netlist.Net):
-    """A net represents connectivity from one vertex (or vertex slice) to many
-    vertices and vertex slices.
-
-    ..note::
-        This extends the Rig :py:class:`~rig.netlist.Netlist` to add Nengo
-        specific attributes and terms.
-
-    Attributes
-    ----------
-    source : :py:class:`.Vertex` or :py:class:`.VertexSlice`
-        Vertex or vertex slice which is the source of the net.
-    sinks : [:py:class:`.Vertex` or :py:class:`.VertexSlice`, ...]
-        List of vertices and vertex slices which are the sinks of the net.
-    weight : int
-        Number of packets transmitted across the net every simulation
-        time-step.
-    keyspace : :py:class:`rig.bitfield.BitField`
-        32-bit bitfield instance that can be used to derive the routing key and
-        mask for the net.
-    """
-    def __init__(self, source, sinks, weight, keyspace):
-        """Create a new net.
-
-        See :py:meth:`~rig.netlist.Net.__init__`.
-
-        Parameters
-        ----------
-        keyspace : :py:class:`rig.bitfield.BitField`
-            32-bit bitfield instance that can be used to derive the routing key
-            and mask for the net.
-        """
-        # Assert that the keyspace is 32-bits long
-        if keyspace.length != 32:
-            raise ValueError(
-                "keyspace: Must be 32-bits long, not {}".format(
-                    keyspace.length)
-            )
-        super(Net, self).__init__(source, sinks, weight)
-        self.keyspace = keyspace
-
-    @property
-    def as_rig_primitive(self):
-        """Return a new :py:class:`rig.netlist.Net` representing this Net."""
-        return rig.netlist.Net(self.source, self.sinks, self.weight)
-
-
-class Vertex(object):
-    """Represents a nominal unit of computation (a single instance or many
-    instances of an application running on a SpiNNaker machine) or an external
-    device that is connected to the SpiNNaker network.
-
-    Attributes
-    ----------
-    application : str or None
-        Path to application which should be loaded onto SpiNNaker to simulate
-        this vertex, or None if no application is required.
-    constraints : [constraint, ...]
-        The :py:mod:`~rig.place_and_route.constraints` which should be applied
-        to the placement and routing related to the vertex.
-    resource : {resource: usage, ...}
-        Mapping from resource type to the consumption of that resource, in
-        whatever is an appropriate unit.
-    cluster : int or None
-        Index of the cluster the vertex is a part of.
-    """
-    def __init__(self, application=None, resources=dict(), constraints=list()):
-        """Create a new Vertex.
-        """
-        self.application = application
-        self.constraints = list(constraints)
-        self.resources = dict(resources)
-        self.cluster = None
-
-
-class VertexSlice(Vertex):
-    """Represents a portion of a nominal unit of computation.
-
-    Attributes
-    ----------
-    application : str or None
-        Path to application which should be loaded onto SpiNNaker to simulate
-        this vertex, or None if no application is required.
-    constraints : [constraint, ...]
-        The :py:mod:`~rig.place_and_route.constraints` which should be applied
-        to the placement and routing related to the vertex.
-    resource : {resource: usage, ...}
-        Mapping from resource type to the consumption of that resource, in
-        whatever is an appropriate unit.
-    slice : :py:class:`slice`
-        Slice of the unit of computation which is represented by this vertex
-        slice.
-    """
-    def __init__(self, slice, application=None, resources=dict(),
-                 constraints=list()):
-        super(VertexSlice, self).__init__(application, resources, constraints)
-        self.slice = slice
 
 
 class Netlist(object):
@@ -129,6 +27,8 @@ class Netlist(object):
         Object containing keyspaces for nets.
     groups : [{:py:class:`~.Vertex`, ...}, ...]
         List of groups of vertices.
+    constraints : [contraint, ...]
+        List of additional constraints.
     load_functions : [`fn(netlist, controller)`, ...]
         List of functions which will be called to load the model to a SpiNNaker
         machine.  Each must accept a netlist and a controller.
@@ -150,7 +50,7 @@ class Netlist(object):
         Map of vertices to file-like views of the SDRAM they have been
         allocated.
     """
-    def __init__(self, nets, vertices, keyspaces, groups,
+    def __init__(self, nets, vertices, keyspaces, groups, constraints=list(),
                  load_functions=list(), before_simulation_functions=list(),
                  after_simulation_functions=list()):
         # Store given parameters
@@ -158,6 +58,7 @@ class Netlist(object):
         self.vertices = list(vertices)
         self.keyspaces = keyspaces
         self.groups = list(groups)
+        self.constraints = list(constraints)
         self.load_functions = list(load_functions)
         self.before_simulation_functions = list(before_simulation_functions)
         self.after_simulation_functions = list(after_simulation_functions)
@@ -166,20 +67,12 @@ class Netlist(object):
         # route.
         self.placements = dict()
         self.allocations = dict()
+        self.net_keyspaces = dict()
         self.routes = dict()
         self.vertices_memory = dict()
 
-    def as_rig_arguments(self):
-        """Construct arguments for Rig from the Netlist."""
-        vertices_resources = {v: v.resources for v in self.vertices}
-        nets = [net.as_rig_primitive for net in self.nets]
-        constraints = list(flatten(v.constraints for v in self.vertices))
-        constraints.append(ReserveResourceConstraint(Cores, slice(0, 1)))
-
-        return {"vertices_resources": vertices_resources,
-                "nets": nets,
-                "constraints": constraints
-                }
+        # Add a constraint to keep the monitor processor clear
+        self.constraints.append(ReserveResourceConstraint(Cores, slice(0, 1)))
 
     def place_and_route(self, machine,
                         place=place_and_route.place,
@@ -213,27 +106,39 @@ class Netlist(object):
         """
         # Build a map of vertices to the resources they require, get a list of
         # constraints.
-        args = self.as_rig_arguments()
-        vertices_resources = args["vertices_resources"]
-        constraints = args["constraints"]
+        vertices_resources = {v: v.resources for v in self.vertices}
 
         # Perform placement and allocation
-        self.placements = place(vertices_resources, self.nets,
-                                machine, constraints, **place_kwargs)
-        self.allocations = allocate(vertices_resources, self.nets, machine,
-                                    constraints, self.placements,
+        place_nets = list(utils.get_nets_for_placement(self.nets))
+        self.placements = place(vertices_resources, place_nets, machine,
+                                self.constraints, **place_kwargs)
+        self.allocations = allocate(vertices_resources, place_nets, machine,
+                                    self.constraints, self.placements,
                                     **allocate_kwargs)
 
-        # Identify clusters and modify keyspaces and vertices appropriately
-        identify_clusters(self.placements, self.nets, self.groups)
+        # Identify clusters and modify vertices appropriately
+        utils.identify_clusters(self.groups, self.placements)
+
+        # Get the nets for routing
+        (route_nets,
+         vertices_resources,  # Can safely overwrite the resource dictionary
+         extended_placements,
+         extended_allocations,
+         derived_nets) = utils.get_nets_for_routing(
+            vertices_resources, self.nets, self.placements, self.allocations)
+
+        # Get a map from the nets we will route with to keyspaces
+        self.net_keyspaces = utils.get_net_keyspaces(self.placements,
+                                                     derived_nets)
 
         # Fix all keyspaces
         self.keyspaces.assign_fields()
 
-        # Finally, route all nets
-        self.routes = route(vertices_resources, self.nets, machine,
-                            constraints, self.placements, self.allocations,
-                            **route_kwargs)
+        # Finally, route all nets using the extended resource dictionary,
+        # placements and allocations.
+        self.routes = route(vertices_resources, route_nets, machine,
+                            self.constraints, extended_placements,
+                            extended_allocations, **route_kwargs)
 
     def load_application(self, controller):
         """Load the netlist to a SpiNNaker machine.
@@ -246,9 +151,9 @@ class Netlist(object):
         # Build and load the routing tables, first by building a mapping from
         # nets to keys and masks.
         logger.debug("Loading routing tables")
-        net_keys = {n: (n.keyspace.get_value(tag=self.keyspaces.routing_tag),
-                        n.keyspace.get_mask(tag=self.keyspaces.routing_tag))
-                    for n in self.nets}
+        net_keys = {n: (ks.get_value(tag=self.keyspaces.routing_tag),
+                        ks.get_mask(tag=self.keyspaces.routing_tag))
+                    for n, ks in iteritems(self.net_keyspaces)}
         routing_tables = build_routing_tables(self.routes, net_keys)
         controller.load_routing_tables(routing_tables)
 
