@@ -1,5 +1,5 @@
 import pytest
-from rig.machine import Cores
+from rig.place_and_route import Cores
 
 from nengo_spinnaker.utils.keyspaces import KeyspaceContainer
 from nengo_spinnaker.netlist import NMNet, Vertex, utils

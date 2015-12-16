@@ -2,7 +2,7 @@ import collections
 import numpy as np
 from rig.machine_control.consts import SCP_PORT
 from rig.machine_control.packets import SCPPacket
-from rig.machine import Cores
+from rig.place_and_route import Cores
 from six import iteritems
 import socket
 import threading

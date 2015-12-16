@@ -5,7 +5,7 @@ from nengo.cache import get_default_decoder_cache
 import numpy as np
 from rig.machine_control import MachineController
 from rig.machine_control.consts import AppState
-from rig.machine import Cores
+from rig.place_and_route import Cores
 import rig.place_and_route
 import six
 import time
@@ -120,14 +120,14 @@ class Simulator(object):
         start = time.time()
         self.netlist = self.model.make_netlist(self.max_steps or 0)
 
-        # Get a machine object to place & route against
+        # Get a system-info object to place & route against
         logger.info("Getting SpiNNaker machine specification")
-        machine = self.controller.get_machine()
+        system_info = self.controller.get_system_info()
 
         # Place & Route
         logger.info("Placing and routing")
         self.netlist.place_and_route(
-            machine,
+            system_info,
             place=getconfig(network.config, Simulator,
                             'placer', rig.place_and_route.place),
             place_kwargs=getconfig(network.config, Simulator,
@@ -166,7 +166,7 @@ class Simulator(object):
         for x in range(machine_width):
             for y in range(machine_height):
                 with self.controller(x=x, y=y):
-                    if (x, y) in machine:
+                    if (x, y) in system_info:
                         data = self.controller.read(0xf1000000, 4)
                         self.controller.write(0xf1000000, data[:-1] + b'\x10')
 
