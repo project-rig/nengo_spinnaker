@@ -1,8 +1,7 @@
 import mock
 import pytest
 from rig.bitfield import BitField
-from rig import machine
-from rig.machine import Cores, SDRAM
+from rig.place_and_route import Cores, SDRAM
 from rig.place_and_route.constraints import (ReserveResourceConstraint,
                                              LocationConstraint)
 

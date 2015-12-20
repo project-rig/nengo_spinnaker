@@ -1,4 +1,4 @@
-from rig.machine import Cores, SDRAM
+from rig.place_and_route import Cores, SDRAM
 import six
 import struct
 
