@@ -41,7 +41,7 @@ class EnsembleTransmissionParameters(object):
         self.transform = np.array(transform)
 
         # Compute and store the transformed decoders
-        self.decoders = np.dot(transform, decoders.T).T
+        self.decoders = np.dot(transform, decoders.T)
 
         # Make the arrays read-only
         self.untransformed_decoders.flags['WRITEABLE'] = False
