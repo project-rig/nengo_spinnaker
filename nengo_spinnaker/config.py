@@ -1,6 +1,6 @@
 """Nengo/SpiNNaker specific configuration."""
 import nengo
-from nengo.params import BoolParam, DictParam, NumberParam, Parameter
+from nengo.params import BoolParam, DictParam, NumberParam, Parameter, IntParam
 from rig import place_and_route as par
 
 from nengo_spinnaker.node_io import Ethernet
@@ -30,6 +30,16 @@ def add_spinnaker_params(config):
     config[nengo.Node].set_param("function_of_time", BoolParam(default=False))
     config[nengo.Node].set_param("function_of_time_period",
                                  NumberParam(default=None, optional=True))
+
+    # Add multiple-core options to Nodes
+    config[nengo.Node].set_param(
+        "n_cores_per_chip",
+        IntParam(default=None, low=1, high=16, optional=True)
+    )
+    config[nengo.Node].set_param(
+        "n_chips",
+        IntParam(default=None, low=1, optional=True)
+    )
 
     # Add profiling parameters to Ensembles
     config[nengo.Ensemble].set_param("profile", BoolParam(default=False))

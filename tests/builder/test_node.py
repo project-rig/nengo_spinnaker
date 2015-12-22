@@ -333,7 +333,6 @@ class TestNodeIOController(object):
 
         # Check the passthrough Node resulted in a new operator
         assert model.object_operators[b].size_in == b.size_in
-        assert model.object_operators[b].transmission_delay == 1
 
         # Get the source and ensure that the appropriate object is returned
         with mock.patch.object(nioc, "get_spinnaker_source_for_node") as gssfn:

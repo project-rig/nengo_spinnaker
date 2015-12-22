@@ -4,10 +4,10 @@ from nengo.utils.builder import full_transform
 import numpy as np
 import threading
 
-from nengo_spinnaker.builder.builder import ObjectPort, spec, Model
-from nengo_spinnaker.builder.model import InputPort, OutputPort
 from .connection import (PassthroughNodeTransmissionParameters,
                          NodeTransmissionParameters)
+from nengo_spinnaker.builder.builder import ObjectPort, spec, Model
+from nengo_spinnaker.builder.model import InputPort, OutputPort
 from nengo_spinnaker.operators import Filter, ValueSink, ValueSource
 from nengo_spinnaker.utils.config import getconfig
 
@@ -106,8 +106,13 @@ class NodeIOController(object):
 
         if node.output is None:
             # If the Node is a passthrough Node then create a new filter object
-            # for it.
-            op = Filter(node.size_in)
+            # for it.  We might be requested to use a fixed number of cores or
+            # chips, we extract that information from the config.
+            n_cores = getconfig(model.config, node, "n_cores_per_chip")
+            n_chips = getconfig(model.config, node, "n_chips")
+
+            op = Filter(node.size_in, n_cores_per_chip=n_cores,
+                        n_chips=n_chips)
             self._passthrough_nodes[node] = op
             model.object_operators[node] = op
         elif f_of_t:
