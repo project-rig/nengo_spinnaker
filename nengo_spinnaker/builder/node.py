@@ -116,13 +116,8 @@ class NodeIOController(object):
 
         if node.output is None:
             # If the Node is a passthrough Node then create a new filter object
-            # for it.  We might be requested to use a fixed number of cores or
-            # chips, we extract that information from the config.
-            n_cores = getconfig(model.config, node, "n_cores_per_chip")
-            n_chips = getconfig(model.config, node, "n_chips")
-
-            op = Filter(node.size_in, n_cores_per_chip=n_cores,
-                        n_chips=n_chips)
+            # for it.
+            op = Filter(node.size_in)
             self.passthrough_nodes[node] = op
             model.object_operators[node] = op
         elif f_of_t:

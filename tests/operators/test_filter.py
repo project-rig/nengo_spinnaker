@@ -1,115 +1,86 @@
 import mock
 import numpy as np
 import pytest
+from rig.place_and_route import Cores
 import struct
 import tempfile
 
-from nengo_spinnaker.builder.model import SignalParameters
-from nengo_spinnaker.operators.filter import (SystemRegion,
-                                              get_transforms_and_keys,
-                                              ParallelFilterSlice)
+from nengo_spinnaker.builder import Model
+from nengo_spinnaker.builder.model import SignalParameters, OutputPort
+from nengo_spinnaker.operators.filter import (SystemRegion, Filter, Regions,
+                                              get_transforms_and_keys)
 from nengo_spinnaker.builder.ensemble import EnsembleTransmissionParameters
 from nengo_spinnaker.builder.node import PassthroughNodeTransmissionParameters
 
 
-class TestParallelFilterSlice(object):
-    def test_accepts_signal(self):
-        # Create a series of vertex slices
-        pfss = [
-            ParallelFilterSlice(slice(0, 16), slice(None)),
-            ParallelFilterSlice(slice(8, 24), slice(None)),
-            ParallelFilterSlice(slice(16, 32), slice(None)),
-        ]
-
-        # Create a series of transmission parameters, of current known types.
-        ens_0_to_8 = np.random.uniform(size=(100, 10))
-        ens_0_to_8[:, 8:] = 0.0
-        tp0 = EnsembleTransmissionParameters(ens_0_to_8, 1.0)
-
-        ptn_20_to_26 = np.zeros((32, 6))
-        ptn_20_to_26[20:26, :] = np.eye(6)
-        tp1 = PassthroughNodeTransmissionParameters(ptn_20_to_26)
-
-        # Check that `accepts_signal` responds correctly
-        assert pfss[0].accepts_signal(None, tp0)
-        assert not pfss[1].accepts_signal(None, tp0)
-        assert not pfss[2].accepts_signal(None, tp0)
-
-        assert not pfss[0].accepts_signal(None, tp1)
-        assert pfss[1].accepts_signal(None, tp1)
-        assert pfss[2].accepts_signal(None, tp1)
-
-    def test_transmits_signal(self):
-        # Create a series of transmission parameters
-        ptn_2_to_8 = np.zeros((32, 6))
-        ptn_2_to_8[2:8, :] = np.eye(6)
-        tp0 = PassthroughNodeTransmissionParameters(ptn_2_to_8.T)
-        tp0_slice = set(range(2, 8))
-
-        ptn_20_to_26 = np.zeros((32, 6))
-        ptn_20_to_26[20:26, :] = np.eye(6)
-        tp1 = PassthroughNodeTransmissionParameters(ptn_20_to_26.T)
-        tp1_slice = set(range(20, 26))
-
-        signal_parameter_slices = [(tp0, tp0_slice),
-                                   (tp1, tp1_slice),
-                                   ]
-
-        # Create a series of vertex slices
-        pfss = [
-            ParallelFilterSlice(slice(None), slice(0, 16), {},
-                                signal_parameter_slices),
-            ParallelFilterSlice(slice(None), slice(8, 24), {},
-                                signal_parameter_slices),
-            ParallelFilterSlice(slice(None), slice(16, 32), {},
-                                signal_parameter_slices),
-        ]
-
-        # Check that `transmits_signal` responds correctly
-        assert pfss[0].transmits_signal(None, tp0)
-        assert not pfss[1].transmits_signal(None, tp0)
-        assert not pfss[2].transmits_signal(None, tp0)
-
-        assert not pfss[0].transmits_signal(None, tp1)
-        assert pfss[1].transmits_signal(None, tp1)
-        assert pfss[2].transmits_signal(None, tp1)
-
-
-class TestSystemRegion(object):
-    def test_sizeof(self):
-        # Create a system region
-        sr = SystemRegion(n_dims=512, machine_timestep=1000)
-
-        # Should always be 6 words
-        assert sr.sizeof() == 6 * 4
-
+class TestFilter(object):
     @pytest.mark.parametrize(
-        "n_dims, in_slice, out_slice, machine_timestep, vector_address",
-        [(256, slice(0, 10), slice(10, 12), 1000, 0x67800000),
-         (100, slice(5, 7), slice(0, 4), 2000, 0x67880000),
-         ]
+        "size_in, n_expected_slices",
+        [(32, 1), (64, 1), (256, 2), (512, 4), (1024, 8), (2056, 17)]
     )
-    def test_write_subregion_to_file(self, n_dims, in_slice, out_slice,
-                                     machine_timestep, vector_address):
-        # Create the region
-        sr = SystemRegion(n_dims=n_dims, machine_timestep=machine_timestep)
+    def test_init(self, size_in, n_expected_slices):
+        """Check that the filter is broken into column-slices correctly."""
+        f = Filter(size_in)
+        assert len(f.groups) == n_expected_slices
+        assert all(g.size_in < 528 for g in f.groups)
 
-        # Store the address of the shared vector in SDRAM
-        sr.shared_vector_address = vector_address
+    def test_make_vertices_no_outgoing_signals(self):
+        """Test that no vertices or constraints result if there are no outgoing
+        signals.
+        """
+        # Create a small filter operator
+        filter_op = Filter(3)
 
-        # Write the region to file, assert the values are sane
-        fp = tempfile.TemporaryFile()
-        sr.write_subregion_to_file(fp, in_slice=in_slice, out_slice=out_slice)
+        # Create an empty model
+        m = Model()
 
-        fp.seek(0)
-        assert struct.unpack("<6I", fp.read()) == (
-            machine_timestep,
-            n_dims,
-            in_slice.start,
-            in_slice.stop - in_slice.start,
-            out_slice.stop - out_slice.start,
-            vector_address,
+        # Make vertices using the model
+        netlistspec = filter_op.make_vertices(m, 10000)
+        assert len(netlistspec.vertices) == 0
+        assert netlistspec.load_function is None
+        assert netlistspec.before_simulation_function is None
+        assert netlistspec.after_simulation_function is None
+        assert netlistspec.constraints is None
+
+    def test_make_vertices_one_group_many_cores_1_chip(self):
+        """Test that many vertices are returned if the matrix has many rows and
+        that there is an appropriate constraint forcing the co-location of the
+        vertices.
+        """
+        # Create a small filter operator
+        filter_op = Filter(3)
+
+        # Create a model and add some connections which will cause packets to
+        # be transmitted from the filter operator.
+        m = Model()
+        signal_parameters = SignalParameters(False, 3, m.keyspaces["nengo"])
+        signal_parameters.keyspace.length = 32
+
+        transmission_parameters = \
+            PassthroughNodeTransmissionParameters(np.ones((32*3, 3)))
+        m.connection_map.add_connection(
+            filter_op, OutputPort.standard, signal_parameters,
+            transmission_parameters, None, None, None
         )
+
+        # Make vertices using the model
+        netlistspec = filter_op.make_vertices(m, 10000)
+        assert len(netlistspec.vertices) == 2  # Two vertices
+
+        for vx in netlistspec.vertices:
+            assert "filter" in vx.application
+
+            assert vx.resources[Cores] == 1
+
+            assert vx.regions[Regions.system].column_slice == slice(0, 3)
+
+            keys_region = vx.regions[Regions.keys]
+            assert keys_region.keyspaces == [
+                signal_parameters.keyspace(index=i) for i in range(32*3)]
+            assert len(keys_region.fields) == 1
+            assert keys_region.partitioned == True
+
+            assert vx.regions[Regions.transform].matrix.shape == (32*3, 3)
 
 
 def test_get_transforms_and_keys():

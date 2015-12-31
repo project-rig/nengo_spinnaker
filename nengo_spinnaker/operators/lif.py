@@ -18,6 +18,7 @@ from nengo_spinnaker.builder.model import InputPort, OutputPort
 from nengo_spinnaker.builder.netlist import netlistspec
 from nengo_spinnaker.builder.ports import EnsembleInputPort
 from nengo_spinnaker.regions.filters import make_filter_regions
+from nengo_spinnaker.regions.utils import Args
 from .. import regions
 from nengo_spinnaker.netlist import Vertex
 from nengo_spinnaker import partition
@@ -725,11 +726,6 @@ def get_decoders_and_keys(signals_connections, minimise=False):
     assert len(keys) == decoders.shape[0]
 
     return decoders, keys
-
-
-class Args(collections.namedtuple("Args", "args, kwargs")):
-    def __new__(cls, *args, **kwargs):
-        return super(Args, cls).__new__(cls, args, kwargs)
 
 
 def _get_basic_region_arguments(neuron_slice, output_slice, cluster_slices):
