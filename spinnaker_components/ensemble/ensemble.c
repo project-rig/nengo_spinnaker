@@ -441,6 +441,10 @@ void c_main(void)
     // Determine how long to simulate for
     config_get_n_ticks();
 
+    // Reset the recording regions
+    record_buffer_reset(&record_spikes);
+    record_buffer_reset(&record_voltages);
+
     // Perform the simulation
     spin1_start(SYNC_WAIT);
   }
