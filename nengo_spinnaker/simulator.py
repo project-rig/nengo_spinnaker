@@ -214,10 +214,9 @@ class Simulator(object):
         # Prepare the simulation
         self.netlist.before_simulation(self, steps)
 
-        # Wait for all cores to hit SYNC0
-        self.controller.wait_for_cores_to_reach_state(
-            "sync0", len(self.netlist.vertices)
-        )
+        # Wait for all cores to hit SYNC0 (either by remaining it or entering it from init)
+        self._wait_for_transition(AppState.init, [AppState.sync0],
+                                  len(self.netlist.vertices))
         self.controller.send_signal("sync0")
 
         # Get a new thread for the IO
@@ -255,17 +254,9 @@ class Simulator(object):
             # Stop the IO thread whatever occurs
             io_thread.stop()
 
-        # Check if any cores are in bad states
-        if self.controller.count_cores_in_state(["dead", "watchdog",
-                                                 "runtime_exception"]):
-            for vertex in self.netlist.vertices:
-                x, y = self.netlist.placements[vertex]
-                p = self.netlist.allocations[vertex][Cores].start
-                status = self.controller.get_processor_status(p, x, y)
-                if status.cpu_state is not AppState.sync0:
-                    print("Core ({}, {}, {}) in state {!s}".format(
-                        x, y, p, status.cpu_state))
-            raise Exception("Unexpected core failures.")
+        # Wait for cores to exit or re-enter sync0
+        self._wait_for_transition(AppState.run, [AppState.exit, AppState.sync0],
+                                  len(self.netlist.vertices))
 
         # Retrieve simulation data
         start = time.time()
@@ -277,6 +268,27 @@ class Simulator(object):
 
         # Increase the steps count
         self.steps += steps
+
+    def _wait_for_transition(self, from_state, desired_to_states, num_verts):
+        while True:
+            # If no cores are still in from_state, stop
+            if self.controller.count_cores_in_state(from_state) == 0:
+                break
+
+            # Wait a bit
+            time.sleep(1.0)
+
+        # Check if any cores haven't exited cleanly
+        if self.controller.count_cores_in_state(desired_to_states) != num_verts:
+            # Loop through all placed vertices
+            for vertex, (x,y) in six.iteritems(self.netlist.placements):
+                p = self.netlist.allocations[vertex][Cores].start
+                status = self.controller.get_processor_status(p, x, y)
+                if status.cpu_state not in desired_to_states:
+                    print("Core ({}, {}, {}) in state {!s}".format(
+                        x, y, p, status.cpu_state))
+                    print self.controller.get_iobuf(p, x, y)
+            raise Exception("Unexpected core failures before reaching %s state." % desired_to_states)
 
     def _create_host_sim(self):
         # change node_functions to reflect time
