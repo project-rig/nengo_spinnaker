@@ -258,7 +258,7 @@ class ParallelFilterSlice(Vertex):
             # If the connection is from an ensemble only return true if the
             # decoders contain non-zero values in the input dimensions we care
             # about.
-            return np.any(transmission_params.decoders[:, self.in_slice])
+            return np.any(transmission_params.decoders[self.in_slice, :])
         elif isinstance(transmission_params,
                         PassthroughNodeTransmissionParameters):
             # If the connection is from a Node of some variety then only return
