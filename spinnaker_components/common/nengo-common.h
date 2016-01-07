@@ -63,7 +63,7 @@ do { \
               __FILE__, __LINE__, SIZE); \
     VAR = spin1_malloc(SIZE); \
     if (VAR == NULL) \
-      spin1_exit(-1); \
+      rt_error(RTE_MALLOC); \
   } \
 } while (0)
 
