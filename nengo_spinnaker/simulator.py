@@ -215,7 +215,7 @@ class Simulator(object):
         self.netlist.before_simulation(self, steps)
 
         # Wait for all cores to hit SYNC0 (either by remaining it or entering it from init)
-        self._wait_for_transition(AppState.init, [AppState.sync0],
+        self._wait_for_transition(AppState.init, AppState.sync0,
                                   len(self.netlist.vertices))
         self.controller.send_signal("sync0")
 
@@ -254,8 +254,8 @@ class Simulator(object):
             # Stop the IO thread whatever occurs
             io_thread.stop()
 
-        # Wait for cores to exit or re-enter sync0
-        self._wait_for_transition(AppState.run, [AppState.exit, AppState.sync0],
+        # Wait for cores to re-enter sync0
+        self._wait_for_transition(AppState.run, AppState.sync0,
                                   len(self.netlist.vertices))
 
         # Retrieve simulation data
@@ -269,7 +269,7 @@ class Simulator(object):
         # Increase the steps count
         self.steps += steps
 
-    def _wait_for_transition(self, from_state, desired_to_states, num_verts):
+    def _wait_for_transition(self, from_state, desired_to_state, num_verts):
         while True:
             # If no cores are still in from_state, stop
             if self.controller.count_cores_in_state(from_state) == 0:
@@ -279,16 +279,16 @@ class Simulator(object):
             time.sleep(1.0)
 
         # Check if any cores haven't exited cleanly
-        if self.controller.count_cores_in_state(desired_to_states) != num_verts:
+        if self.controller.count_cores_in_state(desired_to_state) != num_verts:
             # Loop through all placed vertices
             for vertex, (x,y) in six.iteritems(self.netlist.placements):
                 p = self.netlist.allocations[vertex][Cores].start
                 status = self.controller.get_processor_status(p, x, y)
-                if status.cpu_state not in desired_to_states:
+                if status.cpu_state is not desired_to_state:
                     print("Core ({}, {}, {}) in state {!s}".format(
                         x, y, p, status.cpu_state))
                     print self.controller.get_iobuf(p, x, y)
-            raise Exception("Unexpected core failures before reaching %s state." % desired_to_states)
+            raise Exception("Unexpected core failures before reaching %s state." % desired_to_state)
 
     def _create_host_sim(self):
         # change node_functions to reflect time
