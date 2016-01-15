@@ -288,7 +288,7 @@ class Simulator(object):
                 if status.cpu_state is not desired_to_state:
                     print("Core ({}, {}, {}) in state {!s}".format(
                         x, y, p, status.cpu_state))
-                    print self.controller.get_iobuf(p, x, y)
+                    print(self.controller.get_iobuf(p, x, y))
             raise Exception("Unexpected core failures before reaching %s "
                             "state." % desired_to_state)
 
