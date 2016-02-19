@@ -3,8 +3,10 @@ from rig import place_and_route  # noqa : F401
 
 from rig.place_and_route.utils import (build_machine,
                                        build_core_constraints,
-                                       build_application_map,
-                                       build_routing_tables)
+                                       build_application_map)
+from rig.routing_table import (build_routing_table_target_lengths,
+                               routing_tree_to_tables,
+                               minimise_tables)
 from rig.place_and_route import Cores
 from rig.machine_control.utils import sdram_alloc_for_vertices
 from six import iteritems
@@ -146,7 +148,7 @@ class Netlist(object):
                             constraints, extended_placements,
                             extended_allocations, **route_kwargs)
 
-    def load_application(self, controller):
+    def load_application(self, controller, system_info):
         """Load the netlist to a SpiNNaker machine.
 
         Parameters
@@ -160,7 +162,11 @@ class Netlist(object):
         net_keys = {n: (ks.get_value(tag=self.keyspaces.routing_tag),
                         ks.get_mask(tag=self.keyspaces.routing_tag))
                     for n, ks in iteritems(self.net_keyspaces)}
-        routing_tables = build_routing_tables(self.routes, net_keys)
+
+        routing_tables = routing_tree_to_tables(self.routes, net_keys)
+        target_lengths = build_routing_table_target_lengths(system_info)
+        routing_tables = minimise_tables(routing_tables, target_lengths)
+
         controller.load_routing_tables(routing_tables)
 
         # Assign memory to each vertex as required
