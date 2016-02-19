@@ -144,7 +144,7 @@ class Simulator(object):
 
         # Load the application
         logger.info("Loading application")
-        self.netlist.load_application(self.controller)
+        self.netlist.load_application(self.controller, system_info)
 
         # Check if any cores are in bad states
         if self.controller.count_cores_in_state(["exit", "dead", "watchdog",
