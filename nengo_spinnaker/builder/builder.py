@@ -311,6 +311,11 @@ class Model(object):
             A netlist which can be placed and routed to simulate this model on
             a SpiNNaker machine.
         """
+        # Remove any passthrough Nodes which don't connect to anything
+        from nengo_spinnaker import operators
+        removed_operators = model.remove_sinkless_objects(self.connection_map,
+                                                          operators.Filter)
+
         # Apply the default keyspace to any signals without keyspaces
         self.connection_map.add_default_keyspace(self.keyspaces["nengo"])
 
@@ -324,6 +329,12 @@ class Model(object):
 
         for op in itertools.chain(itervalues(self.object_operators),
                                   self.extra_operators):
+            # Skip any operators that were previously removed
+            if op in removed_operators:
+                continue
+
+            # Otherwise call upon the operator to build vertices for the
+            # netlist.
             vxs, load_fn, pre_fn, post_fn, constraint = op.make_vertices(
                 self, *args, **kwargs
             )
@@ -400,19 +411,6 @@ class Model(object):
             load_functions=load_functions,
             before_simulation_functions=before_simulation_functions,
             after_simulation_functions=after_simulation_functions
-        )
-
-
-class netlistspec(collections.namedtuple(
-        "netlistspec", "vertices, load_function, before_simulation_function, "
-                       "after_simulation_function, constraints")):
-    """Specification of how an operator should be added to a netlist."""
-    def __new__(cls, vertices, load_function=None,
-                before_simulation_function=None,
-                after_simulation_function=None, constraints=None):
-        return super(netlistspec, cls).__new__(
-            cls, vertices, load_function, before_simulation_function,
-            after_simulation_function, constraints
         )
 
 

@@ -40,6 +40,11 @@ def add_spinnaker_params(config):
         "n_chips",
         IntParam(default=None, low=1, optional=True)
     )
+    # Add optimisation control parameters to (passthrough) Nodes. None means
+    # that a heuristic will be used to determine if the passthrough Node should
+    # be removed.
+    config[nengo.Node].set_param("optimize_out",
+                                 BoolParam(default=None, optional=True))
 
     # Add profiling parameters to Ensembles
     config[nengo.Ensemble].set_param("profile", BoolParam(default=False))

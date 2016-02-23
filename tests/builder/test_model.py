@@ -333,3 +333,91 @@ class TestConnectionMap(object):
 
                 # Assert the correct paired transmission parameters are used.
                 assert transmission_params is tp_b
+
+
+def test_remove_sinkless_signals():
+    """Removing sinkless signals will modify the connection map to remove any
+    signals which no-longer have any sinks.
+    """
+    # Construct a connection map containing two signals.
+    # Objects to act as sources and sinks
+    obj_a = mock.Mock(name="A")
+    obj_b = mock.Mock(name="B")
+
+    # Add the connections
+    cm = model.ConnectionMap()
+    cm.add_connection(
+        obj_a, None, model.SignalParameters(weight=1), None,
+        obj_b, None, None
+    )
+    cm.add_connection(
+        obj_b, None, model.SignalParameters(weight=2), None,
+        obj_a, None, None
+    )
+
+    # Remove the sinks from one of the connections
+    for _, sinks in cm._connections[obj_b][None]:
+        for sink in sinks:
+            sinks.remove(sink)
+
+    # Remove all the sinkless signals
+    model.remove_sinkless_signals(cm)
+
+    # Assert that only one signal remains
+    assert len(cm.get_signals_from_object(obj_a)[None]) == 1
+    assert len(cm.get_signals_from_object(obj_b)) == 0
+    assert len(list(cm.get_signals())) == 1
+
+def test_remove_sinkless_objects():
+    """Filter objects with no outgoing connections (hence sinks) can safely be
+    removed from the network.  This process should be called repeatedly as long
+    as there are filters which can be removed.
+
+    We construct the following network and then expect that all items apart
+    from A and G are removed from the connection map.
+
+                /--> C --\
+               /          \
+        A --> B            E --> F
+        |      \          /
+        |       \--> D --/
+        \-> G
+
+    The result should be a reduced connection map and a list of all objects
+    apart from A and G.
+    """
+    class G(object):
+        """Separate class to indicate the type filtering works as expected."""
+
+    # Construct the network objects
+    a = mock.Mock(name="A")
+    b = mock.Mock(name="B")
+    c = mock.Mock(name="C")
+    d = mock.Mock(name="D")
+    e = mock.Mock(name="E")
+    f = mock.Mock(name="F")
+    g = G()
+
+    # Make the connection map
+    cm = model.ConnectionMap()
+    cm.add_connection(a, None, model.SignalParameters(), None, b, None, None)
+    cm.add_connection(a, None, model.SignalParameters(), None, g, None, None)
+    cm.add_connection(b, None, model.SignalParameters(), None, c, None, None)
+    cm.add_connection(b, None, model.SignalParameters(), None, d, None, None)
+    cm.add_connection(c, None, model.SignalParameters(), None, e, None, None)
+    cm.add_connection(d, None, model.SignalParameters(), None, e, None, None)
+    cm.add_connection(e, None, model.SignalParameters(), None, f, None, None)
+    cm._connections[f][None] = list()
+
+    # Remove the sinkless filters
+    removed = model.remove_sinkless_objects(cm, mock.Mock)
+
+    # Check that the expected connection A->G still exists.
+    assert len(cm.get_signals_from_object(a)[None]) == 1
+    assert len(list(cm.get_signals())) == 1
+
+    # Assert that the removed objects list is correct
+    expected_removed = set((b, c, d, e, f))
+    for x in expected_removed:
+        assert len(cm.get_signals_from_object(x)) == 0
+    assert removed == expected_removed

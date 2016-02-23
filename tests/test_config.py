@@ -12,7 +12,7 @@ def test_add_spinnaker_params():
     # Create a network
     with nengo.Network() as net:
         n_ft = nengo.Node(lambda t: [t, t**2])
-        n_pt = nengo.Node(size_in=100)
+        ptn = nengo.Node(size_in=2)
 
     # Setting SpiNNaker-specific options before calling `add_spinnaker_params`
     # should fail.
@@ -27,10 +27,11 @@ def test_add_spinnaker_params():
 
     for param, value in [
             ("n_cores_per_chip", 16),
-            ("n_chips", 4)
+            ("n_chips", 4),
+            ("optimize_out", False),
             ]:
         with pytest.raises(AttributeError) as excinfo:
-            setattr(net.config[n_ft], param, value)
+            setattr(net.config[ptn], param, value)
 
     for param, value in [
             ("placer", lambda r, n, m, c: None),
@@ -51,9 +52,10 @@ def test_add_spinnaker_params():
 
     assert net.config[nengo.Node].function_of_time is False
     assert net.config[nengo.Node].function_of_time_period is None
+    assert net.config[nengo.Node].optimize_out is None
 
-    assert net.config[nengo.Node].n_cores_per_chip == None
-    assert net.config[nengo.Node].n_chips == None
+    assert net.config[nengo.Node].n_cores_per_chip is None
+    assert net.config[nengo.Node].n_chips is None
 
     assert net.config[Simulator].placer is par.place
     assert net.config[Simulator].placer_kwargs == {}

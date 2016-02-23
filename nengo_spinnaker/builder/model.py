@@ -273,3 +273,109 @@ class Signal(object):
         self.sinks = list(sinks)
         self.keyspace = keyspace
         self.weight = weight
+
+
+def remove_sinkless_signals(conn_map):
+    """Remove any signals which do not have any sinks from a connection map.
+
+    Parameters
+    ----------
+    conn_map : :py:class:`~.ConnectionMap`
+        A connection map to modify.
+    """
+    # Create a new empty connection map dictionary.
+    conns = collections.defaultdict(lambda: collections.defaultdict(list))
+
+    # Get the old connection map
+    old_conns = conn_map._connections
+
+    # Iterate over the old connection map, copying everything across to the new
+    # map unless a signal has no sinks.
+    for source_object, source_port_and_signals in iteritems(old_conns):
+        for source_port, signals in iteritems(source_port_and_signals):
+            for parameters_and_sinks in signals:
+                if not parameters_and_sinks.sinks:
+                    # If there are no sinks associated with the transmission
+                    # parameters then don't bother copying the signal into the
+                    # new dictionary.
+                    continue
+                # Otherwise copy the signal across.
+                conns[source_object][source_port].append(parameters_and_sinks)
+
+    # Replace the connection map dictionary
+    conn_map._connections = conns
+
+
+def remove_sinkless_objects(conn_map, cls):
+    """Remove all objects of a given type which have no outgoing connections
+    from a connection map.
+
+    Parameters
+    ----------
+    conn_map : :py:class:`~.ConnectionMap`
+        A connection map to modify.
+    cls :
+        Type of objects to remove.
+
+    Returns
+    -------
+    set
+        Set of all objects removed from the connection map.
+    """
+    # Begin by removing all sinkless signals
+    remove_sinkless_signals(conn_map)
+
+    # Create a new empty connection map dictionary.
+    conns = collections.defaultdict(lambda: collections.defaultdict(list))
+
+    # Get the old connection map
+    old_conns = conn_map._connections
+
+    # Find all of the objects of the given type that do not have any outgoing
+    # connections.
+    transmitting_objects = set()
+    receiving_objects = set()
+
+    for source_object, source_port_and_signals in iteritems(old_conns):
+        # Store this object as transmitting a value
+        if isinstance(source_object, cls):
+            transmitting_objects.add(source_object)
+
+        # Store all the sinks for connections out of this object
+        for signals in itervalues(source_port_and_signals):
+            for parameters_and_sinks in signals:
+                for sink_object, _, _ in parameters_and_sinks.sinks:
+                    # Store each object in the sinks
+                    if isinstance(sink_object, cls):
+                        receiving_objects.add(sink_object)
+
+    # Identify all objects which receive but do not transmit
+    remove_objects = receiving_objects - transmitting_objects
+
+    # If there are no objects to remove then return the empty set
+    if not remove_objects:
+        return set()
+
+    # Create a new dictionary for the connection map, by copying across
+    # anything which doesn't target the objects to remove.
+    for source_object, source_port_and_signals in iteritems(old_conns):
+        for source_port, signals in iteritems(source_port_and_signals):
+            for parameters_and_sinks in signals:
+                # Construct a new list of sinks by filtering the original list
+                # of sinks.
+                sinks = [
+                    sink_pars for sink_pars in parameters_and_sinks.sinks if
+                    sink_pars.sink_object not in remove_objects
+                ]
+
+                # Add this to the new dictionary
+                conns[source_object][source_port].append(
+                    _ParsSinksPair(parameters_and_sinks.parameters,
+                                   sinks)
+                )
+
+    # Modify the connection map
+    conn_map._connections = conns
+
+    # Recurse to remove any objects which we've just made sinkless
+    return remove_objects | remove_sinkless_objects(conn_map, cls)
