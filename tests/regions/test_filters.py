@@ -45,6 +45,25 @@ def test_filter_pack_into(width, latching, init_index, words):
     assert size == width
 
 
+def test_filter_pack_into_overridden_width():
+    class MyFilter(Filter):
+        def size_words(self):
+            return 0
+
+        def method_index(self):
+            return 1
+
+        def pack_data(self, *args, **kwargs):
+            pass
+    
+    fil = MyFilter(1024, False)
+
+    data = bytearray(100)
+    fil.pack_into(0.001, data, width=10)
+
+    assert 10 == struct.unpack_from("<4I", data, 0)[2]
+
+
 class TestNoneFilter(object):
     """Test creating and writing out None filters."""
     def test_size_words(self):
@@ -228,6 +247,33 @@ def test_filter_region():
     expected_data = bytearray(fr.sizeof() - 4)
     fs[0].pack_into(fr.dt, expected_data)
     fs[1].pack_into(fr.dt, expected_data, (fs[0].size_words() + 4)*4)
+    assert fp.read() == expected_data
+
+
+def test_filter_region_force_width():
+    """Test creation of a filter data region."""
+    # Create two filters
+    fs = [LowpassFilter(5, False, 0.1),
+          NoneFilter(3, False)]
+
+    # Create the filter region
+    fr = FilterRegion(fs, dt=0.001)
+
+    # The size should be correct (count of words + header 1 + data 1 + header 2
+    # + data 2)
+    assert fr.sizeof() == 4 + 16 + 8 + 16 + 0
+
+    # Check that the data is written out correctly
+    fp = tempfile.TemporaryFile()
+    fr.write_subregion_to_file(fp, filter_width=1)
+    fp.seek(0)
+
+    length, = struct.unpack("<I", fp.read(4))
+    assert length == len(fs)
+
+    expected_data = bytearray(fr.sizeof() - 4)
+    fs[0].pack_into(fr.dt, expected_data, width=1)
+    fs[1].pack_into(fr.dt, expected_data, (fs[0].size_words() + 4)*4, width=1)
     assert fp.read() == expected_data
 
 
