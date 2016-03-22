@@ -1,4 +1,5 @@
 import nengo
+from nengo.exceptions import ConfigError
 import pytest
 from rig import place_and_route as par
 
@@ -43,7 +44,7 @@ def test_add_spinnaker_params():
             ("node_io", None),
             ("node_io_kwargs", {}),
             ]:
-        with pytest.raises(KeyError) as excinfo:
+        with pytest.raises(ConfigError) as excinfo:
             setattr(net.config[Simulator], param, value)
         assert "Simulator" in str(excinfo.value)
 
@@ -59,8 +60,8 @@ def test_add_spinnaker_params():
 
     assert net.config[Simulator].placer is par.place
     assert net.config[Simulator].placer_kwargs == {}
-    assert net.config[Simulator].allocater is par.allocate
-    assert net.config[Simulator].allocater_kwargs == {}
+    assert net.config[Simulator].allocator is par.allocate
+    assert net.config[Simulator].allocator_kwargs == {}
     assert net.config[Simulator].router is par.route
     assert net.config[Simulator].router_kwargs == {}
 
@@ -72,7 +73,7 @@ def test_callable_parameter_validate():
     """Test that the callable parameter fails to validate if passed something
     other than a callable.
     """
-    cp = CallableParameter()
+    cp = CallableParameter("test")
 
     with pytest.raises(ValueError) as excinfo:
         cp.validate(None, "Not a function")
