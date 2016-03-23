@@ -89,7 +89,9 @@ def optimise_out_passthrough_nodes(model, passthrough_nodes, config,
                        getconfig(config, node, "optimize_out"))
         if remove_node or remove_node is None:
             removed = remove_operator_from_connection_map(
-                model.connection_map, operator, force=bool(remove_node))
+                model.connection_map, operator, force=bool(remove_node),
+                weight=len(operator.groups)
+            )
 
         # Log if the Node was removed
         if removed:
@@ -101,7 +103,8 @@ def optimise_out_passthrough_nodes(model, passthrough_nodes, config,
             logger.info("Passthrough Node {!s} was optimized out".format(node))
 
 
-def remove_operator_from_connection_map(conn_map, target, force=True):
+def remove_operator_from_connection_map(conn_map, target, force=True,
+                                        weight=1.0):
     """Remove an operator from a connection map by combining the connections
     that lead to and from the operator.
 
@@ -115,6 +118,10 @@ def remove_operator_from_connection_map(conn_map, target, force=True):
 
     Other Parameters
     ----------------
+    weight : int or float
+        Multiplier of the cost of the network traffic with the operator left in
+        place (used, for example, to represent the number of column divisions
+        of a matrix multiply).
     force : bool
         If False then the operator will only be optimised out if it is expected
         that doing so will break network performance. If True (the default)
@@ -131,7 +138,7 @@ def remove_operator_from_connection_map(conn_map, target, force=True):
 
     # Compute the most packets any object which receives packets from the
     # operator will receive if the operator is not removed.
-    old_max_packets = _get_max_packets_received(out_conns)
+    old_max_packets = _get_max_packets_received(out_conns) * weight
 
     # Prepare to compute the new equivalent of this value
     new_rx = collections.defaultdict(lambda: 0)
