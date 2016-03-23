@@ -6,6 +6,7 @@ import nengo.synapses
 import numpy as np
 from six.moves import filter as sfilter
 from six import iteritems, itervalues
+from toposort import toposort_flatten
 
 from nengo_spinnaker.builder.ensemble import EnsembleTransmissionParameters
 from nengo_spinnaker.builder.model import (
@@ -70,6 +71,38 @@ def get_force_removal_passnodes(network):
     return force_removal
 
 
+def get_passthrough_node_dependencies(model, passthrough_nodes):
+    """Create a dictionary mapping from nodes and operators to all the nodes
+    and operators which transmit to it.
+
+    The resultant dictionary may be used to topologically sort the passthrough
+    Nodes.
+    """
+    # Create an empty dependency dictionary
+    deps = {n_op: set() for n_op in iteritems(passthrough_nodes)}
+
+    # Store a mapping : {operator: {Node, operator}
+    n_ops = {op: (n, op) for n, op in iteritems(passthrough_nodes)}
+
+    # Iterate through the signals to get those whose sinks include an operator
+    # about which we care and whose source is also an operator we care about.
+    for sig, _ in model.connection_map.get_signals():
+        if sig.source in n_ops:
+            for sink in sig.sinks:
+                if sink in n_ops:
+                    # The sink and source are both passthrough nodes.
+                    deps[n_ops[sink]].add(n_ops[sig.source])
+
+    return deps
+
+
+def order_passthrough_nodes(model, passthrough_nodes):
+    """Order passthrough Nodes for removal."""
+    return reversed(toposort_flatten(
+        get_passthrough_node_dependencies(model, passthrough_nodes)
+    ))
+
+
 def optimise_out_passthrough_nodes(model, passthrough_nodes, config,
                                    forced_removals=set()):
     """Remove passthrough Nodes from a network.
@@ -80,7 +113,7 @@ def optimise_out_passthrough_nodes(model, passthrough_nodes, config,
         Set of Nodes which should be removed regardless of the configuration
         settings.
     """
-    for node, operator in iteritems(passthrough_nodes):
+    for node, operator in order_passthrough_nodes(model, passthrough_nodes):
         removed = False
 
         # Determine whether to remove the Node or not (if True then definitely
