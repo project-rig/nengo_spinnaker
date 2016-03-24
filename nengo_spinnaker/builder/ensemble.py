@@ -3,6 +3,7 @@ import nengo
 from nengo.builder import connection as connection_b
 from nengo.builder import ensemble
 from nengo.dists import Distribution
+from nengo.exceptions import BuildError
 from nengo.processes import Process
 from nengo.utils.builder import full_transform
 from nengo.utils import numpy as npext
@@ -136,6 +137,38 @@ def build_lif(model, ens):
     model.object_operators[ens] = operators.EnsembleLIF(ens)
 
 
+def build_decoders(model, conn, rng):
+    # Copied from older version of Nengo
+    encoders = model.params[conn.pre_obj].encoders
+    gain = model.params[conn.pre_obj].gain
+    bias = model.params[conn.pre_obj].bias
+
+    eval_points = connection_b.get_eval_points(model, conn, rng)
+    targets = connection_b.get_targets(model, conn, eval_points)
+
+    x = np.dot(eval_points, encoders.T / conn.pre_obj.radius)
+    E = None
+    if conn.solver.weights:
+        E = model.params[conn.post_obj].scaled_encoders.T[conn.post_slice]
+        # include transform in solved weights
+        targets = connection_b.multiply(targets, conn.transform.T)
+
+    try:
+        wrapped_solver = model.decoder_cache.wrap_solver(
+            connection_b.solve_for_decoders
+        )
+        decoders, solver_info = wrapped_solver(
+            conn.solver, conn.pre_obj.neuron_type, gain, bias, x, targets,
+            rng=rng, E=E)
+    except BuildError:
+        raise BuildError(
+            "Building %s: 'activities' matrix is all zero for %s. "
+            "This is because no evaluation points fall in the firing "
+            "ranges of any neurons." % (conn, conn.pre_obj))
+
+    return eval_points, decoders, solver_info
+
+
 @Model.transmission_parameter_builders.register(nengo.Ensemble)
 def build_from_ensemble_connection(model, conn):
     """Build the parameters object for a connection from an Ensemble."""
@@ -151,9 +184,7 @@ def build_from_ensemble_connection(model, conn):
     transform = full_transform(conn, slice_pre=False, allow_scalars=False)
 
     # Solve for the decoders
-    eval_points, decoders, solver_info = connection_b.build_decoders(
-        model, conn, rng
-    )
+    eval_points, decoders, solver_info = build_decoders(model, conn, rng)
 
     # Store the parameters in the model
     model.params[conn] = BuiltConnection(decoders=decoders,

@@ -7,49 +7,61 @@ from nengo_spinnaker.node_io import Ethernet
 from nengo_spinnaker.simulator import Simulator
 
 
+def _set_param(obj, name, ParamType, *args, **kwargs):
+    # Create the parameter
+    try:
+        param = ParamType(*args, **kwargs)
+    except TypeError:
+        param = ParamType(name, *args, **kwargs)
+
+    obj.set_param(name, param)
+
+
 def add_spinnaker_params(config):
     """Add SpiNNaker specific parameters to a configuration object."""
     # Add simulator parameters
     config.configures(Simulator)
 
-    config[Simulator].set_param("placer", CallableParameter(default=par.place))
-    config[Simulator].set_param("placer_kwargs", DictParam(default={}))
+    _set_param(config[Simulator], "placer", CallableParameter,
+               default=par.place)
+    _set_param(config[Simulator], "placer_kwargs", DictParam,
+               default=dict())
 
-    config[Simulator].set_param("allocater",
-                                CallableParameter(default=par.allocate))
-    config[Simulator].set_param("allocater_kwargs",
-                                DictParam(default={}))
+    _set_param(config[Simulator], "allocator", CallableParameter,
+               default=par.allocate)
+    _set_param(config[Simulator], "allocator_kwargs", DictParam,
+               default=dict())
 
-    config[Simulator].set_param("router", CallableParameter(default=par.route))
-    config[Simulator].set_param("router_kwargs", DictParam(default={}))
+    _set_param(config[Simulator], "router", CallableParameter,
+               default=par.route)
+    _set_param(config[Simulator], "router_kwargs", DictParam,
+               default=dict())
 
-    config[Simulator].set_param("node_io", Parameter(default=Ethernet))
-    config[Simulator].set_param("node_io_kwargs", DictParam(default={}))
+    _set_param(config[Simulator], "node_io", Parameter, default=Ethernet)
+    _set_param(config[Simulator], "node_io_kwargs", DictParam, default={})
 
     # Add function_of_time parameters to Nodes
-    config[nengo.Node].set_param("function_of_time", BoolParam(default=False))
-    config[nengo.Node].set_param("function_of_time_period",
-                                 NumberParam(default=None, optional=True))
+    _set_param(config[nengo.Node], "function_of_time", BoolParam,
+               default=False)
+    _set_param(config[nengo.Node], "function_of_time_period",
+               NumberParam, default=None, optional=True)
 
     # Add multiple-core options to Nodes
-    config[nengo.Node].set_param(
-        "n_cores_per_chip",
-        IntParam(default=None, low=1, high=16, optional=True)
-    )
-    config[nengo.Node].set_param(
-        "n_chips",
-        IntParam(default=None, low=1, optional=True)
-    )
+    _set_param(config[nengo.Node], "n_cores_per_chip", IntParam, default=None,
+               low=1, high=16, optional=True)
+    _set_param(config[nengo.Node], "n_chips", IntParam, default=None, low=1,
+               optional=True)
+
     # Add optimisation control parameters to (passthrough) Nodes. None means
     # that a heuristic will be used to determine if the passthrough Node should
     # be removed.
-    config[nengo.Node].set_param("optimize_out",
-                                 BoolParam(default=None, optional=True))
+    _set_param(config[nengo.Node], "optimize_out", BoolParam,
+               default=None, optional=True)
 
     # Add profiling parameters to Ensembles
-    config[nengo.Ensemble].set_param("profile", BoolParam(default=False))
-    config[nengo.Ensemble].set_param("profile_num_samples",
-                                     NumberParam(default=None, optional=True))
+    _set_param(config[nengo.Ensemble], "profile", BoolParam, default=False)
+    _set_param(config[nengo.Ensemble], "profile_num_samples",
+               NumberParam, default=None, optional=True)
 
 
 class CallableParameter(Parameter):
