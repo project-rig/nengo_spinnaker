@@ -248,6 +248,12 @@ class FilterCore(Vertex):
             indices of the transform matrix corresponding to the transmission
             parameters.
         """
+        # Check that the output slice is safe
+        assert (output_slice.start is not None and
+                output_slice.stop is not None and
+                (output_slice.step is None or output_slice.step == 1)
+                )
+
         # Store information about the slices of the for which matrix we're
         # responsible.
         self.output_slice = output_slice
@@ -255,9 +261,7 @@ class FilterCore(Vertex):
 
         # Store which signal parameter slices we contain
         self.transmission_params = list()
-        out_set = set(range(output_slice.start or 0,
-                            output_slice.stop or 0,
-                            output_slice.step or 1))
+        out_set = set(range(output_slice.start, output_slice.stop))
         for transmission_params, outs in output_slices:
             # If there is an intersection between the outs and the set of outs
             # we're responsible for then store transmission parameters.
