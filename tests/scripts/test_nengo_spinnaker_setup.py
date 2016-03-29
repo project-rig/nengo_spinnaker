@@ -27,8 +27,7 @@ def test_generate_config_file():
     fileno, filename = tempfile.mkstemp()
     print(filename)
 
-    generate_config_file(filename, dimensions=(4, 8),
-                         ip_address="127.0.0.1")
+    generate_config_file(filename, ip_address="127.0.0.1")
 
     with open(filename, "r") as f:
         config = f.read()
@@ -36,8 +35,6 @@ def test_generate_config_file():
 
     assert "[spinnaker_machine]\n" in config
     assert "hostname: 127.0.0.1\n" in config
-    assert "width: 4\n" in config
-    assert "height: 8\n" in config
 
 
 def test_bad_main(monkeypatch):
@@ -51,8 +48,7 @@ def test_bad_main(monkeypatch):
 
 def test_main(monkeypatch):
     # Check that questions are asked and a config file generated
-    mock_cli_wrapper = Mock(return_value={"dimensions": (2, 2),
-                                          "ip_address": "127.0.0.1"})
+    mock_cli_wrapper = Mock(return_value={"ip_address": "127.0.0.1"})
     monkeypatch.setattr(wizard, "cli_wrapper", mock_cli_wrapper)
 
     # Temporarily any existing project config file out of the way

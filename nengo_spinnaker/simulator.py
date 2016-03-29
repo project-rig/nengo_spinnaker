@@ -67,11 +67,9 @@ class Simulator(object):
 
         # Create a controller for the machine and boot if necessary
         hostname = rc.get("spinnaker_machine", "hostname")
-        machine_width = rc.getint("spinnaker_machine", "width")
-        machine_height = rc.getint("spinnaker_machine", "height")
 
         self.controller = MachineController(hostname)
-        self.controller.boot(machine_width, machine_height)
+        self.controller.boot()
 
         # Create the IO controller
         io_cls = getconfig(network.config, Simulator, "node_io", Ethernet)
@@ -171,12 +169,10 @@ class Simulator(object):
         ))
 
         logger.info("Setting router timeout to 16 cycles")
-        for x in range(machine_width):
-            for y in range(machine_height):
-                with self.controller(x=x, y=y):
-                    if (x, y) in system_info:
-                        data = self.controller.read(0xf1000000, 4)
-                        self.controller.write(0xf1000000, data[:-1] + b'\x10')
+        for x, y in system_info.chips():
+            with self.controller(x=x, y=y):
+                data = self.controller.read(0xf1000000, 4)
+                self.controller.write(0xf1000000, data[:-1] + b'\x10')
 
     def __enter__(self):
         """Enter a context which will close the simulator when exited."""
