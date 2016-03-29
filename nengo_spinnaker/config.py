@@ -1,6 +1,6 @@
 """Nengo/SpiNNaker specific configuration."""
 import nengo
-from nengo.params import BoolParam, DictParam, NumberParam, Parameter, IntParam
+from nengo.params import BoolParam, DictParam, NumberParam, Parameter
 from rig import place_and_route as par
 
 from nengo_spinnaker.node_io import Ethernet
@@ -45,12 +45,6 @@ def add_spinnaker_params(config):
                default=False)
     _set_param(config[nengo.Node], "function_of_time_period",
                NumberParam, default=None, optional=True)
-
-    # Add multiple-core options to Nodes
-    _set_param(config[nengo.Node], "n_cores_per_chip", IntParam, default=None,
-               low=1, high=16, optional=True)
-    _set_param(config[nengo.Node], "n_chips", IntParam, default=None, low=1,
-               optional=True)
 
     # Add optimisation control parameters to (passthrough) Nodes. None means
     # that a heuristic will be used to determine if the passthrough Node should

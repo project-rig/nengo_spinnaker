@@ -27,8 +27,6 @@ def test_add_spinnaker_params():
         assert param in str(excinfo.value)
 
     for param, value in [
-            ("n_cores_per_chip", 16),
-            ("n_chips", 4),
             ("optimize_out", False),
             ]:
         with pytest.raises(AttributeError) as excinfo:
@@ -54,9 +52,6 @@ def test_add_spinnaker_params():
     assert net.config[nengo.Node].function_of_time is False
     assert net.config[nengo.Node].function_of_time_period is None
     assert net.config[nengo.Node].optimize_out is None
-
-    assert net.config[nengo.Node].n_cores_per_chip is None
-    assert net.config[nengo.Node].n_chips is None
 
     assert net.config[Simulator].placer is par.place
     assert net.config[Simulator].placer_kwargs == {}

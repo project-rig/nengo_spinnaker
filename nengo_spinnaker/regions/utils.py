@@ -5,6 +5,11 @@ from six import iteritems, iterkeys
 import struct
 
 
+class Args(collections.namedtuple("Args", "args, kwargs")):
+    def __new__(cls, *args, **kwargs):
+        return super(Args, cls).__new__(cls, args, kwargs)
+
+
 def create_app_ptr_and_region_files_named(fp, regions, region_args):
     """Split up a file-like view of memory into smaller views, one per region,
     and write into the first region of memory the offsets to these later
