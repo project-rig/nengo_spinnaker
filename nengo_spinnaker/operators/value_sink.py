@@ -1,3 +1,4 @@
+import enum
 import numpy as np
 from rig.place_and_route import Cores, SDRAM
 import struct
@@ -5,10 +6,22 @@ import struct
 from nengo_spinnaker.builder.model import InputPort
 from nengo_spinnaker.builder.netlist import netlistspec
 from nengo_spinnaker import regions
+from nengo_spinnaker.regions.utils import Args, sizeof_regions_named
 from nengo_spinnaker.regions.filters import make_filter_regions
 from nengo_spinnaker.netlist import Vertex
+from nengo_spinnaker.partition import divide_slice
 from nengo_spinnaker.utils.application import get_application
-from nengo_spinnaker.utils.type_casts import fix_to_np
+
+from ..builder.connection import (EnsembleTransmissionParameters,
+                                  PassthroughNodeTransmissionParameters)
+
+
+class Regions(enum.IntEnum):
+    """Region names, corresponding to those used in `value_sink.c`"""
+    system = 1
+    filters = 2
+    filter_routing = 3
+    recording = 15
 
 
 class ValueSink(object):
@@ -24,9 +37,10 @@ class ValueSink(object):
     sample_every : int
         Number of machine timesteps between taking samples.
     """
-    def __init__(self, probe, dt):
+    def __init__(self, probe, dt, max_width=64):
         self.probe = probe
         self.size_in = probe.size_in
+        self.max_width = max_width
 
         # Compute the sample period
         if probe.sample_every is None:
@@ -41,71 +55,138 @@ class ValueSink(object):
         # Extract all the filters from the incoming connections to build the
         # filter regions.
         signals_conns = model.get_signals_to_object(self)[InputPort.standard]
-        self.filter_region, self.filter_routing_region = make_filter_regions(
+        filter_region, filter_routing_region = make_filter_regions(
             signals_conns, model.dt, True, model.keyspaces.filter_routing_tag)
 
-        # Use a matrix region to record into (slightly unpleasant)
-        self.recording_region = regions.MatrixRegion(
-            np.zeros((self.size_in, n_steps), dtype=np.uint32)
+        # Make sufficient vertices to ensure that each has a size_in of less
+        # than max_width.
+        n_vertices = (
+            (self.size_in // self.max_width) +
+            (1 if self.size_in % self.max_width else 0)
+        )
+        self.vertices = tuple(
+            ValueSinkVertex(model.machine_timestep, n_steps, sl, filter_region,
+                            filter_routing_region) for sl in
+            divide_slice(slice(0, self.size_in), n_vertices)
         )
 
-        # This isn't partitioned, so we just compute the SDRAM requirement and
-        # return a new vertex.
-        self.system_region = SystemRegion(model.machine_timestep, self.size_in)
-
-        self.regions = [None] * 15
-        self.regions[0] = self.system_region
-        self.regions[1] = self.filter_region
-        self.regions[2] = self.filter_routing_region
-        self.regions[14] = self.recording_region  # **YUCK**
-        resources = {
-            Cores: 1,
-            SDRAM: regions.utils.sizeof_regions(self.regions, None)
-        }
-
-        self.vertex = Vertex(get_application("value_sink"), resources)
-
         # Return the spec
-        return netlistspec(self.vertex, self.load_to_machine,
+        return netlistspec(self.vertices, self.load_to_machine,
                            after_simulation_function=self.after_simulation)
 
     def load_to_machine(self, netlist, controller):
         """Load the ensemble data into memory."""
-        # Assign SDRAM for each memory region and create the application
-        # pointer table.
-        region_memory = regions.utils.create_app_ptr_and_region_files(
-            netlist.vertices_memory[self.vertex], self.regions, None)
-
-        # Write in each region
-        for region, mem in zip(self.regions[:3], region_memory):
-            if region is not None:
-                region.write_subregion_to_file(mem, slice(None))
-
-        # Store the location of the recording region
-        self.recording_region_mem = region_memory[14]
+        # Load each vertex in turn
+        for v in self.vertices:
+            v.load_to_machine(netlist)
 
     def after_simulation(self, netlist, simulator, n_steps):
         """Retrieve data from a simulation."""
-        self.recording_region_mem.seek(0)
-        recorded_data = fix_to_np(np.frombuffer(
-            self.recording_region_mem.read(n_steps * self.size_in * 4),
-            dtype=np.int32)).reshape(n_steps, self.size_in)
+        # Create an array into which to read probed values
+        data = np.zeros((n_steps, self.size_in), dtype=np.float)
 
-        if self.probe not in simulator.data:
-            simulator.data[self.probe] = recorded_data
-        else:
-            full_data = np.vstack([simulator.data[self.probe], recorded_data])
-            simulator.data[self.probe] = full_data
+        # Read in the recorded results
+        for v in self.vertices:
+            data[:, v.input_slice] = v.read_recording(n_steps)
+
+        # Apply the sampling
+        data = data[::self.sample_every]
+
+        # Store the probe data in the simulator
+        if self.probe in simulator.data:
+            # Include any existing probed data
+            data = np.vstack((simulator.data[self.probe], data))
+        simulator.data[self.probe] = data
+
+
+class ValueSinkVertex(Vertex):
+    def __init__(self, timestep, n_steps, input_slice,
+                 filter_region, filter_routing_region):
+        """Create a new vertex for a portion of a value sink."""
+        self.input_slice = input_slice
+
+        # Store the pre-existing regions and create new regions
+        self.regions = {
+            Regions.system: SystemRegion(timestep, input_slice),
+            Regions.filters: filter_region,
+            Regions.filter_routing: filter_routing_region,
+            Regions.recording: regions.WordRecordingRegion(n_steps),
+        }
+
+        # Store region arguments
+        w = input_slice.stop - input_slice.start
+        self.region_arguments = {
+            Regions.system: Args(),
+            Regions.filters: Args(filter_width=w),
+            Regions.filter_routing: Args(),
+            Regions.recording: Args(input_slice),
+        }
+
+        # Determine resources usage
+        resources = {
+            Cores: 1,
+            SDRAM: sizeof_regions_named(self.regions, self.region_arguments)
+        }
+        super(ValueSinkVertex, self).__init__(get_application("value_sink"),
+                                              resources)
+
+    def accepts_signal(self, signal_params, transmission_params):
+        """Choose whether to receive this signal or not."""
+        if isinstance(transmission_params, EnsembleTransmissionParameters):
+            # If the connection is from an ensemble only return true if the
+            # decoders contain non-zero values in the input dimensions we care
+            # about.
+            return np.any(transmission_params.decoders[self.input_slice, :])
+        elif isinstance(transmission_params,
+                        PassthroughNodeTransmissionParameters):
+            # If the connection is from a Node of some variety then only return
+            # true if the transform contains non-zero values in the rows which
+            # relate to the subspace we receive input in.
+            return np.any(transmission_params.transform[self.input_slice])
+
+        # We don't know how to interpret the transmission parameters
+        raise NotImplementedError
+
+    def load_to_machine(self, netlist):
+        # Get a block of memory for each of the regions
+        self.region_memory = \
+            regions.utils.create_app_ptr_and_region_files_named(
+                netlist.vertices_memory[self], self.regions,
+                self.region_arguments
+            )
+
+        # Write the regions into memory
+        for key in Regions:
+            # Get the arguments
+            args, kwargs = self.region_arguments[key]
+
+            # Get the region
+            self.regions[key].write_subregion_to_file(
+                self.region_memory[key], *args, **kwargs
+            )
+
+    def read_recording(self, n_steps):
+        """Read back the recorded values."""
+        # Grab the block of memory and seek to the start
+        mem = self.region_memory[Regions.recording]
+        mem.seek(0)
+
+        # Perform the read
+        return self.regions[Regions.recording].to_array(
+            mem, self.input_slice, n_steps
+        )
 
 
 class SystemRegion(regions.Region):
     """System region for a value sink."""
-    def __init__(self, timestep, size_in):
+    def __init__(self, timestep, input_slice):
         self.timestep = timestep
-        self.size_in = size_in
+        self.input_slice = input_slice
 
     def sizeof(self, *args):
-        return 8  # 2 words
+        return 12  # 3 words
 
     def write_subregion_to_file(self, fp, *args):
-        fp.write(struct.pack("<2I", self.timestep, self.size_in))
+        size_in = self.input_slice.stop - self.input_slice.start
+        fp.write(struct.pack("<3I", self.timestep,
+                             size_in, self.input_slice.start))

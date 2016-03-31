@@ -4,6 +4,7 @@ import numpy as np
 from rig.type_casts import NumpyFixToFloatConverter
 
 from .region import Region
+from nengo_spinnaker.utils.type_casts import fix_to_np
 
 
 class RecordingRegion(Region):
@@ -23,6 +24,21 @@ class WordRecordingRegion(RecordingRegion):
     """Record 1 word per atom per time step."""
     def bytes_per_frame(self, n_atoms):
         return 4*n_atoms
+
+    def to_array(self, mem, vertex_slice, n_steps):
+        mem.seek(0)
+
+        # Determine how many bytes to read, then read
+        width = vertex_slice.stop - vertex_slice.start
+        framelength = self.bytes_per_frame(width)
+        data = mem.read(n_steps * framelength)
+
+        # Convert the data into the correct format
+        data = np.fromstring(data, dtype=np.int32)
+        data.shape = (n_steps, -1)
+
+        # Recast back to float and return
+        return fix_to_np(data)
 
 
 class SpikeRecordingRegion(RecordingRegion):
