@@ -69,13 +69,6 @@ class Simulator(object):
         # Add this simulator to the set of open simulators
         Simulator._add_simulator(self)
 
-        # Create a controller for the machine and boot if necessary
-        if hostname is None:
-            hostname = rc.get("spinnaker_machine", "hostname")
-
-        self.controller = MachineController(hostname)
-        self.controller.boot()
-
         # Create the IO controller
         io_cls = getconfig(network.config, Simulator, "node_io", Ethernet)
         io_kwargs = getconfig(network.config, Simulator, "node_io_kwargs",
@@ -130,6 +123,13 @@ class Simulator(object):
         logger.info("Building netlist")
         start = time.time()
         self.netlist = self.model.make_netlist(self.max_steps or 0)
+
+        # Create a controller for the machine and boot if necessary
+        if hostname is None:
+            hostname = rc.get("spinnaker_machine", "hostname")
+
+        self.controller = MachineController(hostname)
+        self.controller.boot()
 
         # Get a system-info object to place & route against
         logger.info("Getting SpiNNaker machine specification")
