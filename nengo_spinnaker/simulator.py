@@ -50,7 +50,8 @@ class Simulator(object):
     def _remove_simulator(cls, simulator):
         cls._open_simulators.remove(simulator)
 
-    def __init__(self, network, dt=0.001, period=10.0, timescale=1.0):
+    def __init__(self, network, dt=0.001, period=10.0, timescale=1.0,
+                 hostname=None):
         """Create a new Simulator with the given network.
 
         Parameters
@@ -61,12 +62,16 @@ class Simulator(object):
         timescale : float
             Scaling factor to apply to the simulation, e.g., a value of `0.5`
             will cause the simulation to run at half real-time.
+        hostname : string or None
+            Hostname of the SpiNNaker machine to use; if None then the machine
+            specified in the config file will be used.
         """
         # Add this simulator to the set of open simulators
         Simulator._add_simulator(self)
 
         # Create a controller for the machine and boot if necessary
-        hostname = rc.get("spinnaker_machine", "hostname")
+        if hostname is None:
+            hostname = rc.get("spinnaker_machine", "hostname")
 
         self.controller = MachineController(hostname)
         self.controller.boot()
