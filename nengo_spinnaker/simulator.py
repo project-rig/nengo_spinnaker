@@ -51,7 +51,8 @@ class Simulator(object):
         cls._open_simulators.remove(simulator)
 
     def __init__(self, network, dt=0.001, period=10.0, timescale=1.0,
-                 hostname=None, use_spalloc=False):
+                 hostname=None, use_spalloc=False,
+                 allocation_fudge_factor=0.6):
         """Create a new Simulator with the given network.
 
         Parameters
@@ -67,6 +68,16 @@ class Simulator(object):
             specified in the config file will be used.
         use_spalloc : bool
             Allocate a SpiNNaker machine for the simulator using ``spalloc``.
+
+        Other Parameters
+        ----------------
+        allocation_fudge_factor:
+           Fudge factor to allocate more cores than really necessary when using
+           `spalloc` to ensure that (a) there are sufficient "live" cores in
+           the allocated machine, (b) there is sufficient room for a good place
+           and route solution. This should generally be more than 0.1 (10% more
+           cores than necessary) to account for the usual rate of missing
+           chips.
         """
         # Add this simulator to the set of open simulators
         Simulator._add_simulator(self)
@@ -139,19 +150,28 @@ class Simulator(object):
 
             # Determine how many boards to ask for (assuming 16 usable cores
             # per chip and 48 chips per board).
-            n_cores = sum(v.resources.get(Cores, 0) for v in
-                          self.netlist.vertices)
+            n_cores = (sum(v.resources.get(Cores, 0) for v in
+                           self.netlist.vertices) *
+                       (1.0 + allocation_fudge_factor))
             n_boards = int(np.ceil((n_cores / 16.) / 48.))
 
             # Request the job
             self.job = Job(n_boards)
+            logger.info("Allocated job ID %d...", self.job.id)
 
             # Wait until we're given the machine
             logger.info("Waiting for machine allocation...")
             self.job.wait_until_ready()
 
+            # spalloc recommends a slight delay before attempting to boot the
+            # machine, later versions of spalloc server may relax this
+            # requirement.
+            time.sleep(1)
+
             # Store the hostname
             hostname = self.job.hostname
+            logger.info("Using %d boards at %s (on machine %s)",
+                        n_boards, hostname, self.job.machine_name)
 
         self.controller = MachineController(hostname)
         self.controller.boot()
