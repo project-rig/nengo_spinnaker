@@ -51,7 +51,7 @@ class Simulator(object):
         cls._open_simulators.remove(simulator)
 
     def __init__(self, network, dt=0.001, period=10.0, timescale=1.0,
-                 hostname=None):
+                 hostname=None, use_spalloc=False):
         """Create a new Simulator with the given network.
 
         Parameters
@@ -65,6 +65,8 @@ class Simulator(object):
         hostname : string or None
             Hostname of the SpiNNaker machine to use; if None then the machine
             specified in the config file will be used.
+        use_spalloc : bool
+            Allocate a SpiNNaker machine for the simulator using ``spalloc``.
         """
         # Add this simulator to the set of open simulators
         Simulator._add_simulator(self)
@@ -125,8 +127,31 @@ class Simulator(object):
         self.netlist = self.model.make_netlist(self.max_steps or 0)
 
         # Create a controller for the machine and boot if necessary
-        if hostname is None:
-            hostname = rc.get("spinnaker_machine", "hostname")
+        self.job = None
+        if not use_spalloc:
+            # Use the specified machine rather than trying to get one
+            # allocated.
+            if hostname is None:
+                hostname = rc.get("spinnaker_machine", "hostname")
+        else:
+            # Attempt to get a machine allocated to us
+            from spalloc import Job
+
+            # Determine how many boards to ask for (assuming 16 usable cores
+            # per chip and 48 chips per board).
+            n_cores = sum(v.resources.get(Cores, 0) for v in
+                          self.netlist.vertices)
+            n_boards = int(np.ceil((n_cores / 16.) / 48.))
+
+            # Request the job
+            self.job = Job(n_boards)
+
+            # Wait until we're given the machine
+            logger.info("Waiting for machine allocation...")
+            self.job.wait_until_ready()
+
+            # Store the hostname
+            hostname = self.job.hostname
 
         self.controller = MachineController(hostname)
         self.controller.boot()
@@ -345,6 +370,10 @@ class Simulator(object):
             self._closed = True
             self.io_controller.close()
             self.controller.send_signal("stop")
+
+            # Destroy the job if we allocated one
+            if self.job is not None:
+                self.job.destroy()
 
             # Remove this simulator from the list of open simulators
             Simulator._remove_simulator(self)

@@ -99,5 +99,10 @@ setup(
         "console_scripts": [
             "nengo_spinnaker_setup = nengo_spinnaker.scripts.nengo_spinnaker_setup:main",
         ],
-    }
+    },
+
+    # Extras
+    extras_require={
+        "spalloc": ["spalloc >= 0.2.2"],  # For machine allocation
+    },
 )
