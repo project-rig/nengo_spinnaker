@@ -166,7 +166,7 @@ class Simulator(object):
             # spalloc recommends a slight delay before attempting to boot the
             # machine, later versions of spalloc server may relax this
             # requirement.
-            time.sleep(1)
+            time.sleep(5.0)
 
             # Store the hostname
             hostname = self.job.hostname
