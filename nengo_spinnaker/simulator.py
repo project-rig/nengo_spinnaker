@@ -51,7 +51,7 @@ class Simulator(object):
         cls._open_simulators.remove(simulator)
 
     def __init__(self, network, dt=0.001, period=10.0, timescale=1.0,
-                 hostname=None, use_spalloc=False,
+                 hostname=None, use_spalloc=None,
                  allocation_fudge_factor=0.6):
         """Create a new Simulator with the given network.
 
@@ -66,8 +66,9 @@ class Simulator(object):
         hostname : string or None
             Hostname of the SpiNNaker machine to use; if None then the machine
             specified in the config file will be used.
-        use_spalloc : bool
+        use_spalloc : bool or None
             Allocate a SpiNNaker machine for the simulator using ``spalloc``.
+            If None then the setting specified in the config file will be used.
 
         Other Parameters
         ----------------
@@ -137,6 +138,15 @@ class Simulator(object):
         start = time.time()
         self.netlist = self.model.make_netlist(self.max_steps or 0)
 
+        # Determine whether to use a spalloc machine or not
+        if use_spalloc is None:
+            # Default is to not use spalloc; this is indicated by either the
+            # absence of the option in the config file OR the option being set
+            # to false.
+            use_spalloc = (
+                rc.has_option("spinnaker_machine", "use_spalloc") and
+                rc.getboolean("spinnaker_machine", "use_spalloc"))
+
         # Create a controller for the machine and boot if necessary
         self.job = None
         if not use_spalloc:
@@ -170,8 +180,8 @@ class Simulator(object):
 
             # Store the hostname
             hostname = self.job.hostname
-            logger.info("Using %d boards at %s (on machine %s)",
-                        n_boards, hostname, self.job.machine_name)
+            logger.info("Using %d board(s) of \"%s\" (%s)",
+                        n_boards, self.job.machine_name, hostname)
 
         self.controller = MachineController(hostname)
         self.controller.boot()
