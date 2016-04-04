@@ -181,7 +181,7 @@ class Simulator(object):
             # Store the hostname
             hostname = self.job.hostname
             logger.info("Using %d board(s) of \"%s\" (%s)",
-                        n_boards, self.job.machine_name, hostname)
+                        len(self.job.boards), self.job.machine_name, hostname)
 
         self.controller = MachineController(hostname)
         self.controller.boot()
