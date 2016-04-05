@@ -294,9 +294,8 @@ class Simulator(object):
             io_thread.start()
 
             # Wait for all cores to hit SYNC1
-            self.controller.wait_for_cores_to_reach_state(
-                "sync1", len(self.netlist.vertices)
-            )
+            self._wait_for_transition(AppState.sync0, AppState.sync1,
+                                      len(self.netlist.vertices))
             logger.info("Running simulation...")
             self.controller.send_signal("sync1")
 
@@ -344,7 +343,10 @@ class Simulator(object):
             time.sleep(1.0)
 
         # Check if any cores haven't exited cleanly
-        if self.controller.count_cores_in_state(desired_to_state) != num_verts:
+        num_ready = self.controller.wait_for_cores_to_reach_state(
+            desired_to_state, num_verts, timeout=5.0)
+
+        if num_ready != num_verts:
             # Loop through all placed vertices
             for vertex, (x, y) in six.iteritems(self.netlist.placements):
                 p = self.netlist.allocations[vertex][Cores].start
@@ -353,6 +355,7 @@ class Simulator(object):
                     print("Core ({}, {}, {}) in state {!s}".format(
                         x, y, p, status.cpu_state))
                     print(self.controller.get_iobuf(p, x, y))
+
             raise Exception("Unexpected core failures before reaching %s "
                             "state." % desired_to_state)
 
