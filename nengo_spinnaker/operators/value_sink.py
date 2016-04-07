@@ -37,7 +37,7 @@ class ValueSink(object):
     sample_every : int
         Number of machine timesteps between taking samples.
     """
-    def __init__(self, probe, dt, max_width=64):
+    def __init__(self, probe, dt, max_width=16):
         self.probe = probe
         self.size_in = probe.size_in
         self.max_width = max_width
