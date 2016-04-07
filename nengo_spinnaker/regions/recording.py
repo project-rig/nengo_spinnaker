@@ -4,6 +4,7 @@ import numpy as np
 from rig.type_casts import NumpyFixToFloatConverter
 
 from .region import Region
+from nengo_spinnaker.utils.type_casts import fix_to_np
 
 
 class RecordingRegion(Region):
@@ -15,6 +16,17 @@ class RecordingRegion(Region):
         n_atoms = vertex_slice.stop - vertex_slice.start
         return self.bytes_per_frame(n_atoms) * self.n_steps
 
+    def _read(self, mem, vertex_slice, n_steps):
+        """Read a suitable amount of data out of the memory view."""
+        mem.seek(0)
+
+        # Determine how many bytes to read, then read
+        width = vertex_slice.stop - vertex_slice.start
+        framelength = self.bytes_per_frame(width)
+        data = mem.read(n_steps * framelength)
+
+        return data, framelength, width
+
     def write_subregion_to_file(self, *args, **kwargs):  # pragma: no cover
         pass  # Nothing to do
 
@@ -23,6 +35,17 @@ class WordRecordingRegion(RecordingRegion):
     """Record 1 word per atom per time step."""
     def bytes_per_frame(self, n_atoms):
         return 4*n_atoms
+
+    def to_array(self, mem, vertex_slice, n_steps):
+        # Read from the memory
+        data, _, _ = self._read(mem, vertex_slice, n_steps)
+
+        # Convert the data into the correct format
+        data = np.fromstring(data, dtype=np.int32)
+        data.shape = (n_steps, -1)
+
+        # Recast back to float and return
+        return fix_to_np(data)
 
 
 class SpikeRecordingRegion(RecordingRegion):
@@ -39,12 +62,8 @@ class SpikeRecordingRegion(RecordingRegion):
         """Read the memory and return an appropriately formatted array of the
         results.
         """
-        mem.seek(0)
-
-        # Determine how many bytes to read, then read
-        n_neurons = vertex_slice.stop - vertex_slice.start
-        framelength = self.bytes_per_frame(n_neurons)
-        data = mem.read(n_steps * framelength)
+        # Read from the memory
+        data, framelength, _ = self._read(mem, vertex_slice, n_steps)
 
         # Format the data as a bitarray
         spikes = bitarray(endian="little")
@@ -73,12 +92,8 @@ class VoltageRecordingRegion(RecordingRegion):
         return 4 * words_per_frame
 
     def to_array(self, mem, vertex_slice, n_steps):
-        mem.seek(0)
-
-        # Determine how many bytes to read, then read
-        n_neurons = vertex_slice.stop - vertex_slice.start
-        framelength = self.bytes_per_frame(n_neurons)
-        data = mem.read(n_steps * framelength)
+        # Read from the memory
+        data, _, n_neurons = self._read(mem, vertex_slice, n_steps)
 
         # Convert the data into the correct format
         data = np.fromstring(data, dtype=np.uint16)
