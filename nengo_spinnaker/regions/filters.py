@@ -240,8 +240,8 @@ class LinearFilter(Filter):
         ab = np.vstack((-a[1:], b[1:])).T.flatten()
 
         # Convert the values to fixpoint and write into a data buffer
-        struct.pack_into("<I", buffer, offset, self.order)
-        buffer[offset + 4:4+self.order*8] = tp.np_to_fix(ab).tostring()
+        struct.pack_into("<I{}s".format(self.order * 2 * 4), buffer, offset,
+                         self.order, tp.np_to_fix(ab).tostring())
 
 
 class FilterRoutingRegion(Region):
