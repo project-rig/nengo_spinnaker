@@ -50,7 +50,9 @@ class Simulator(object):
     def _remove_simulator(cls, simulator):
         cls._open_simulators.remove(simulator)
 
-    def __init__(self, network, dt=0.001, period=10.0, timescale=1.0):
+    def __init__(self, network, dt=0.001, period=10.0, timescale=1.0,
+                 hostname=None, use_spalloc=None,
+                 allocation_fudge_factor=0.6):
         """Create a new Simulator with the given network.
 
         Parameters
@@ -61,15 +63,25 @@ class Simulator(object):
         timescale : float
             Scaling factor to apply to the simulation, e.g., a value of `0.5`
             will cause the simulation to run at half real-time.
+        hostname : string or None
+            Hostname of the SpiNNaker machine to use; if None then the machine
+            specified in the config file will be used.
+        use_spalloc : bool or None
+            Allocate a SpiNNaker machine for the simulator using ``spalloc``.
+            If None then the setting specified in the config file will be used.
+
+        Other Parameters
+        ----------------
+        allocation_fudge_factor:
+           Fudge factor to allocate more cores than really necessary when using
+           `spalloc` to ensure that (a) there are sufficient "live" cores in
+           the allocated machine, (b) there is sufficient room for a good place
+           and route solution. This should generally be more than 0.1 (10% more
+           cores than necessary) to account for the usual rate of missing
+           chips.
         """
         # Add this simulator to the set of open simulators
         Simulator._add_simulator(self)
-
-        # Create a controller for the machine and boot if necessary
-        hostname = rc.get("spinnaker_machine", "hostname")
-
-        self.controller = MachineController(hostname)
-        self.controller.boot()
 
         # Create the IO controller
         io_cls = getconfig(network.config, Simulator, "node_io", Ethernet)
@@ -125,6 +137,54 @@ class Simulator(object):
         logger.info("Building netlist")
         start = time.time()
         self.netlist = self.model.make_netlist(self.max_steps or 0)
+
+        # Determine whether to use a spalloc machine or not
+        if use_spalloc is None:
+            # Default is to not use spalloc; this is indicated by either the
+            # absence of the option in the config file OR the option being set
+            # to false.
+            use_spalloc = (
+                rc.has_option("spinnaker_machine", "use_spalloc") and
+                rc.getboolean("spinnaker_machine", "use_spalloc"))
+
+        # Create a controller for the machine and boot if necessary
+        self.job = None
+        if not use_spalloc:
+            # Use the specified machine rather than trying to get one
+            # allocated.
+            if hostname is None:
+                hostname = rc.get("spinnaker_machine", "hostname")
+        else:
+            # Attempt to get a machine allocated to us
+            from spalloc import Job
+
+            # Determine how many boards to ask for (assuming 16 usable cores
+            # per chip and 48 chips per board).
+            n_cores = (sum(v.resources.get(Cores, 0) for v in
+                           self.netlist.vertices) *
+                       (1.0 + allocation_fudge_factor))
+            n_boards = int(np.ceil((n_cores / 16.) / 48.))
+
+            # Request the job
+            self.job = Job(n_boards)
+            logger.info("Allocated job ID %d...", self.job.id)
+
+            # Wait until we're given the machine
+            logger.info("Waiting for machine allocation...")
+            self.job.wait_until_ready()
+
+            # spalloc recommends a slight delay before attempting to boot the
+            # machine, later versions of spalloc server may relax this
+            # requirement.
+            time.sleep(5.0)
+
+            # Store the hostname
+            hostname = self.job.hostname
+            logger.info("Using %d board(s) of \"%s\" (%s)",
+                        len(self.job.boards), self.job.machine_name, hostname)
+
+        self.controller = MachineController(hostname)
+        self.controller.boot()
 
         # Get a system-info object to place & route against
         logger.info("Getting SpiNNaker machine specification")
@@ -234,9 +294,8 @@ class Simulator(object):
             io_thread.start()
 
             # Wait for all cores to hit SYNC1
-            self.controller.wait_for_cores_to_reach_state(
-                "sync1", len(self.netlist.vertices)
-            )
+            self._wait_for_transition(AppState.sync0, AppState.sync1,
+                                      len(self.netlist.vertices))
             logger.info("Running simulation...")
             self.controller.send_signal("sync1")
 
@@ -284,7 +343,10 @@ class Simulator(object):
             time.sleep(1.0)
 
         # Check if any cores haven't exited cleanly
-        if self.controller.count_cores_in_state(desired_to_state) != num_verts:
+        num_ready = self.controller.wait_for_cores_to_reach_state(
+            desired_to_state, num_verts, timeout=5.0)
+
+        if num_ready != num_verts:
             # Loop through all placed vertices
             for vertex, (x, y) in six.iteritems(self.netlist.placements):
                 p = self.netlist.allocations[vertex][Cores].start
@@ -293,6 +355,7 @@ class Simulator(object):
                     print("Core ({}, {}, {}) in state {!s}".format(
                         x, y, p, status.cpu_state))
                     print(self.controller.get_iobuf(p, x, y))
+
             raise Exception("Unexpected core failures before reaching %s "
                             "state." % desired_to_state)
 
@@ -340,6 +403,10 @@ class Simulator(object):
             self._closed = True
             self.io_controller.close()
             self.controller.send_signal("stop")
+
+            # Destroy the job if we allocated one
+            if self.job is not None:
+                self.job.destroy()
 
             # Remove this simulator from the list of open simulators
             Simulator._remove_simulator(self)
