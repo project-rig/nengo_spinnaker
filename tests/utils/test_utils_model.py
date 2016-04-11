@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from nengo_spinnaker.utils import model as model_utils
-from nengo_spinnaker.builder import model
+from nengo_spinnaker.builder import model, Model
 
 from nengo_spinnaker.builder.ensemble import EnsembleTransmissionParameters
 from nengo_spinnaker.builder.node import (
@@ -71,6 +71,48 @@ def test_get_force_removal_passnodes():
 
     # Get whether the passthrough Nodes should be marked for removal
     assert model_utils.get_force_removal_passnodes(model) == set(set_a + set_b)
+
+
+def test_get_passthrough_node_dependencies():
+    """Check that the creation of a passthrough Node dependency graph works as
+    expected.
+    """
+    # Construct a mock network with three sets of passthrough Nodes in the
+    # configuration:
+    #
+    # 0 --> 2 --> 3
+    # 1 --/  \--> 4
+    #
+    # 5 --------> 6
+    #
+    # 7
+
+    # Create the Nodes and operators
+    ns = [nengo.Node(size_in=1, label="N{}".format(i), add_to_container=False)
+          for i in range(8)]
+    ops = [mock.Mock(name="O{}".format(i)) for i, _ in enumerate(ns)]
+
+    # Create the model
+    m = Model()
+    m.object_operators = ptns = dict(zip(ns, ops))
+
+    # Add the connections
+    for i, j in ((0, 2), (1, 2), (2, 3), (2, 4), (5, 6)):
+        m.connection_map.add_connection(
+            ops[i], None, model.SignalParameters(), None, ops[j], None, None)
+
+    # Check the dependencies against the expected dependencies.
+    deps = model_utils.get_passthrough_node_dependencies(m, ptns)
+    assert deps == {
+        (ns[0], ops[0]): set(),
+        (ns[1], ops[1]): set(),
+        (ns[2], ops[2]): {(ns[0], ops[0]), (ns[1], ops[1])},
+        (ns[3], ops[3]): {(ns[2], ops[2])},
+        (ns[4], ops[4]): {(ns[2], ops[2])},
+        (ns[5], ops[5]): set(),
+        (ns[6], ops[6]): {(ns[5], ops[5])},
+        (ns[7], ops[7]): set(),
+    }
 
 
 def test_remove_operator_from_connection_map():
