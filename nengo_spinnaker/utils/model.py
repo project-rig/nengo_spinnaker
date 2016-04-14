@@ -168,7 +168,7 @@ def remove_operator_from_connection_map(conn_map, target, force=True):
             conn_map.add_connection(**kwargs)
 
     # Determine whether the changes made should be discarded.
-    new_max_packets = max(itervalues(new_rx))
+    new_max_packets = 0 if not new_rx else max(itervalues(new_rx))
     discard_changes = new_max_packets > old_max_packets
 
     # If not forced and we caused a worsening in network usage then copy the
