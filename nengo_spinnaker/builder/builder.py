@@ -201,7 +201,8 @@ class Model(object):
         self._probe_builders.update(kwargs.get("extra_probe_builders", {}))
 
         # Build
-        self._build_network(network)
+        with self.decoder_cache:
+            self._build_network(network)
 
     def _build_network(self, network):
         # Get the seed for the network
