@@ -20,7 +20,7 @@ static inline int32_t convert_s32_30_s16_15(int64_t value)
 // Returns the dot product of two vectors of fixed point values.
 // NOTE: This dot product is not saturating at all!
 
-static inline value_t dot_product(uint32_t order, value_t *a, value_t *b)
+static inline value_t dot_product(uint32_t order, const value_t *a, const value_t *b)
 {
   // Initialise the accumulator with the first product
   register int32_t x = bitsk(a[0]);

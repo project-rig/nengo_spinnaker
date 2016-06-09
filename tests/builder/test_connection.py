@@ -80,20 +80,25 @@ class TestEnsembleTransmissionParameters(object):
         class MyETP(EnsembleTransmissionParameters):
             pass
 
-        tp1 = EnsembleTransmissionParameters(np.ones((3, 3)), np.eye(3))
-        tp2 = EnsembleTransmissionParameters(np.ones((1, 1)), np.eye(1))
-        tp3 = EnsembleTransmissionParameters(np.eye(3), np.eye(3))
-        tp4 = MyETP(np.ones((3, 3)), np.eye(3))
+        tp1 = EnsembleTransmissionParameters(np.ones((3, 3)), np.eye(3), None)
+        tp2 = EnsembleTransmissionParameters(np.ones((1, 1)), np.eye(1), None)
+        tp3 = EnsembleTransmissionParameters(np.eye(3), np.eye(3), None)
+        tp4 = MyETP(np.ones((3, 3)), np.eye(3), None)
 
         assert tp1 != tp2
         assert tp1 != tp3
         assert tp1 != tp4
 
-        tp5 = EnsembleTransmissionParameters(np.ones((3, 3)), np.eye(3))
+        tp5 = EnsembleTransmissionParameters(np.ones((3, 3)), np.eye(3), None)
         assert tp1 == tp5
 
-        tp6 = EnsembleTransmissionParameters(np.ones((3, 1)), np.ones((3, 1)))
+        tp6 = EnsembleTransmissionParameters(np.ones((3, 1)), np.ones((3, 1)), None)
         assert tp1 == tp6
+
+        learning_rule = mock.Mock()
+        tp7 = EnsembleTransmissionParameters(np.ones((3, 1)), np.ones((3, 1)), learning_rule)
+        tp8 = EnsembleTransmissionParameters(np.ones((3, 1)), np.ones((3, 1)), learning_rule)
+        assert tp7 != tp8
 
 
 class TestNodeTransmissionParameters(object):

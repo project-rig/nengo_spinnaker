@@ -265,7 +265,8 @@ void input_filtering_get_routes(
  */
 void input_filtering_get_filters(
     if_collection_t *filters,
-    uint32_t *data);
+    uint32_t *data,
+    value_t **filter_output_array);
 
 /* Initialise a filter collection with an output accumulator.
  *

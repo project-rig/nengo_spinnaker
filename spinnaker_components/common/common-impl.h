@@ -8,8 +8,8 @@
 #define use(x) do {} while ((x)!=(x))
 #endif
 
-//! This function is used to represent doing nothing.
-static inline void skip (void) { return; }
+//! This function is used in macros etc as a nop
+static inline void nop (void) { return; }
 
 extern uint32_t simulation_ticks;
 

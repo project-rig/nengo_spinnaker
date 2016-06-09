@@ -1,6 +1,8 @@
 #ifndef PROFILER_H
 #define PROFILER_H
 
+#include "common-impl.h"
+
 //---------------------------------------
 // Macros
 //---------------------------------------
@@ -10,7 +12,6 @@
 
 #ifdef PROFILER_ENABLED
 
-#include "common-typedefs.h"
 #include "spin1_api.h"
 
 //---------------------------------------
@@ -61,12 +62,12 @@ static inline void profiler_write_entry_disable_fiq(uint32_t tag)
 }
 #else // PROFILER_ENABLED
 
-#define profiler_read_region(address) skip()
-#define profiler_finalise() skip()
-#define profiler_init(region_size) skip()
-#define profiler_write_entry(tag) skip()
-#define profiler_write_entry_disable_irq_fiq(tag) skip()
-#define profiler_write_entry_disable_fiq(tag) skip()
+#define profiler_read_region(address) nop()
+#define profiler_finalise() nop()
+#define profiler_init(region_size) nop()
+#define profiler_write_entry(tag) nop()
+#define profiler_write_entry_disable_irq_fiq(tag) nop()
+#define profiler_write_entry_disable_fiq(tag) nop()
 
 #endif  // PROFILER_ENABLED
 

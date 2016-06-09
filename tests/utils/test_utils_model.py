@@ -142,7 +142,7 @@ def test_remove_operator_from_connection_map():
     sps = model.SignalParameters(True, 6)
     tps = PassthroughNodeTransmissionParameters(np.vstack([np.eye(3),
                                                            np.zeros((3, 3))]))
-    rps = model.ReceptionParameters(None, 6)
+    rps = model.ReceptionParameters(None, 6, None)
     
     cm.add_connection(source_object=operators[0],
                       source_port=None,
@@ -156,7 +156,7 @@ def test_remove_operator_from_connection_map():
     sps = model.SignalParameters(False, 6)
     tps = PassthroughNodeTransmissionParameters(np.vstack([np.zeros((3, 3)),
                                                            np.eye(3)]))
-    rps = model.ReceptionParameters(None, 6)
+    rps = model.ReceptionParameters(None, 6, None)
     
     cm.add_connection(source_object=operators[1],
                       source_port=None,
@@ -170,7 +170,7 @@ def test_remove_operator_from_connection_map():
     sps = model.SignalParameters(False, 6, mock.Mock("Keyspace 1"))
     tps = PassthroughNodeTransmissionParameters(np.vstack([np.eye(3),
                                                            np.eye(3)]))
-    rps = model.ReceptionParameters(None, 6)
+    rps = model.ReceptionParameters(None, 6, None)
     
     cm.add_connection(source_object=operators[1],
                       source_port=None,
@@ -184,7 +184,7 @@ def test_remove_operator_from_connection_map():
     sps = model.SignalParameters(False, 3)
     tps = PassthroughNodeTransmissionParameters(np.hstack((np.zeros((3, 3)),
                                                            np.eye(3))))
-    rps = model.ReceptionParameters(None, 3)
+    rps = model.ReceptionParameters(None, 3, None)
     
     cm.add_connection(source_object=operators[2],
                       source_port=None,
@@ -198,7 +198,7 @@ def test_remove_operator_from_connection_map():
     sps = model.SignalParameters(False, 3)
     tps = PassthroughNodeTransmissionParameters(np.hstack([np.eye(3),
                                                            np.eye(3)]) * 2)
-    rps = model.ReceptionParameters(None, 3)
+    rps = model.ReceptionParameters(None, 3, None)
     
     cm.add_connection(source_object=operators[2],
                       source_port=None,
@@ -221,7 +221,8 @@ def test_remove_operator_from_connection_map():
     assert signal_parameters == model.SignalParameters(True, 3, None)
     assert transmission_parameters.transform.shape == (3, 3)
     assert np.all(transmission_parameters.transform == np.eye(3)*2)
-    assert sinks == [(operators[5], None, model.ReceptionParameters(None, 3))]
+    assert sinks == [(operators[5], None,
+                      model.ReceptionParameters(None, 3, None))]
 
     # FROM O2
     from_o2 = cm._connections[operators[1]]
@@ -238,26 +239,26 @@ def test_remove_operator_from_connection_map():
                 assert np.all(transmission_parameters.transform ==
                               np.eye(3) * 2)
                 assert sinks == [(operators[5], None,
-                                  model.ReceptionParameters(None, 3))]
+                                  model.ReceptionParameters(None, 3, None))]
             else:
                 # TO O5
                 assert np.all(transmission_parameters.transform ==
                               np.eye(3))
                 assert sinks == [(operators[4], None,
-                                  model.ReceptionParameters(None, 3))]
+                                  model.ReceptionParameters(None, 3, None))]
         else:
             # TO O4
             assert transmission_parameters.transform.shape == (6, 3)
             assert np.all(transmission_parameters.transform ==
                           np.vstack([np.eye(3)]*2))
             assert sinks == [(operators[3], None,
-                              model.ReceptionParameters(None, 6))]
+                              model.ReceptionParameters(None, 6, None))]
 
     # We now add a connection from O4 to O6 with a custom keyspace.  Removing
     # O4 will fail because keyspaces can't be merged.
     signal_params = model.SignalParameters(False, 1, mock.Mock("Keyspace 2"))
     transmission_params = PassthroughNodeTransmissionParameters(1.0)
-    reception_params = model.ReceptionParameters(None, 1)
+    reception_params = model.ReceptionParameters(None, 1, None)
 
     cm.add_connection(
         source_object=operators[3],
@@ -314,7 +315,7 @@ def test_remove_operator_from_connection_map_unforced():
     for sources, sink in ((op_A, op_B), (op_D, op_E)):
         # Get the signal and reception parameters
         sps = model.SignalParameters(True, D)
-        rps = model.ReceptionParameters(None, D)
+        rps = model.ReceptionParameters(None, D, None)
 
         for i, source in enumerate(sources):
             # Get the transform
@@ -322,7 +323,8 @@ def test_remove_operator_from_connection_map_unforced():
             transform[i*SD:(i+1)*SD, :] = np.eye(SD)
 
             # Get the parameters
-            tps = EnsembleTransmissionParameters(np.ones((1, SD)), transform)
+            tps = EnsembleTransmissionParameters(np.ones((1, SD)), transform,
+                                                 None)
     
             cm.add_connection(source_object=source, source_port=None,
                               signal_parameters=sps,
@@ -333,7 +335,7 @@ def test_remove_operator_from_connection_map_unforced():
     # Create the fan-out connection C to D[...]
     # Get the signal and reception parameters
     sps = model.SignalParameters(True, SD)
-    rps = model.ReceptionParameters(None, SD)
+    rps = model.ReceptionParameters(None, SD, None)
 
     for i, sink in enumerate(op_D):
         # Get the transform
@@ -351,7 +353,7 @@ def test_remove_operator_from_connection_map_unforced():
 
     # Create the connection B to C
     sps = model.SignalParameters(True, D)
-    rps = model.ReceptionParameters(None, D)
+    rps = model.ReceptionParameters(None, D, None)
     tps = PassthroughNodeTransmissionParameters(np.eye(D))
 
     cm.add_connection(source_object=op_B, source_port=None,
@@ -367,7 +369,7 @@ def test_remove_operator_from_connection_map_unforced():
             transform[i, j] = i + j
 
     sps = model.SignalParameters(True, D)
-    rps = model.ReceptionParameters(None, D)
+    rps = model.ReceptionParameters(None, D, None)
     tps = PassthroughNodeTransmissionParameters(transform)
 
     cm.add_connection(source_object=op_E, source_port=None,
@@ -378,7 +380,7 @@ def test_remove_operator_from_connection_map_unforced():
 
     # Create the fan-out connections from F
     sps = model.SignalParameters(True, SD)
-    rps = model.ReceptionParameters(None, SD)
+    rps = model.ReceptionParameters(None, SD, None)
 
     for i, sink in enumerate(op_G):
         # Get the transform
@@ -417,7 +419,7 @@ def test_remove_operator_from_connection_map_unforced():
         assert signal_parameters == model.SignalParameters(True, SD, None)
         assert transmission_parameters.transform.shape == (SD, SD)
         assert np.all(transmission_parameters.transform == np.eye(SD))
-        assert sinks == [(d, None, model.ReceptionParameters(None, SD))]
+        assert sinks == [(d, None, model.ReceptionParameters(None, SD, None))]
 
         # Connection(s) from D[n]
         from_d = cm._connections[d]
@@ -444,7 +446,7 @@ class TestCombineTransmissionAndReceptionParameters(object):
     def test_ens_to_x(self, final_port):
         # Create the ingoing connection parameters
         in_transmission_params = EnsembleTransmissionParameters(
-            np.random.uniform(size=(100, 10)), 1.0
+            np.random.uniform(size=(100, 10)), 1.0, None,
         )
 
         # Create the outgoing connection parameters
@@ -513,7 +515,7 @@ class TestCombineTransmissionAndReceptionParameters(object):
     def test_ens_to_gi(self):
         # Create the ingoing connection parameters
         in_transmission_params = EnsembleTransmissionParameters(
-            np.random.uniform(size=(100, 7)), 1.0
+            np.random.uniform(size=(100, 7)), 1.0, None
         )
 
         # Create the outgoing connection parameters
@@ -582,7 +584,7 @@ class TestCombineTransmissionAndReceptionParameters(object):
         in_transmission_params = {
             "ensemble": EnsembleTransmissionParameters(
                             np.random.uniform(size=(100, 1)),
-                            np.array([[1.0], [0.0]])
+                            np.array([[1.0], [0.0]]), None
                         ),
             "node": NodeTransmissionParameters(
                         slice(10, 20),
@@ -631,10 +633,11 @@ class TestCombineTransmissionAndReceptionParameters(object):
     # Test combining reception parameters
     def test_combine_none_and_lowpass_filter(self):
         # Create the ingoing reception parameters
-        reception_params_a = model.ReceptionParameters(nengo.Lowpass(0.05), 1)
+        reception_params_a = model.ReceptionParameters(nengo.Lowpass(0.05), 1,
+                                                       None)
 
         # Create the outgoing reception parameters
-        reception_params_b = model.ReceptionParameters(None, 3)
+        reception_params_b = model.ReceptionParameters(None, 3, None)
 
         # Combine the parameter each way round
         for a, b in ((reception_params_a, reception_params_b),
@@ -649,10 +652,12 @@ class TestCombineTransmissionAndReceptionParameters(object):
 
     def test_combine_linear_and_linear_filter(self):
         # Create the ingoing reception parameters
-        reception_params_a = model.ReceptionParameters(nengo.Lowpass(0.05), 1)
+        reception_params_a = model.ReceptionParameters(nengo.Lowpass(0.05), 1,
+                                                       None)
 
         # Create the outgoing reception parameters
-        reception_params_b = model.ReceptionParameters(nengo.Lowpass(0.01), 5)
+        reception_params_b = model.ReceptionParameters(nengo.Lowpass(0.01), 5,
+                                                       None)
 
         # Combine the parameter each way round
         for a, b in ((reception_params_a, reception_params_b),
@@ -669,10 +674,11 @@ class TestCombineTransmissionAndReceptionParameters(object):
 
     def test_combine_unknown_filter(self):
         # Create the ingoing reception parameters
-        reception_params_a = model.ReceptionParameters(nengo.Lowpass(0.05), 1)
+        reception_params_a = model.ReceptionParameters(nengo.Lowpass(0.05), 1,
+                                                       None)
 
         # Create the outgoing reception parameters
-        reception_params_b = model.ReceptionParameters(mock.Mock(), 1)
+        reception_params_b = model.ReceptionParameters(mock.Mock(), 1, None)
 
         # Combine the parameter each way round
         for a, b in ((reception_params_a, reception_params_b),

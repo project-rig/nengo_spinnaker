@@ -97,7 +97,7 @@ class ConnectionMap(object):
             Dictionary mapping ports to lists of parameters for the signals
             that originate from them.
         """
-        signals = dict()
+        signals = collections.defaultdict(list)
 
         # For every port and list of (transmission pars, sinks) associated with
         # it add the transmission parameters to the correct list of signals.
@@ -208,7 +208,7 @@ class SignalParameters(object):
 
 
 ReceptionParameters = collections.namedtuple("ReceptionParameters",
-                                             "filter, width")
+                                             "filter, width, learning_rule")
 """Basic reception parameters that relate to the reception of a series of
 multicast packets.
 

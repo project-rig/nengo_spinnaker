@@ -82,7 +82,7 @@ class TestNoneFilter(object):
     def test_from_parameters(self, latching, width):
         # Create the mock signal and connection
         signal = SignalParameters(latching=latching)
-        rps = ReceptionParameters(None, width)
+        rps = ReceptionParameters(None, width, None)
 
         # Build the filter
         nf = NoneFilter.from_parameters(signal, rps)
@@ -92,7 +92,7 @@ class TestNoneFilter(object):
     def test_from_parameters_force_width(self, latching, width):
         # Create the mock signal and connection
         signal = SignalParameters(latching=latching)
-        rps = ReceptionParameters(None, width)
+        rps = ReceptionParameters(None, width, None)
 
         # Build the filter
         nf = NoneFilter.from_parameters(signal, rps, width=1)
@@ -123,7 +123,7 @@ class TestLowpassFilter(object):
     def test_from_parameters(self, width, latching, tc):
         # Create the mock signal and connection
         signal = SignalParameters(latching=latching)
-        rps = ReceptionParameters(nengo.Lowpass(tc), width)
+        rps = ReceptionParameters(nengo.Lowpass(tc), width, None)
 
         # Create the filter
         lpf = LowpassFilter.from_parameters(signal, rps)
@@ -133,7 +133,7 @@ class TestLowpassFilter(object):
     def test_from_parameters_force_width(self, width, latching, tc):
         # Create the mock signal and connection
         signal = SignalParameters(latching=latching)
-        rps = ReceptionParameters(nengo.Lowpass(tc), width)
+        rps = ReceptionParameters(nengo.Lowpass(tc), width, None)
 
         # Create the filter
         lpf = LowpassFilter.from_parameters(signal, rps, width=2)
@@ -188,7 +188,7 @@ class TestLinearFilter(object):
     def test_from_parameters_force_width(self):
         # Create the mock signal and connection
         signal = SignalParameters(latching=True)
-        rps = ReceptionParameters(nengo.LinearFilter([1.0], [0.5, 1.0]), 1)
+        rps = ReceptionParameters(nengo.LinearFilter([1.0], [0.5, 1.0]), 1, None)
 
         # Create the filter
         lpf = LinearFilter.from_parameters(signal, rps, width=2)
@@ -336,8 +336,8 @@ class TestMakeFilterRegions(object):
         ks_b = mock.Mock(name="Keyspace[B]")
         signal_b = SignalParameters(keyspace=ks_b, latching=False)
 
-        rp_a = ReceptionParameters(nengo.Lowpass(0.01), 3)
-        rp_b = ReceptionParameters(nengo.Lowpass(0.01), 3)
+        rp_a = ReceptionParameters(nengo.Lowpass(0.01), 3, None)
+        rp_b = ReceptionParameters(nengo.Lowpass(0.01), 3, None)
 
         # Create the data structure that is expected as input
         specs = [
@@ -385,8 +385,8 @@ class TestMakeFilterRegions(object):
         ks_b = mock.Mock(name="Keyspace[B]")
         signal_b = SignalParameters(keyspace=ks_b, latching=False)
 
-        rp_a = ReceptionParameters(nengo.Lowpass(0.01), 3)
-        rp_b = ReceptionParameters(None, 3)
+        rp_a = ReceptionParameters(nengo.Lowpass(0.01), 3, None)
+        rp_b = ReceptionParameters(None, 3, None)
 
         # Create the type of dictionary that is expected as input
         specs = [
@@ -431,8 +431,8 @@ class TestMakeFilterRegions(object):
         ks_b = mock.Mock(name="Keyspace[B]")
         signal_b = SignalParameters(keyspace=ks_b, latching=False)
 
-        rp_a = ReceptionParameters(nengo.Lowpass(0.01), 3)
-        rp_b = ReceptionParameters(None, 5)
+        rp_a = ReceptionParameters(nengo.Lowpass(0.01), 3, None)
+        rp_b = ReceptionParameters(None, 5, None)
 
         # Create the type of dictionary that is expected as input
         specs = [

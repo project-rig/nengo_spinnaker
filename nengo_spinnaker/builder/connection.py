@@ -18,13 +18,15 @@ def generic_sink_getter(model, conn):
 
 
 @Model.reception_parameter_builders.register(nengo.base.NengoObject)
+@Model.reception_parameter_builders.register(nengo.connection.LearningRule)
 @Model.reception_parameter_builders.register(nengo.ensemble.Neurons)
 def build_generic_reception_params(model, conn):
     """Build parameters necessary for receiving packets that simulate this
     connection.
     """
     # Just extract the synapse from the connection.
-    return ReceptionParameters(conn.synapse, conn.post_obj.size_in)
+    return ReceptionParameters(conn.synapse, conn.post_obj.size_in,
+                               conn.learning_rule)
 
 
 class EnsembleTransmissionParameters(object):
@@ -35,10 +37,13 @@ class EnsembleTransmissionParameters(object):
     decoders : array
         Decoders to use for the connection.
     """
-    def __init__(self, decoders, transform):
+    def __init__(self, decoders, transform, learning_rule):
         # Copy the decoders
         self.untransformed_decoders = np.array(decoders)
         self.transform = np.array(transform)
+
+        # Cache learning rule
+        self.learning_rule = learning_rule
 
         # Compute and store the transformed decoders
         self.decoders = np.dot(transform, decoders.T)
@@ -54,6 +59,10 @@ class EnsembleTransmissionParameters(object):
     def __eq__(self, other):
         # Equal iff. the objects are of the same type
         if type(self) is not type(other):
+            return False
+
+        # Equal iff. neither connection has a learning rule
+        if self.learning_rule is not None or other.learning_rule is not None:
             return False
 
         # Equal iff. the decoders are the same shape

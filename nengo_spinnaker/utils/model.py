@@ -375,7 +375,7 @@ def _combine_transmission_params(in_transmission_parameters,
                   EnsembleTransmissionParameters):
         transmission_params = EnsembleTransmissionParameters(
             in_transmission_parameters.untransformed_decoders,
-            new_transform
+            new_transform, in_transmission_parameters.learning_rule
         )
     elif isinstance(in_transmission_parameters,
                     NodeTransmissionParameters):
@@ -422,4 +422,5 @@ def _combine_reception_params(in_reception_parameters,
 
     # Take the size in from the second reception parameter, construct the new
     # reception parameters.
-    return ReceptionParameters(new_filter, out_reception_parameters.width)
+    return ReceptionParameters(new_filter, out_reception_parameters.width,
+                               out_reception_parameters.learning_rule)

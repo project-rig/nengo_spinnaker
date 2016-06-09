@@ -11,8 +11,8 @@ import numpy as np
 
 from .builder import BuiltConnection, Model, ObjectPort, spec
 from .connection import EnsembleTransmissionParameters
-from .model import InputPort
-from .ports import EnsembleInputPort
+from .model import InputPort, OutputPort
+from .ports import EnsembleInputPort, EnsembleOutputPort
 from .. import operators
 from ..utils import collections as collections_ext
 
@@ -21,6 +21,21 @@ BuiltEnsemble = collections.namedtuple(
                      "scaled_encoders, gain, bias"
 )
 """Parameters which describe an Ensemble."""
+
+
+@Model.source_getters.register(nengo.Ensemble)
+def get_ensemble_source(model, conn):
+    ens = model.object_operators[conn.pre_obj]
+
+    # If this connection has a learning rule
+    if conn.learning_rule is not None:
+        # If the rule modifies decoders, source it from learnt output port
+        if conn.learning_rule.learning_rule_type.modifies == "decoders":
+            return spec(ObjectPort(ens, EnsembleOutputPort.learnt))
+
+    # Otherwise, it's a standard connection that can
+    # be sourced from the standard output port
+    return spec(ObjectPort(ens, OutputPort.standard))
 
 
 @Model.source_getters.register(nengo.ensemble.Neurons)
@@ -51,8 +66,55 @@ def get_ensemble_sink(model, connection):
         transform = full_transform(connection, slice_pre=False)
         ens.direct_input += np.dot(transform, val)
     else:
+        # If this connection has a learning rule
+        if connection.learning_rule is not None:
+            # If the rule modifies encoders, sink it into learnt input port
+            modifies = connection.learning_rule.learning_rule_type.modifies
+            if modifies == "encoders":
+                return spec(ObjectPort(ens, EnsembleInputPort.learnt))
+
         # Otherwise we just sink into the Ensemble
         return spec(ObjectPort(ens, InputPort.standard))
+
+
+@Model.sink_getters.register(nengo.connection.LearningRule)
+def get_learning_rule_sink(model, connection):
+    # Get the sink learning rule and parent learnt connection
+    learning_rule = connection.post_obj
+    learnt_connection = learning_rule.connection
+
+    # If rule modifies decoders
+    if learning_rule.learning_rule_type.modifies == "decoders":
+        # If connection begins at an ensemble
+        if isinstance(learnt_connection.pre_obj, nengo.Ensemble):
+            # Sink connection into unique port on pre-synaptic
+            # ensemble identified by learning rule object
+            ens = model.object_operators[learnt_connection.pre_obj]
+            return spec(ObjectPort(ens, learning_rule))
+        else:
+            raise NotImplementedError(
+                "SpiNNaker only supports decoder learning "
+                "rules on connections from ensembles"
+            )
+    # Otherwise, if it modifies encoders
+    elif learning_rule.learning_rule_type.modifies == "encoders":
+        # If connections ends at an ensemble
+        if isinstance(learnt_connection.post_obj, nengo.Ensemble):
+            # Sink connection into unique port on post-synaptic
+            # ensemble identified by learning rule object
+            ens = model.object_operators[learnt_connection.post_obj]
+            return spec(ObjectPort(ens, learning_rule))
+        else:
+            raise NotImplementedError(
+                "SpiNNaker only supports encoder learning "
+                "rules on connections to ensembles"
+            )
+    # Otherwise
+    else:
+        raise NotImplementedError(
+            "SpiNNaker only supports learning rules  "
+            "which modify 'decoders' or 'encoders'"
+        )
 
 
 @Model.sink_getters.register(nengo.ensemble.Neurons)
@@ -197,7 +259,8 @@ def build_from_ensemble_connection(model, conn):
             np.all(transform[0, :] == transform[1:, :])):
         transform = np.array([transform[0]])
 
-    return EnsembleTransmissionParameters(decoders, transform)
+    return EnsembleTransmissionParameters(decoders, transform,
+                                          conn.learning_rule)
 
 
 @Model.transmission_parameter_builders.register(nengo.ensemble.Neurons)
@@ -250,3 +313,31 @@ def build_neurons_probe(model, probe):
                 probe.target.ensemble.neuron_type.__class__.__name__
             )
         )
+
+
+@Model.probe_builders.register(nengo.connection.LearningRule)
+def build_voja_probe(model, probe):
+    # Extract learning rule type
+    learning_rule_type = probe.target.learning_rule_type
+    learnt_connection = probe.target.connection
+
+    # If this learning rule supports this type of probe
+    if probe.attr in learning_rule_type.probeable:
+        # If we're probing scaled encoders
+        if probe.attr == "scaled_encoders":
+            # If learning rule modifies encoders
+            if learning_rule_type.modifies == "encoders":
+                # If post-synaptic object is an ensemble, add probe
+                # to the bject operators lists of local probes
+                if isinstance(learnt_connection.post_obj, nengo.Ensemble):
+                    ens = learnt_connection.post_obj
+                    model.object_operators[ens].local_probes.append(probe)
+                    return
+
+    raise NotImplementedError(
+        "SpiNNaker does not currently support probing '{}' on '{}' "
+        .format(
+            probe.attr,
+            learning_rule_type.__class__.__name__
+        )
+    )

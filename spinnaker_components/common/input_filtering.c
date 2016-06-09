@@ -274,8 +274,11 @@ typedef struct _filter_parameters_t
  * first word of each entry should indicate the length of the entry.  Each
  * entry should be a `filter_parameters_t` with some following words which can
  * be interpreted by the appropriate initialisation function.
+ * If signal_output_array is specified it should contain a pre-allocated
+ * output array for each filter
  */
-void input_filtering_get_filters(if_collection_t *filters, uint32_t *data)
+void input_filtering_get_filters(if_collection_t *filters, uint32_t *data,
+  value_t **filter_output_array)
 {
   // Get the number of filters and malloc sufficient space for the filter
   // parameters.
@@ -308,9 +311,17 @@ void input_filtering_get_filters(if_collection_t *filters, uint32_t *data)
     filters->filters[f].input->mask = (params->flags & (1 << LATCHING)) ?
                                       0x00000000 : 0xffffffff;
 
-    // Initialise the output vector
-    MALLOC_OR_DIE(filters->filters[f].output,
-                  sizeof(value_t)*params->size);
+    // If no filter output array is specified, allocate new vector
+    if(filter_output_array == NULL)
+    {
+      MALLOC_OR_DIE(filters->filters[f].output,
+                    sizeof(value_t) * params->size);
+    }
+    // Otherwise, copy output pointer into filter
+    else
+    {
+      filters->filters[f].output = filter_output_array[f];
+    }
 
     // Zero the input and the output
     memset(filters->filters[f].input->value, 0,

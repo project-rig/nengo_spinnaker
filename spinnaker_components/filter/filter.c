@@ -114,7 +114,7 @@ void c_main(void)
   spin1_memcpy(transform, region_start(5, address), matrix_size);
 
   // Prepare the filters for receiving packets
-  input_filtering_get_filters(&filters, region_start(3, address));
+  input_filtering_get_filters(&filters, region_start(3, address), NULL);
   input_filtering_get_routes(&filters, region_start(4, address));
   input_filtering_initialise_output(&filters, params.input_size);
 

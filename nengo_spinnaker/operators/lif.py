@@ -8,16 +8,21 @@ appropriate sized slices.
 
 import collections
 import enum
+import math
 from nengo.base import ObjView
+from nengo.connection import LearningRule
+from nengo.learning_rules import PES, Voja
 import numpy as np
 from rig.place_and_route import Cores, SDRAM
 from rig.place_and_route.constraints import SameChipConstraint
+from six import iteritems
 import struct
 
 from nengo_spinnaker.builder.model import InputPort, OutputPort
 from nengo_spinnaker.builder.netlist import netlistspec
-from nengo_spinnaker.builder.ports import EnsembleInputPort
-from nengo_spinnaker.regions.filters import make_filter_regions
+from nengo_spinnaker.builder.ports import EnsembleInputPort, EnsembleOutputPort
+from nengo_spinnaker.regions.filters import (FilterRegion, FilterRoutingRegion,
+                                             add_filters, make_filter_regions)
 from nengo_spinnaker.regions.utils import Args
 from .. import regions
 from nengo_spinnaker.netlist import Vertex
@@ -28,7 +33,7 @@ from nengo_spinnaker.utils import type_casts as tp
 from nengo_spinnaker.utils import neurons as neuron_utils
 
 
-class EnsembleRegions(enum.IntEnum):
+class Regions(enum.IntEnum):
     """Region names, corresponding to those defined in `ensemble.h`"""
     ensemble = 1  # General ensemble settings
     neuron = 2  # Neuron specific parameters
@@ -36,15 +41,25 @@ class EnsembleRegions(enum.IntEnum):
     bias = 4  # Biases
     gain = 5  # Gains
     decoders = 6  # Decoder matrix (for all neurons, only some rows)
-    keys = 7  # Output keys
-    population_length = 8  # Information about the entire cluster
-    input_filters = 9
-    input_routing = 10
-    inhibition_filters = 11
-    inhibition_routing = 12
-    profiler = 13
-    spikes = 14
-    voltages = 15
+    learnt_decoders = 7  # Learnt decoder matrix (for all neurons, all rows)
+    keys = 8  # Output keys
+    learnt_keys = 9  # Learnt output keys
+    population_length = 10  # Information about the entire cluster
+    input_filters = 11
+    input_routing = 12
+    inhibition_filters = 13
+    inhibition_routing = 14
+    modulatory_filters = 15
+    modulatory_routing = 16
+    learnt_encoder_filters = 17
+    learnt_encoder_routing = 18
+    pes = 19
+    voja = 20
+    filtered_activity = 21
+    profiler = 22
+    spike_recording = 23
+    voltage_recording = 24
+    encoder_recording = 25
 
 
 class EnsembleLIF(object):
@@ -58,6 +73,7 @@ class EnsembleLIF(object):
         self.profiled = False
         self.record_spikes = False
         self.record_voltages = False
+        self.record_encoders = False
 
     def make_vertices(self, model, n_steps):
         """Construct the data which can be loaded into the memory of a
@@ -67,38 +83,22 @@ class EnsembleLIF(object):
         params = model.params[self.ensemble]
         ens_regions = dict()
 
-        # Convert the encoders combined with the gain to S1615 before creating
-        # the region.
-        encoders_with_gain = params.scaled_encoders
-        ens_regions[EnsembleRegions.encoders] = regions.MatrixRegion(
-            tp.np_to_fix(encoders_with_gain),
-            sliced_dimension=regions.MatrixPartitioning.rows)
-
-        # Combine the direct input with the bias before converting to S1615 and
-        # creating the region.
-        bias_with_di = params.bias + np.dot(encoders_with_gain,
-                                            self.direct_input)
-        assert bias_with_di.ndim == 1
-        ens_regions[EnsembleRegions.bias] = regions.MatrixRegion(
-            tp.np_to_fix(bias_with_di),
-            sliced_dimension=regions.MatrixPartitioning.rows)
-
-        # Convert the gains to S1615 before creating the region
-        ens_regions[EnsembleRegions.gain] = regions.MatrixRegion(
-            tp.np_to_fix(params.gain),
-            sliced_dimension=regions.MatrixPartitioning.rows)
-
         # Extract all the filters from the incoming connections
         incoming = model.get_signals_to_object(self)
 
-        (ens_regions[EnsembleRegions.input_filters],
-         ens_regions[EnsembleRegions.input_routing]) = make_filter_regions(
+        # Filter out incoming modulatory connections
+        incoming_modulatory = {port: signal
+                               for (port, signal) in iteritems(incoming)
+                               if isinstance(port, LearningRule)}
+
+        (ens_regions[Regions.input_filters],
+         ens_regions[Regions.input_routing]) = make_filter_regions(
             incoming[InputPort.standard], model.dt, True,
             model.keyspaces.filter_routing_tag,
             width=self.ensemble.size_in
         )
-        (ens_regions[EnsembleRegions.inhibition_filters],
-         ens_regions[EnsembleRegions.inhibition_routing]) = \
+        (ens_regions[Regions.inhibition_filters],
+         ens_regions[Regions.inhibition_routing]) = \
             make_filter_regions(
                 incoming[EnsembleInputPort.global_inhibition], model.dt, True,
                 model.keyspaces.filter_routing_tag, width=1
@@ -113,28 +113,237 @@ class EnsembleLIF(object):
         else:
             decoders = np.array([])
             output_keys = list()
+
         size_out = decoders.shape[0]
 
-        ens_regions[EnsembleRegions.decoders] = regions.MatrixRegion(
+        ens_regions[Regions.decoders] = regions.MatrixRegion(
             tp.np_to_fix(decoders / model.dt),
             sliced_dimension=regions.MatrixPartitioning.rows)
-        ens_regions[EnsembleRegions.keys] = regions.KeyspacesRegion(
+
+        ens_regions[Regions.keys] = regions.KeyspacesRegion(
             output_keys,
             fields=[regions.KeyField({'cluster': 'cluster'})],
             partitioned_by_atom=True
         )
 
+        # Extract pre-scaled encoders from parameters
+        encoders_with_gain = params.scaled_encoders
+
+        # Create filtered activity region
+        ens_regions[Regions.filtered_activity] =\
+            FilteredActivityRegion(model.dt)
+
+        # Create, initially empty, PES region
+        ens_regions[Regions.pes] = PESRegion(self.ensemble.n_neurons)
+
+        # Loop through outgoing learnt connections
+        mod_filters = list()
+        mod_keyspace_routes = list()
+        learnt_decoders = np.array([])
+        learnt_output_keys = list()
+        for sig, t_params in outgoing[EnsembleOutputPort.learnt]:
+            l_rule = t_params.learning_rule
+            l_rule_type = t_params.learning_rule.learning_rule_type
+
+            # If this learning rule is PES
+            if isinstance(l_rule_type, PES):
+                # If there is a modulatory connection
+                # associated with the learning rule
+                if l_rule in incoming_modulatory:
+                    e = incoming_modulatory[l_rule]
+
+                    # Cache the index of the input filter containing the
+                    # error signal and the starting offset into the learnt
+                    # decoder where the learning rule should operate
+                    error_filter_index = len(mod_filters)
+                    decoder_start = learnt_decoders.shape[0]
+
+                    # Get new decoders and output keys for learnt connection
+                    rule_decoders, rule_output_keys = \
+                        get_decoders_and_keys([(sig, t_params)], False)
+
+                    # If there are no existing decodes, hstacking doesn't
+                    # work so set decoders to new learnt decoder matrix
+                    if decoder_start == 0:
+                        learnt_decoders = rule_decoders
+                    # Otherwise, stack learnt decoders
+                    # alongside existing matrix
+                    else:
+                        learnt_decoders = np.vstack(
+                            (learnt_decoders, rule_decoders))
+
+                    decoder_stop = learnt_decoders.shape[0]
+
+                    # Also add output keys to list
+                    learnt_output_keys.extend(rule_output_keys)
+
+                    # Add error connection to lists
+                    # of modulatory filters and routes
+                    mod_filters, mod_keyspace_routes = add_filters(
+                        mod_filters, mod_keyspace_routes, e, minimise=False)
+
+                    # Either add a new filter to the filtered activity
+                    # region or get the index of the existing one
+                    # activity_filter_index = \
+                    #    ens_regions[Regions.filtered_activity].add_get_filter(
+                    #        l_rule_type.pre_tau)
+                    activity_filter_index = -1
+
+                    # Add a new learning rule to the PES region
+                    # **NOTE** divide learning rate by dt
+                    # to account for activity scaling
+                    ens_regions[Regions.pes].learning_rules.append(
+                        PESLearningRule(
+                            learning_rate=l_rule_type.learning_rate / model.dt,
+                            error_filter_index=error_filter_index,
+                            decoder_start=decoder_start,
+                            decoder_stop=decoder_stop,
+                            activity_filter_index=activity_filter_index))
+                # Otherwise raise an error - PES requires a modulatory signal
+                else:
+                    raise ValueError(
+                        "Ensemble %s has outgoing connection with PES "
+                        "learning, but no corresponding modulatory "
+                        "connection" % self.ensemble.label
+                    )
+            else:
+                raise NotImplementedError(
+                    "SpiNNaker does not support %s learning rule."
+                    % l_rule_type
+                )
+
+        size_learnt_out = learnt_decoders.shape[0]
+
+        ens_regions[Regions.learnt_decoders] = regions.MatrixRegion(
+            tp.np_to_fix(learnt_decoders / model.dt),
+            sliced_dimension=regions.MatrixPartitioning.rows)
+
+        ens_regions[Regions.learnt_keys] = regions.KeyspacesRegion(
+            learnt_output_keys,
+            fields=[regions.KeyField({'cluster': 'cluster'})],
+            partitioned_by_atom=True
+        )
+        # Create, initially empty, Voja region, passing in scaling factor
+        # used, with gain, to scale activities to match encoders
+        ens_regions[Regions.voja] = VojaRegion(1.0 / self.ensemble.radius)
+
+        # Loop through incoming learnt connections
+        learnt_encoder_filters = list()
+        learnt_encoder_routes = list()
+        for sig, t_params in incoming[EnsembleInputPort.learnt]:
+            # If this learning rule is Voja
+            l_rule = t_params.learning_rule
+            l_rule_type = t_params.learning_rule.learning_rule_type
+            if isinstance(l_rule_type, Voja):
+                # If there is a modulatory connection
+                # associated with the learning rule
+                if l_rule in incoming_modulatory:
+                    l = incoming_modulatory[l_rule]
+
+                    # Cache the index of the input filter
+                    # containing the learning signal
+                    learn_sig_filter_index = len(mod_filters)
+
+                    # Add learning connection to lists
+                    # of modulatory filters and routes
+                    mod_filters, mod_keyspace_routes = add_filters(
+                        mod_filters, mod_keyspace_routes, l, minimise=False)
+                # Otherwise, learning is always on so
+                # invalidate learning signal index
+                else:
+                    learn_sig_filter_index = -1
+
+                # Cache the index of the input filter containing
+                # the input signal and the offset into the encoder
+                # where the learning rule should operate
+                decoded_input_filter_index = len(learnt_encoder_filters)
+                encoder_offset = encoders_with_gain.shape[1]
+
+                # Create a duplicate copy of the original size_in columns of
+                # the encoder matrix for modification by this learning rule
+                base_encoders = encoders_with_gain[:, :self.ensemble.size_in]
+                encoders_with_gain = np.hstack((encoders_with_gain,
+                                                base_encoders))
+
+                # Add learnt connection to list of filters
+                # and routes with learnt encoders
+                learnt_encoder_filters, learnt_encoder_routes = add_filters(
+                    learnt_encoder_filters, learnt_encoder_routes,
+                    [(sig, t_params)], minimise=False)
+
+                # Either add a new filter to the filtered activity
+                # region or get the index of the existing one
+                # activity_filter_index = \
+                #    ens_regions[Regions.filtered_activity].add_get_filter(
+                #        l_rule_type.post_tau)
+                activity_filter_index = -1
+
+                # Add a new learning rule to the Voja region
+                # **NOTE** divide learning rate by dt
+                # to account for activity scaling
+                ens_regions[Regions.voja].learning_rules.append(
+                    VojaLearningRule(
+                        learning_rate=l_rule_type.learning_rate,
+                        learning_signal_filter_index=learn_sig_filter_index,
+                        encoder_offset=encoder_offset,
+                        decoded_input_filter_index=decoded_input_filter_index,
+                        activity_filter_index=activity_filter_index))
+            else:
+                raise NotImplementedError(
+                    "SpiNNaker does not support %s learning rule."
+                    % l_rule_type
+                )
+
+        # Create encoders region
+        ens_regions[Regions.encoders] = regions.MatrixRegion(
+            tp.np_to_fix(encoders_with_gain),
+            sliced_dimension=regions.MatrixPartitioning.rows)
+
+        # Tile direct input across all encoder copies (used for learning)
+        tiled_direct_input = np.tile(
+            self.direct_input,
+            encoders_with_gain.shape[1] // self.ensemble.size_in)
+
+        # Combine the direct input with the bias before converting to S1615 and
+        # creating the region.
+        bias_with_di = params.bias + np.dot(encoders_with_gain,
+                                            tiled_direct_input)
+        assert bias_with_di.ndim == 1
+        ens_regions[Regions.bias] = regions.MatrixRegion(
+            tp.np_to_fix(bias_with_di),
+            sliced_dimension=regions.MatrixPartitioning.rows)
+
+        # Convert the gains to S1615 before creating the region
+        ens_regions[Regions.gain] = regions.MatrixRegion(
+            tp.np_to_fix(params.gain),
+            sliced_dimension=regions.MatrixPartitioning.rows)
+
+        # Create modulatory filter and routing regions
+        ens_regions[Regions.modulatory_filters] =\
+            FilterRegion(mod_filters, model.dt)
+        ens_regions[Regions.modulatory_routing] =\
+            FilterRoutingRegion(mod_keyspace_routes,
+                                model.keyspaces.filter_routing_tag)
+
+        # Create learnt encoder filter and routing regions
+        ens_regions[Regions.learnt_encoder_filters] =\
+            FilterRegion(learnt_encoder_filters, model.dt)
+        ens_regions[Regions.learnt_encoder_routing] =\
+            FilterRoutingRegion(learnt_encoder_routes,
+                                model.keyspaces.filter_routing_tag)
+
         # The population length region stores information about groups of
         # co-operating cores.
-        ens_regions[EnsembleRegions.population_length] = \
-            regions.ListRegion("I")
+        ens_regions[Regions.population_length] = regions.ListRegion("I")
 
         # The ensemble region contains basic information about the ensemble
-        ens_regions[EnsembleRegions.ensemble] = EnsembleRegion(
-            model.machine_timestep, self.ensemble.size_in)
+        n_learnt_input_signals = len(learnt_encoder_filters)
+        ens_regions[Regions.ensemble] = EnsembleRegion(
+            model.machine_timestep, self.ensemble.size_in,
+            encoders_with_gain.shape[1], n_learnt_input_signals)
 
         # The neuron region contains information specific to the neuron type
-        ens_regions[EnsembleRegions.neuron] = LIFRegion(
+        ens_regions[Regions.neuron] = LIFRegion(
             model.dt, self.ensemble.neuron_type.tau_rc,
             self.ensemble.neuron_type.tau_ref
         )
@@ -154,10 +363,8 @@ class EnsembleLIF(object):
                                       n_steps * 2)
 
         # Create profiler region
-        ens_regions[EnsembleRegions.profiler] = regions.Profiler(
-            n_profiler_samples)
-        ens_regions[EnsembleRegions.ensemble].n_profiler_samples = \
-            n_profiler_samples
+        ens_regions[Regions.profiler] = regions.Profiler(n_profiler_samples)
+        ens_regions[Regions.ensemble].n_profiler_samples = n_profiler_samples
 
         # Manage probes
         for probe in self.local_probes:
@@ -165,22 +372,30 @@ class EnsembleLIF(object):
                 self.record_spikes = True
             elif probe.attr == "voltage":
                 self.record_voltages = True
+            elif probe.attr == "scaled_encoders":
+                self.record_encoders = True
             else:
                 raise NotImplementedError(
                     "Cannot probe {} on Ensembles".format(probe.attr)
                 )
 
         # Set the flags
-        ens_regions[EnsembleRegions.ensemble].record_spikes = \
-            self.record_spikes
-        ens_regions[EnsembleRegions.ensemble].record_voltages = \
-            self.record_voltages
+        ens_regions[Regions.ensemble].record_spikes = self.record_spikes
+        ens_regions[Regions.ensemble].record_voltages = self.record_voltages
+        ens_regions[Regions.ensemble].record_encoders = self.record_encoders
 
         # Create the probe recording regions
-        ens_regions[EnsembleRegions.spikes] = regions.SpikeRecordingRegion(
-            n_steps if self.record_spikes else 0)
-        ens_regions[EnsembleRegions.voltages] = regions.VoltageRecordingRegion(
-            n_steps if self.record_voltages else 0)
+        self.learnt_enc_dims = (encoders_with_gain.shape[1] -
+                                self.ensemble.size_in)
+        ens_regions[Regions.spike_recording] =\
+            regions.SpikeRecordingRegion(n_steps if self.record_spikes
+                                         else 0)
+        ens_regions[Regions.voltage_recording] =\
+            regions.VoltageRecordingRegion(n_steps if self.record_voltages
+                                           else 0)
+        ens_regions[Regions.encoder_recording] =\
+            regions.EncoderRecordingRegion(n_steps if self.record_encoders
+                                           else 0, self.learnt_enc_dims)
 
         # Create constraints against which to partition, initially assume that
         # we can devote 16 cores to every problem.
@@ -196,24 +411,27 @@ class EnsembleLIF(object):
                                               0.8)  # 80% of 16 cores compute
 
         # Form the constraints dictionary
-        def _make_constraint(f, size_in, size_out, **kwargs):
+        def _make_constraint(f, size_in, size_out, size_learnt_out, **kwargs):
             """Wrap a usage computation method to work with the partitioner."""
             def f_(vertex_slice):
                 # Calculate the number of neurons
                 n_neurons = vertex_slice.stop - vertex_slice.start
 
                 # Call the original method
-                return f(size_in, size_out, n_neurons, **kwargs)
+                return f(size_in, size_out, size_learnt_out,
+                         n_neurons, **kwargs)
             return f_
 
         partition_constraints = {
             sdram_constraint: _make_constraint(_lif_sdram_usage,
-                                               self.ensemble.size_in,
-                                               size_out),
+                                               encoders_with_gain.shape[1],
+                                               size_out, size_learnt_out),
             dtcm_constraint: _make_constraint(_lif_dtcm_usage,
-                                              self.ensemble.size_in, size_out),
+                                              encoders_with_gain.shape[1],
+                                              size_out, size_learnt_out),
             cpu_constraint: _make_constraint(_lif_cpu_usage,
-                                             self.ensemble.size_in, size_out),
+                                             encoders_with_gain.shape[1],
+                                             size_out, size_learnt_out),
         }
 
         # Partition the ensemble to create clusters of co-operating cores
@@ -225,7 +443,9 @@ class EnsembleLIF(object):
             # For each slice we create a cluster of co-operating cores.  We
             # instantiate the cluster and then ask it to produce vertices which
             # will be added to the netlist.
-            cluster = EnsembleCluster(sl, self.ensemble.size_in, size_out,
+            cluster = EnsembleCluster(sl, self.ensemble.size_in,
+                                      encoders_with_gain.shape[1], size_out,
+                                      size_learnt_out, n_learnt_input_signals,
                                       ens_regions)
             self.clusters.append(cluster)
 
@@ -271,7 +491,8 @@ class EnsembleLIF(object):
             for cl in self.clusters:
                 # For each neuron slice copy in the spike data
                 for neurons, data in cl.get_spike_data(n_steps):
-                    spikes[:, neurons] = data
+                    neurons_stop = neurons.start + data.shape[1]
+                    spikes[:, neurons.start:neurons_stop] = data
 
             # Recast the data as floats
             spike_vals = np.zeros((n_steps, self.ensemble.n_neurons))
@@ -288,6 +509,20 @@ class EnsembleLIF(object):
                 for neurons, data in cl.get_voltage_data(n_steps):
                     voltages[:, neurons] = data
 
+        # If (learnt) encoders were recorded
+        if self.record_encoders:
+            # Create empty matrix to hold probed data
+            encoders = np.empty((
+                n_steps,
+                self.ensemble.n_neurons,
+                self.learnt_enc_dims))
+
+            # For each cluster read back the encoder data
+            for cl in self.clusters:
+                # For each neuron slice copy in the encoder data
+                for neurons, data in cl.get_encoder_data(n_steps):
+                    encoders[:, neurons] = data
+
         # Store the data associated with probes
         for p in self.local_probes:
             # Get the neuron slice applied by the probe
@@ -300,13 +535,15 @@ class EnsembleLIF(object):
             if p.sample_every is not None:
                 sample_every = int(p.sample_every / simulator.dt)
 
-            # Get the probe data
+            # Copy desired slice of recorded data into simulator
             if p.attr in ("output", "spikes"):
                 # Spike data
                 probe_data = spike_vals[::sample_every, neuron_slice]
             elif p.attr == "voltage":
                 # Voltage data
                 probe_data = voltages[::sample_every, neuron_slice]
+            elif p.attr == "scaled_encoders":
+                probe_data = encoders[::sample_every, neuron_slice, :]
 
             # Store the probe data
             if p in simulator.data:
@@ -316,14 +553,18 @@ class EnsembleLIF(object):
 
 
 class EnsembleCluster(object):
-    def __init__(self, neuron_slice, size_in, size_out, regions):
+    def __init__(self, neuron_slice, size_in, encoder_width, size_out,
+                 size_learnt_out, n_learnt_input_signals, regions):
         """Create a new cluster of collaborating cores."""
         self.neuron_slice = neuron_slice
         self.regions = regions
         self.neuron_slices = list()
         self.vertices = list()
         self.size_in = size_in
+        self.encoder_width = encoder_width
         self.size_out = size_out
+        self.size_learnt_out = size_learnt_out
+        self.n_learnt_input_signals = n_learnt_input_signals
 
     def make_vertices(self, cycles):
         """Partition the neurons onto multiple cores."""
@@ -340,31 +581,39 @@ class EnsembleCluster(object):
         # Form the constraints dictionary
         def _make_constraint(f, size_in, **kwargs):
             """Wrap a usage computation method to work with the partitioner."""
-            def f_(neuron_slice, output_slice):
+            def f_(neuron_slice, output_slice, learnt_output_slice):
                 # Calculate the number of neurons
                 n_neurons = neuron_slice.stop - neuron_slice.start
 
                 # Calculate the number of outgoing dimensions
                 size_out = output_slice.stop - output_slice.start
+                size_learnt_out = learnt_output_slice.stop -\
+                    learnt_output_slice.start
 
                 # Call the original method
-                return f(size_in, size_out, n_neurons, **kwargs)
+                return f(size_in, size_out, size_learnt_out,
+                         n_neurons, **kwargs)
             return f_
 
         constraints = {
-            dtcm_constraint: _make_constraint(_lif_dtcm_usage, self.size_in,
+            dtcm_constraint: _make_constraint(_lif_dtcm_usage,
+                                              self.encoder_width,
                                               n_neurons_in_cluster=n_neurons),
-            cpu_constraint: _make_constraint(_lif_cpu_usage, self.size_in,
+            cpu_constraint: _make_constraint(_lif_cpu_usage,
+                                             self.encoder_width,
                                              n_neurons_in_cluster=n_neurons),
         }
 
         # Partition the slice of neurons that we have
         self.neuron_slices = list()
         output_slices = list()
-        for neurons, outputs in partition.partition_multiple(
-                (self.neuron_slice, slice(self.size_out)), constraints):
+        learnt_output_slices = list()
+        for neurons, outputs, learnt_outputs in partition.partition_multiple(
+                (self.neuron_slice, slice(self.size_out),
+                 slice(self.size_learnt_out)), constraints):
             self.neuron_slices.append(neurons)
             output_slices.append(outputs)
+            learnt_output_slices.append(learnt_outputs)
 
         n_slices = len(self.neuron_slices)
         assert n_slices <= 16  # Too many cores in the cluster
@@ -374,11 +623,11 @@ class EnsembleCluster(object):
                                               n_slices)
 
         # Zip these together to create the vertices
-        all_slices = zip(input_slices, output_slices)
-        for i, (in_slice, out_slice) in enumerate(all_slices):
+        all_slices = zip(input_slices, output_slices, learnt_output_slices)
+        for i, (inp, output, learnt) in enumerate(all_slices):
             # Create the vertex
-            vertex = EnsembleSlice(i, self.neuron_slices, in_slice,
-                                   out_slice, self.regions)
+            vertex = EnsembleSlice(i, self.neuron_slices, inp, output, learnt,
+                                   self.regions)
 
             # Add to the list of vertices
             self.vertices.append(vertex)
@@ -395,9 +644,14 @@ class EnsembleCluster(object):
 
         # Allocate some shared memory for the cluster
         with controller(x=x, y=y):
-            # Get the shared input vector memory
+            # Allocate shared input vector memory
             shared_input_vector = controller.sdram_alloc(self.size_in*4,
                                                          clear=True)
+
+            # Allocate shared learnt input vector memory
+            shared_learnt_input_vector = [
+                controller.sdram_alloc(self.size_in*4, clear=True)
+                for _ in range(self.n_learnt_input_signals)]
 
             # Get the shared spike vector memory
             spike_bytes = neuron_utils.get_bytes_for_unpacked_spike_vector(
@@ -419,8 +673,8 @@ class EnsembleCluster(object):
         # Load each slice in turn, passing references to the shared memory
         for vertex in self.vertices:
             vertex.load_to_machine(
-                netlist, shared_input_vector, shared_spikes_vector,
-                sema_input, sema_spikes
+                netlist, shared_input_vector, shared_learnt_input_vector,
+                shared_spikes_vector, sema_input, sema_spikes
             )
 
     def get_profiler_data(self):
@@ -445,6 +699,11 @@ class EnsembleCluster(object):
             # Get the data and yield a new entry
             yield vertex.neuron_slice, vertex.get_voltage_data(n_steps)
 
+    def get_encoder_data(self, n_steps):
+        """Retrieved (learnt) encoder data from the simulation."""
+        for vertex in self.vertices:
+            yield vertex.neuron_slice, vertex.get_encoder_data(n_steps)
+
 
 class EnsembleSlice(Vertex):
     """Represents a single instance of the Ensemble APLX."""
@@ -454,10 +713,12 @@ class EnsembleSlice(Vertex):
         0:  "Input filter",
         1:  "Neuron update",
         2:  "Decode and transmit output",
+        3:  "PES",
+        4:  "Voja",
     }
 
     def __init__(self, vertex_index, cluster_slices, input_slice, output_slice,
-                 ens_regions):
+                 learnt_output_slice, ens_regions):
         """Create a new slice of an Ensemble.
 
         Parameters
@@ -470,10 +731,13 @@ class EnsembleSlice(Vertex):
             Slice of the input space to be managed by this instance.
         output_slice : slice
             Slice of the output space to be managed by this instance.
+        learnt_output_slice : slice
+            Slice of the learned output space to be managed by this instance.
         """
         # Store the parameters
         self.input_slice = input_slice
         self.output_slice = output_slice
+        self.learnt_output_slice = learnt_output_slice
         self.regions = ens_regions
 
         # Get the specific neural slice we care about and information regarding
@@ -486,25 +750,34 @@ class EnsembleSlice(Vertex):
 
         # Get the basic arguments for the regions that we'll be storing
         self.region_arguments = _get_basic_region_arguments(
-            self.neuron_slice, self.output_slice, cluster_slices
+            self.neuron_slice, self.output_slice,
+            self.learnt_output_slice, cluster_slices
         )
 
         # Add some other arguments for the ensemble region
-        self.region_arguments[EnsembleRegions.ensemble].kwargs.update({
+        self.region_arguments[Regions.ensemble].kwargs.update({
             "population_id": vertex_index,
             "input_slice": input_slice,
             "neuron_slice": self.neuron_slice,
             "output_slice": output_slice,
+            "learnt_output_slice": learnt_output_slice,
         })
 
+        # Add input width parameter to input filter regions that get sliced
+        input_width = input_slice.stop - input_slice.start
+        self.region_arguments[Regions.input_filters].\
+            kwargs["filter_width"] = input_width
+        self.region_arguments[Regions.learnt_encoder_filters].\
+            kwargs["filter_width"] = input_width
+
         # Compute the SDRAM usage
-        sdram_usage = regions.utils.sizeof_regions_named(
-            self.regions, self.region_arguments)
+        sdram_usage = regions.utils.sizeof_regions_named(self.regions,
+                                                         self.region_arguments)
 
         # Prepare the vertex
         application = "ensemble"
 
-        if ens_regions[EnsembleRegions.profiler].n_samples > 0:
+        if ens_regions[Regions.profiler].n_samples > 0:
             # If profiling then use the profiled version of the application
             application += "_profiled"
 
@@ -512,7 +785,8 @@ class EnsembleSlice(Vertex):
                                             {Cores: 1, SDRAM: sdram_usage})
 
     def load_to_machine(self, netlist, shared_input_vector,
-                        shared_spike_vector, sema_input, sema_spikes):
+                        shared_learnt_input_vector, shared_spike_vector,
+                        sema_input, sema_spikes):
         """Load the application data into memory."""
         # Get a block of memory for each of the regions
         self.region_memory = \
@@ -522,19 +796,23 @@ class EnsembleSlice(Vertex):
             )
 
         # Add some arguments to the ensemble region
-        for kwarg, val in (("shared_input_vector", shared_input_vector),
-                           ("shared_spike_vector", shared_spike_vector),
-                           ("sema_input", sema_input),
-                           ("sema_spikes", sema_spikes)):
-            self.region_arguments[EnsembleRegions.ensemble].kwargs[kwarg] = val
+        for kwarg, val in (
+                ("shared_input_vector", shared_input_vector),
+                ("shared_spike_vector", shared_spike_vector),
+                ("shared_learnt_input_vector", shared_learnt_input_vector),
+                ("sema_input", sema_input),
+                ("sema_spikes", sema_spikes)):
+            self.region_arguments[Regions.ensemble].kwargs[kwarg] = val
 
         # Modify the keyword arguments to the keys region to include the
         # cluster index.
-        self.region_arguments[EnsembleRegions.keys].kwargs["cluster"] = \
+        self.region_arguments[Regions.keys].kwargs["cluster"] = \
+            self.cluster
+        self.region_arguments[Regions.learnt_keys].kwargs["cluster"] = \
             self.cluster
 
         # Write each region into memory
-        for key in EnsembleRegions:
+        for key in Regions:
             # Get the arguments and the memory
             args, kwargs = self.region_arguments[key]
             mem = self.region_memory[key]
@@ -548,11 +826,11 @@ class EnsembleSlice(Vertex):
     def get_profiler_data(self):
         """Retrieve profiler data from the simulation."""
         # Get the profiler output memory block
-        mem = self.region_memory[EnsembleRegions.profiler]
+        mem = self.region_memory[Regions.profiler]
         mem.seek(0)
 
         # Read profiler data from memory and put somewhere accessible
-        profiler = self.regions[EnsembleRegions.profiler]
+        profiler = self.regions[Regions.profiler]
         return profiler.read_from_mem(mem, self.profiler_tag_names)
 
     def get_probe_data(self, region_name, n_steps):
@@ -567,11 +845,15 @@ class EnsembleSlice(Vertex):
 
     def get_spike_data(self, n_steps):
         """Retrieve spike data from the simulation."""
-        return self.get_probe_data(EnsembleRegions.spikes, n_steps)
+        return self.get_probe_data(Regions.spike_recording, n_steps)
 
     def get_voltage_data(self, n_steps):
         """Retrieve voltage data from the simulation."""
-        return self.get_probe_data(EnsembleRegions.voltages, n_steps)
+        return self.get_probe_data(Regions.voltage_recording, n_steps)
+
+    def get_encoder_data(self, n_steps):
+        """Retrieve (learnt) encoder data from the simulation."""
+        return self.get_probe_data(Regions.encoder_recording, n_steps)
 
 
 class EnsembleRegion(regions.Region):
@@ -579,23 +861,28 @@ class EnsembleRegion(regions.Region):
 
     Python representation of `ensemble_parameters_t`.
     """
-    def __init__(self, machine_timestep, size_in, n_profiler_samples=0,
-                 record_spikes=False, record_voltages=False):
+    def __init__(self, machine_timestep, size_in, encoder_width,
+                 n_learnt_input_signals, n_profiler_samples=0,
+                 record_spikes=False, record_voltages=False,
+                 record_encoders=False):
         self.machine_timestep = machine_timestep
         self.size_in = size_in
+        self.encoder_width = encoder_width
+        self.n_learnt_input_signals = n_learnt_input_signals
         self.n_profiler_samples = n_profiler_samples
         self.record_spikes = record_spikes
         self.record_voltages = record_voltages
+        self.record_encoders = record_encoders
 
     def sizeof(self, *args, **kwargs):
-        # Always 15 words
-        return 15*4
+        return (18 + self.n_learnt_input_signals) * 4
 
     def write_subregion_to_file(self, fp, n_populations, population_id,
                                 n_neurons_in_population, input_slice,
                                 neuron_slice, output_slice,
-                                shared_input_vector, shared_spike_vector,
-                                sema_input, sema_spikes):
+                                learnt_output_slice, shared_input_vector,
+                                shared_learnt_input_vector,
+                                shared_spike_vector, sema_input, sema_spikes):
         """Write the region to a file-like.
 
         Parameters
@@ -612,8 +899,12 @@ class EnsembleRegion(regions.Region):
             Portion of the neurons that this executable will handle.
         output_slice : slice
             Slice of the decoded space produced by this ensemble.
+        learnt_output_slice : slice
+            Slice of the learnt decoded space produced by this ensemble.
         shared_input_vector : int
             Address of SDRAM used to combine input values.
+        shared_learnt_input_vector : list
+            List of addresses of SDRAM used to combine learnt input values.
         shared_spike_vector : int
             Address in SDRAM used to combine spike vectors.
         sema_input : int
@@ -628,32 +919,41 @@ class EnsembleRegion(regions.Region):
         is_offset = input_slice.start
         is_n_dims = input_slice.stop - input_slice.start
         n_decoder_rows = output_slice.stop - output_slice.start
+        n_learnt_decoder_rows = learnt_output_slice.stop -\
+            learnt_output_slice.start
+
+        assert len(shared_learnt_input_vector) == self.n_learnt_input_signals
 
         # Add the flags
         flags = 0x0
         for i, predicate in enumerate((self.record_spikes,
-                                       self.record_voltages)):
+                                       self.record_voltages,
+                                       self.record_encoders)):
             if predicate:
                 flags |= 1 << i
 
         # Pack and write the data
         fp.write(struct.pack(
-            "<15I",
+            "<%uI" % (18 + self.n_learnt_input_signals),
             self.machine_timestep,
             n_neurons,
             self.size_in,
+            self.encoder_width,
             n_neurons_in_population,
             n_populations,
             population_id,
             is_offset,
             is_n_dims,
             n_decoder_rows,
+            n_learnt_decoder_rows,
             self.n_profiler_samples,
+            self.n_learnt_input_signals,
             flags,
             shared_input_vector,
             shared_spike_vector,
             sema_input,
-            sema_spikes
+            sema_spikes,
+            *shared_learnt_input_vector
         ))
 
 
@@ -689,6 +989,147 @@ class LIFRegion(regions.Region):
             ),
             int(self.tau_ref // self.dt)
         ))
+
+PESLearningRule = collections.namedtuple(
+    "PESLearningRule",
+    "learning_rate, error_filter_index, decoder_start, decoder_stop, "
+    "activity_filter_index")
+
+
+class PESRegion(regions.Region):
+    """Region representing parameters for PES learning rules.
+    """
+    def __init__(self, n_neurons):
+        self.learning_rules = []
+        self.n_neurons = n_neurons
+
+    def sizeof(self, output_slice, learnt_output_slice):
+        sliced_rules = self.get_sliced_learning_rules(learnt_output_slice)
+        return 4 + (len(sliced_rules) * 24)
+
+    def write_subregion_to_file(self, fp, output_slice, learnt_output_slice):
+        # Get number of static decoder rows - used to offset
+        # all PES decoder offsets into global decoder array
+        n_decoder_rows = output_slice.stop - output_slice.start
+
+        # Filter learning rules that learn decoders within learnt output slice
+        sliced_rules = self.get_sliced_learning_rules(learnt_output_slice)
+
+        # Write number of learning rules for slice
+        fp.write(struct.pack("<I", len(sliced_rules)))
+
+        # Loop through sliced learning rules
+        for l in sliced_rules:
+            # Error signal starts either at 1st dimension or the first
+            # dimension of decoder that occurs within learnt output slice
+            error_start_dim = max(0,
+                                  learnt_output_slice.start - l.decoder_start)
+
+            # Error signal end either at last dimension or
+            # the last dimension of learnt output slice
+            error_end_dim = min(l.decoder_stop - l.decoder_start,
+                                learnt_output_slice.stop - l.decoder_start)
+
+            # The row of the global decoder is the learnt row relative to the
+            # start of the learnt output slice with the number of static
+            # decoder rows added to put it into combined decoder space
+            decoder_row = n_decoder_rows +\
+                max(0, l.decoder_start - learnt_output_slice.start)
+
+            # Write structure
+            fp.write(struct.pack(
+                "<i4Ii",
+                tp.value_to_fix(l.learning_rate / float(self.n_neurons)),
+                l.error_filter_index,
+                error_start_dim,
+                error_end_dim,
+                decoder_row,
+                l.activity_filter_index))
+
+    def get_sliced_learning_rules(self, learnt_output_slice):
+        return [l for l in self.learning_rules
+                if (l.decoder_start < learnt_output_slice.stop and
+                    l.decoder_stop > learnt_output_slice.start)]
+
+VojaLearningRule = collections.namedtuple(
+    "VojaLearningRule",
+    "learning_rate, learning_signal_filter_index, encoder_offset, "
+    "decoded_input_filter_index, activity_filter_index")
+
+
+class VojaRegion(regions.Region):
+    """Region representing parameters for PES learning rules.
+    """
+    def __init__(self, one_over_radius):
+        self.learning_rules = []
+        self.one_over_radius = one_over_radius
+
+    def sizeof(self):
+        return 8 + (len(self.learning_rules) * 20)
+
+    def write_subregion_to_file(self, fp):
+        # Write number of learning rules and scaling factor
+        fp.write(struct.pack(
+            "<2I",
+            len(self.learning_rules),
+            tp.value_to_fix(self.one_over_radius)
+        ))
+
+        # Write learning rules
+        for l in self.learning_rules:
+            data = struct.pack(
+                "<Ii2Ii",
+                tp.value_to_fix(l.learning_rate),
+                l.learning_signal_filter_index,
+                l.encoder_offset,
+                l.decoded_input_filter_index,
+                l.activity_filter_index
+            )
+            fp.write(data)
+
+
+class FilteredActivityRegion(regions.Region):
+    def __init__(self, dt):
+        self.filter_propogators = []
+        self.dt = dt
+
+    def add_get_filter(self, time_constant):
+        # If time constant is none or less than dt,
+        # a filter is not required so return -1
+        if time_constant is None or time_constant < self.dt:
+            return -1
+        # Otherwise
+        else:
+            # Calculate propogator
+            propogator = math.exp(-float(self.dt) / float(time_constant))
+
+            # Convert to fixed-point
+            propogator_fixed = tp.value_to_fix(propogator)
+
+            # If there is already a filter with the same fixed-point
+            # propogator in the list, return its index
+            if propogator_fixed in self.filter_propogators:
+                return self.filter_propogators.index(propogator_fixed)
+            # Otherwise add propogator to list and return its index
+            else:
+                self.filter_propogators.append(propogator_fixed)
+                return (len(self.filter_propogators) - 1)
+
+    def sizeof(self):
+        return 4 + (8 * len(self.filter_propogators))
+
+    def write_subregion_to_file(self, fp):
+        # Write number of learning rules
+        fp.write(struct.pack("<I", len(self.filter_propogators)))
+
+        # Write filters
+        for f in self.filter_propogators:
+            data = struct.pack(
+                "<ii",
+                f,
+                tp.value_to_fix(1.0) - f,
+            )
+            fp.write(data)
 
 
 def get_decoders_and_keys(signals_connections, minimise=False):
@@ -728,29 +1169,38 @@ def get_decoders_and_keys(signals_connections, minimise=False):
     return decoders, keys
 
 
-def _get_basic_region_arguments(neuron_slice, output_slice, cluster_slices):
+def _get_basic_region_arguments(neuron_slice, output_slice,
+                                learnt_output_slice, cluster_slices):
     """Get the initial arguments for LIF regions."""
     # By default there are no arguments at all
     region_arguments = collections.defaultdict(Args)
 
     # Regions sliced by neuron
-    for r in (EnsembleRegions.encoders,
-              EnsembleRegions.bias,
-              EnsembleRegions.gain,
-              EnsembleRegions.spikes,
-              EnsembleRegions.voltages):
+    for r in (Regions.encoders,
+              Regions.bias,
+              Regions.gain,
+              Regions.spike_recording,
+              Regions.voltage_recording,
+              Regions.encoder_recording):
         region_arguments[r] = Args(neuron_slice)
 
     # Regions sliced by output
-    for r in [EnsembleRegions.decoders, EnsembleRegions.keys]:
+    for r in (Regions.decoders, Regions.keys):
         region_arguments[r] = Args(output_slice)
+
+    # Regions sliced by learnt output
+    for r in (Regions.learnt_decoders, Regions.learnt_keys):
+        region_arguments[r] = Args(learnt_output_slice)
 
     # Population lengths
     pop_lengths = [p.stop - p.start for p in cluster_slices]
-    region_arguments[EnsembleRegions.population_length] = Args(pop_lengths)
+    region_arguments[Regions.population_length] = Args(pop_lengths)
+
+    # PES region needs both static and learnt output slices
+    region_arguments[Regions.pes] = Args(output_slice, learnt_output_slice)
 
     # Ensemble region arguments
-    region_arguments[EnsembleRegions.ensemble].kwargs.update({
+    region_arguments[Regions.ensemble].kwargs.update({
         "n_populations": len(pop_lengths),
         "n_neurons_in_population": sum(pop_lengths),
     })
@@ -758,14 +1208,16 @@ def _get_basic_region_arguments(neuron_slice, output_slice, cluster_slices):
     return region_arguments
 
 
-def _lif_sdram_usage(size_in, size_out, n_neurons):
+def _lif_sdram_usage(size_in, size_out, size_learnt_out, n_neurons):
     """Approximation of SDRAM usage."""
     # Per neuron cost = encoders + decoders + gain + bias
-    size = n_neurons * (size_in + size_out + 2) + size_out
+    total_size_out = size_out + size_learnt_out
+    size = (n_neurons * (size_in + total_size_out + 2)) + total_size_out
     return size * 4
 
 
-def _lif_dtcm_usage(size_in, size_out, n_neurons, n_neurons_in_cluster=None):
+def _lif_dtcm_usage(size_in, size_out, size_learnt_out,
+                    n_neurons, n_neurons_in_cluster=None):
     """Approximation of DTCM usage."""
     # Assume no clustering if n_neurons_in_cluster is None
     if n_neurons_in_cluster is None:
@@ -773,13 +1225,16 @@ def _lif_dtcm_usage(size_in, size_out, n_neurons, n_neurons_in_cluster=None):
 
     # Per neuron cost = encoders + gain + bias + voltage + refractory counter
     # Per neuron in cluster cost = decoders
-    size = (n_neurons * (size_in + 3) + size_out + size_in +
-            n_neurons // 2) + n_neurons_in_cluster * size_out
+    # **TODO** filters (especially learnt ones need taking into account)
+    total_size_out = size_out + size_learnt_out
+    size = (n_neurons * (size_in + 3) + total_size_out + (5 * size_in) +
+            n_neurons // 2) + (n_neurons_in_cluster * total_size_out)
 
     return size * 4
 
 
-def _lif_cpu_usage(size_in, size_out, n_neurons, n_neurons_in_cluster=None):
+def _lif_cpu_usage(size_in, size_out, size_learnt_out, n_neurons,
+                   n_neurons_in_cluster=None):
     """Approximation of compute cost."""
     # Assume no clustering if n_neurons_in_cluster is None
     if n_neurons_in_cluster is None:
@@ -789,4 +1244,8 @@ def _lif_cpu_usage(size_in, size_out, n_neurons, n_neurons_in_cluster=None):
     encoder_and_neuron_cost = (10 * size_in + 59) * n_neurons
     decoder_cost = (3 * n_neurons_in_cluster + 234) * size_out
 
-    return input_filter_cost + encoder_and_neuron_cost + decoder_cost
+    # **TODO** base on profiled data!
+    learnt_decoder_cost = (3 * n_neurons_in_cluster + 234) * size_learnt_out
+
+    return input_filter_cost + encoder_and_neuron_cost +\
+        decoder_cost + learnt_decoder_cost

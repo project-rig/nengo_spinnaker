@@ -104,5 +104,6 @@ setup(
     # Extras
     extras_require={
         "spalloc": ["spalloc >= 0.2.2"],  # For machine allocation
+        "scipy": ["scipy >= 0.11"],         # For processing of profiler output
     },
 )

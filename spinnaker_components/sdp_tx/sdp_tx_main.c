@@ -63,7 +63,7 @@ void mcpl_callback(uint key, uint payload) {
 
 void c_main(void) {
   address_t address = system_load_sram();
-  input_filtering_get_filters(&g_input, region_start(2, address));
+  input_filtering_get_filters(&g_input, region_start(2, address), NULL);
   input_filtering_get_routes(&g_input, region_start(3, address));
   if (!data_system(region_start(1, address)))
   {
