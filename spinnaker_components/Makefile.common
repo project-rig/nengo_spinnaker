@@ -199,7 +199,7 @@ $(BUILDDIR)/%.o: $(SPINNAKER_COMPONENTS)/%.c $(INC_DIR)/spinnaker.h $(INC_DIR)/s
 # Tidy and cleaning dependencies
 
 tidy:
-	$(RM) $(OBJECTS) $(APP).elf $(APP).txt $(APP).aplx
+	$(RM) $(OBJECTS) $(APP).elf $(APP).txt $(APP).aplx $(APP).nm
 clean: tidy
 	$(RM) $(APP_DIR)/$(APP).aplx
 
