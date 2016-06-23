@@ -54,9 +54,11 @@ LIB := 0
 ifdef SPINN_DIRS
   LIB_DIR := $(SPINN_DIRS)/lib
   INC_DIR := $(SPINN_DIRS)/include
+  TOOLS_DIR := $(SPINN_DIRS)/tools
 else
   LIB_DIR := ../../lib
   INC_DIR := ../../include
+  TOOLS_DIR := ../../tools
 endif
 
 #-------------------------------------------------------------------------------
@@ -85,13 +87,14 @@ else
   LIBRARY := $(LIB_DIR)/libsark.a
 endif
 
-  SCRIPT := $(LIB_DIR)/sark.lnk
+  SCRIPT := $(TOOLS_DIR)/sark.lnk
 
   LD := $(GP)-gcc -T$(SCRIPT) -Wl,-e,cpu_reset -Wl,--gc-sections -Wl,--use-blx 
 
   AR := $(GP)-ar -rcs
   OC := $(GP)-objcopy
   OD := $(GP)-objdump -dxt > $(APP).txt
+  NM := $(GP)-nm
 
 # ARM tool setup
 
@@ -113,14 +116,14 @@ else
   LIBRARY := $(LIB_DIR)/sark.a
 endif
 
-  SCRIPT := $(LIB_DIR)/sark.sct
+  SCRIPT := $(TOOLS_DIR)/sark.sct
 
   LD := armlink --scatter=$(SCRIPT) --remove --entry cpu_reset
 
   AR := armar -rcs
   OC := fromelf
   OD := fromelf -cds --output $(APP).txt
-
+  NM := nm
 endif
 
 ifeq ($(THUMB),1)
@@ -166,7 +169,8 @@ ifeq ($(GNU),1)
 else
 	$(OC) --bin --output $(APP).bin $(APP).elf
 endif
-	mkaplx $(APP).elf | $(CAT) - $(APP).bin > $(APP).aplx
+	$(NM) $(APP).elf > $(APP).nm
+	mkaplx $(APP).nm | $(CAT) - $(APP).bin > $(APP).aplx
 	$(RM) $(APP).bin RO_DATA.bin RW_DATA.bin
 	$(CP) $(APP).aplx $(APP_DIR)/
 	$(LS) $(APP_DIR)/$(APP).aplx
@@ -195,7 +199,7 @@ $(BUILDDIR)/%.o: $(SPINNAKER_COMPONENTS)/%.c $(INC_DIR)/spinnaker.h $(INC_DIR)/s
 # Tidy and cleaning dependencies
 
 tidy:
-	$(RM) $(OBJECTS) $(APP).elf $(APP).txt $(APP).aplx
+	$(RM) $(OBJECTS) $(APP).elf $(APP).txt $(APP).aplx $(APP).nm
 clean: tidy
 	$(RM) $(APP_DIR)/$(APP).aplx
 
