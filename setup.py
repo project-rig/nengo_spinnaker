@@ -58,7 +58,7 @@ def replace_local_hyperlinks(
 
 setup(
     name="nengo_spinnaker",
-    version="0.2.5",
+    version="0.4.0",
     packages=find_packages(),
     package_data={'nengo_spinnaker': ['binaries/*.aplx']},
 
@@ -90,7 +90,7 @@ setup(
     keywords="spinnaker nengo neural cognitive simulation",
 
     # Requirements
-    install_requires=["nengo>=2.0.0, <3.0.0", "rig>=2.0.0, <3.0.0",
+    install_requires=["nengo>=2.1.1, <3.0.0", "rig>=2.0.0, <3.0.0",
                       "bitarray>=0.8.1, <1.0.0", "toposort >= 1.4"],
     zip_safe=False,  # Partly for performance reasons
 
