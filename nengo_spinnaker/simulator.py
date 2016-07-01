@@ -186,6 +186,18 @@ class Simulator(object):
         self.controller = MachineController(hostname)
         self.controller.boot()
 
+        # Select chip 0,0 for ethernet
+        self.remote_iptags = []
+        with self.controller(x=0, y=0):
+            # Get dictionary of remote nodes from simulator
+            remote_node_iptags = getconfig(network.config, Simulator,
+                                           "remote_node_iptags", {})
+
+            # Loop through remote IP tags
+            for iptag, (hostname, port) in six.iteritems(remote_node_iptags):
+                self.controller.iptag_set(iptag, hostname, port)
+                self.remote_iptags.append(iptag)
+        
         # Get a system-info object to place & route against
         logger.info("Getting SpiNNaker machine specification")
         system_info = self.controller.get_system_info()
