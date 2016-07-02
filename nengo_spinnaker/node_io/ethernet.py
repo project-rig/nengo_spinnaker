@@ -71,7 +71,8 @@ class Ethernet(NodeIOController):
             transmitter = SDPTransmitter(
                 connection.post_obj.size_in,
                 getconfig(model.config, connection.post_obj,
-                          "remote_node_iptag", None))
+                          "remote_node_iptag", None),
+                connection.post_obj.label)
             self._sdp_transmitters[connection.post_obj] = transmitter
             model.extra_operators.append(transmitter)
 

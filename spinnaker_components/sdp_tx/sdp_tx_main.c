@@ -21,12 +21,13 @@ void sdp_tx_update(uint ticks, uint arg1) {
 
     // Construct and transmit the SDP Message
     sdp_msg_t message;
-    message.dest_addr = 0x0000;        // (0, 0)
+    message.dest_addr = 0x0000;         // (0, 0)
     message.dest_port = 0xff;
-    message.srce_addr = sv->p2p_addr;  // Sender P2P address
+    message.srce_addr = sv->p2p_addr;   // Sender P2P address
     message.srce_port = spin1_get_id();
-    message.flags = 0x07;              // No reply expected
-    message.tag = g_sdp_tx.iptag;      // Send to IPtag 1
+    message.flags = 0x07;               // No reply expected
+    message.tag = g_sdp_tx.iptag;       // Send to selected IP tag
+    message.arg1 = g_sdp_tx.label_hash; // Stick label hash in argument
 
     message.cmd_rc = 1;
     spin1_memcpy(
@@ -44,12 +45,14 @@ bool data_system(address_t addr) {
   g_sdp_tx.machine_timestep = addr[1];
   g_sdp_tx.transmission_delay = addr[2];
   g_sdp_tx.iptag = addr[3];
+  g_sdp_tx.label_hash = addr[4];
 
   delay_remaining = g_sdp_tx.transmission_delay;
   io_printf(IO_BUF, "[SDP Tx] Tick period = %d microseconds\n",
             g_sdp_tx.machine_timestep);
   io_printf(IO_BUF, "[SDP Tx] transmission delay = %d\n", delay_remaining);
   io_printf(IO_BUF, "[SDP Tx] IP tag = %u\n", g_sdp_tx.iptag);
+  io_printf(IO_BUF, "[SDP Tx] Label hash = %08x\n", g_sdp_tx.label_hash);
 
   input_filtering_initialise_output(&g_input, g_sdp_tx.n_dimensions);
   g_sdp_tx.input = g_input.output;

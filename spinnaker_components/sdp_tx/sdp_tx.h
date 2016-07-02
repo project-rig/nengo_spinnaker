@@ -29,6 +29,7 @@ typedef struct sdp_tx_parameters {
   value_t *input;          //!< Input buffer
   uint *keys;              //!< Output keys
   uint iptag;              //!< IP tag to transmit with
+  uint label_hash;         //!< Hash used to identify transmitting population to external receivers
 } sdp_tx_parameters_t;
 extern sdp_tx_parameters_t g_sdp_tx; //!< Global parameters
 

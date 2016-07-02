@@ -1,4 +1,5 @@
 from rig.place_and_route import Cores, SDRAM
+import hashlib
 import struct
 
 from nengo_spinnaker.builder.model import InputPort
@@ -14,8 +15,9 @@ class SDPTransmitter(object):
     """An operator which receives multicast packets, performs filtering and
     transmits the filtered vector as an SDP packet.
     """
-    def __init__(self, size_in, iptag=None):
+    def __init__(self, size_in, iptag, label):
         self.size_in = size_in
+        self.label = label
         self.iptag = 1 if iptag is None else iptag
         self._vertex = None
         self._sys_region = None
@@ -26,7 +28,7 @@ class SDPTransmitter(object):
         """Create vertices that will simulate the SDPTransmitter."""
         # Build the system region
         self._sys_region = SystemRegion(model.machine_timestep,
-                                        self.size_in, 1, self.iptag)
+                                        self.size_in, 1, self.iptag, self.label)
 
         # Build the filter regions
         in_sigs = model.get_signals_to_object(self)[InputPort.standard]
@@ -69,16 +71,19 @@ class SDPTransmitter(object):
 
 class SystemRegion(Region):
     """System region for SDP Tx."""
-    def __init__(self, machine_timestep, size_in, delay, iptag):
+    def __init__(self, machine_timestep, size_in, delay, iptag, label):
         self.machine_timestep = machine_timestep
         self.size_in = size_in
         self.transmission_delay = delay
         self.iptag = iptag
+        self.label_hash = (0 if label is None
+                           else int(hashlib.md5(label).hexdigest()[:8], 16))
 
     def sizeof(self, *args, **kwargs):
-        return 16
+        return 20
 
     def write_region_to_file(self, fp, *args, **kwargs):
         """Write the region to file."""
-        fp.write(struct.pack("<4I", self.size_in, self.machine_timestep,
-                             self.transmission_delay, self.iptag))
+        fp.write(struct.pack("<5I", self.size_in, self.machine_timestep,
+                             self.transmission_delay, self.iptag,
+                             self.label_hash))
