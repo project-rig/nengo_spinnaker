@@ -116,7 +116,7 @@ class NodeIOController(object):
 
         # If node is remote i.e. doesn't need simulating
         # at all, don't add anything to model
-        if getconfig(model.config, node, "remote_node_iptag", None) is not None:
+        if getconfig(model.config, node, "remote_tx_iptag", None) is not None:
             return
         elif node.output is None:
             # If the Node is a passthrough Node then create a new filter object

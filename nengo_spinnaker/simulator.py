@@ -211,12 +211,12 @@ class Simulator(object):
         # Select chip 0,0 for ethernet
         with self.controller(x=0, y=0):
             # Get dictionary of remote nodes from simulator
-            remote_node_iptags = getconfig(network.config, Simulator,
-                                           "remote_node_iptags", {})
+            remote_node_tx_iptags = getconfig(network.config, Simulator,
+                                              "remote_node_tx_iptags", {})
 
             # Loop through remote IP tags
-            for iptag, (hostname, port) in six.iteritems(remote_node_iptags):
-                self.controller.iptag_set(iptag, hostname, port)
+            for tag, (hostname, port) in six.iteritems(remote_node_tx_iptags):
+                self.controller.iptag_set(tag, hostname, port)
 
         # Load the application
         logger.info("Loading application")

@@ -40,14 +40,16 @@ def add_spinnaker_params(config):
     _set_param(config[Simulator], "node_io", Parameter, default=Ethernet)
     _set_param(config[Simulator], "node_io_kwargs", DictParam, default={})
 
-    _set_param(config[Simulator], "remote_node_iptags", DictParam, default={})
+    _set_param(config[Simulator], "remote_node_tx_iptags", DictParam, default={})
 
     # Add function_of_time parameters to Nodes
     _set_param(config[nengo.Node], "function_of_time", BoolParam,
                default=False)
     _set_param(config[nengo.Node], "function_of_time_period",
                NumberParam, default=None, optional=True)
-    _set_param(config[nengo.Node], "remote_node_iptag",
+    _set_param(config[nengo.Node], "remote_tx_iptag",
+               NumberParam, default=None, optional=True)
+    _set_param(config[nengo.Node], "remote_rx_udp_port",
                NumberParam, default=None, optional=True)
 
     # Add optimisation control parameters to (passthrough) Nodes. None means
