@@ -76,7 +76,7 @@ class SystemRegion(Region):
         self.iptag = iptag
 
     def sizeof(self, *args, **kwargs):
-        return 12
+        return 16
 
     def write_region_to_file(self, fp, *args, **kwargs):
         """Write the region to file."""
