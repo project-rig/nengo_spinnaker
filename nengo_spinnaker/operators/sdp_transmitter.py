@@ -14,8 +14,9 @@ class SDPTransmitter(object):
     """An operator which receives multicast packets, performs filtering and
     transmits the filtered vector as an SDP packet.
     """
-    def __init__(self, size_in):
+    def __init__(self, size_in, iptag=None):
         self.size_in = size_in
+        self.iptag = 1 if iptag is None else iptag
         self._vertex = None
         self._sys_region = None
         self._filter_region = None
@@ -25,7 +26,7 @@ class SDPTransmitter(object):
         """Create vertices that will simulate the SDPTransmitter."""
         # Build the system region
         self._sys_region = SystemRegion(model.machine_timestep,
-                                        self.size_in, 1)
+                                        self.size_in, 1, self.iptag)
 
         # Build the filter regions
         in_sigs = model.get_signals_to_object(self)[InputPort.standard]
@@ -68,15 +69,16 @@ class SDPTransmitter(object):
 
 class SystemRegion(Region):
     """System region for SDP Tx."""
-    def __init__(self, machine_timestep, size_in, delay):
+    def __init__(self, machine_timestep, size_in, delay, iptag):
         self.machine_timestep = machine_timestep
         self.size_in = size_in
         self.transmission_delay = delay
+        self.iptag = iptag
 
     def sizeof(self, *args, **kwargs):
         return 12
 
     def write_region_to_file(self, fp, *args, **kwargs):
         """Write the region to file."""
-        fp.write(struct.pack("<3I", self.size_in, self.machine_timestep,
-                             self.transmission_delay))
+        fp.write(struct.pack("<4I", self.size_in, self.machine_timestep,
+                             self.transmission_delay, self.iptag))

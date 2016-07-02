@@ -26,7 +26,7 @@ void sdp_tx_update(uint ticks, uint arg1) {
     message.srce_addr = sv->p2p_addr;  // Sender P2P address
     message.srce_port = spin1_get_id();
     message.flags = 0x07;              // No reply expected
-    message.tag = 1;                   // Send to IPtag 1
+    message.tag = g_sdp_tx.iptag;      // Send to IPtag 1
 
     message.cmd_rc = 1;
     spin1_memcpy(
@@ -43,11 +43,13 @@ bool data_system(address_t addr) {
   g_sdp_tx.n_dimensions = addr[0];
   g_sdp_tx.machine_timestep = addr[1];
   g_sdp_tx.transmission_delay = addr[2];
+  g_sdp_tx.iptag = addr[3];
 
   delay_remaining = g_sdp_tx.transmission_delay;
   io_printf(IO_BUF, "[SDP Tx] Tick period = %d microseconds\n",
             g_sdp_tx.machine_timestep);
   io_printf(IO_BUF, "[SDP Tx] transmission delay = %d\n", delay_remaining);
+  io_printf(IO_BUF, "[SDP Tx] IP tag = %u\n", g_sdp_tx.iptag);
 
   input_filtering_initialise_output(&g_input, g_sdp_tx.n_dimensions);
   g_sdp_tx.input = g_input.output;
