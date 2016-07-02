@@ -114,7 +114,11 @@ class NodeIOController(object):
             getconfig(model.config, node, "function_of_time", False)
         )
 
-        if node.output is None:
+        # If node is remote i.e. doesn't need simulating
+        # at all, don't add anything to model
+        if getconfig(model.config, node, "remote_node_iptag", None) is not None:
+            return
+        elif node.output is None:
             # If the Node is a passthrough Node then create a new filter object
             # for it.
             op = Filter(node.size_in)
@@ -204,7 +208,13 @@ class NodeIOController(object):
 
     def get_node_sink(self, model, cn):
         """Get the sink for a connection terminating at a Node."""
-        if cn.post_obj in self.passthrough_nodes:
+        # If postsynaptic object is a remote node, we don't need to add
+        # anything to the host network, but we want to make sure a
+        # SDP transmitter is instantiated on SpiNNaker
+        if getconfig(model.config, cn.post_obj,
+                     "remote_node_iptag", None) is not None:
+            return self.get_spinnaker_sink_for_node(model, cn)
+        elif cn.post_obj in self.passthrough_nodes:
             # If the Node is a passthrough Node then we return a reference
             # to the Filter operator we created earlier regardless.
             return spec(ObjectPort(self.passthrough_nodes[cn.post_obj],
