@@ -163,7 +163,6 @@ class NodeIOController(object):
         # SDP receiver is instantiated on SpiNNaker
         if getconfig(model.config, cn.pre_obj,
                      "remote_rx_iptag", None) is not None:
-            print "BAGGIN"
             return self.get_spinnaker_source_for_node(model, cn)
         elif cn.pre_obj in self.passthrough_nodes:
             # If the Node is a passthrough Node then we return a reference

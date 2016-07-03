@@ -105,7 +105,6 @@ class Ethernet(NodeIOController):
                 remote_rx_iptag = getconfig(model.config, node,
                                             "remote_rx_iptag", None)
                 if remote_rx_iptag is not None:
-                    print "TAGGIN"
                     # Select chip 0,0 for ethernet and create a reverse IP tag to forward packet
                     with controller(x=0, y=0):
                         controller.iptag_reverse_set(
