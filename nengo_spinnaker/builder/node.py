@@ -156,7 +156,14 @@ class NodeIOController(object):
 
     def get_node_source(self, model, cn):
         """Get the source for a connection originating from a Node."""
-        if cn.pre_obj in self.passthrough_nodes:
+        # If presynaptic object is a remote node, we don't need to add
+        # anything to the host network, but we want to make sure a
+        # SDP receiver is instantiated on SpiNNaker
+        if getconfig(model.config, cn.pre_obj,
+                     "remote_rx_iptag", None) is not None:
+            print "BAGGIN"
+            return self.get_spinnaker_source_for_node(model, cn)
+        elif cn.pre_obj in self.passthrough_nodes:
             # If the Node is a passthrough Node then we return a reference
             # to the Filter operator we created earlier regardless.
             return spec(ObjectPort(self.passthrough_nodes[cn.pre_obj],

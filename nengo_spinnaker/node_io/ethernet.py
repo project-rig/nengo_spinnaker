@@ -101,9 +101,22 @@ class Ethernet(NodeIOController):
                 x, y = netlist.placements[vertex]
                 p = netlist.allocations[vertex][Cores].start
 
-                # Store this transmission parameters to (x, y, p) map
-                self._node_outgoing[node].append((transmission_params,
-                                                  (x, y, p)))
+                # If node should receive remote input via UDP
+                remote_rx_iptag = getconfig(model.config, node,
+                                            "remote_rx_iptag", None)
+                if remote_rx_iptag is not None:
+                    print "TAGGIN"
+                    # Select chip 0,0 for ethernet and create a reverse IP tag to forward packet
+                    with controller(x=0, y=0):
+                        controller.iptag_reverse_set(
+                            iptag=remote_rx_iptag[0], sdp_port=1,
+                            port=remote_rx_iptag[1],
+                            dest_x=x, dest_y=y, dest_p=p)
+
+                # Otherwise store this transmission parameters to (x, y, p) map
+                else:
+                    self._node_outgoing[node].append((transmission_params,
+                                                      (x, y, p)))
 
         # Build a map of (x, y, p) to Node for incoming values
         for node, sdp_tx in iteritems(self._sdp_transmitters):

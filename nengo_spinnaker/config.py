@@ -1,6 +1,7 @@
 """Nengo/SpiNNaker specific configuration."""
 import nengo
-from nengo.params import BoolParam, DictParam, NumberParam, Parameter
+from nengo.params import (BoolParam, DictParam, NumberParam,
+                          Parameter, TupleParam)
 from rig import place_and_route as par
 
 from nengo_spinnaker.node_io import Ethernet
@@ -49,8 +50,8 @@ def add_spinnaker_params(config):
                NumberParam, default=None, optional=True)
     _set_param(config[nengo.Node], "remote_tx_iptag",
                NumberParam, default=None, optional=True)
-    _set_param(config[nengo.Node], "remote_rx_udp_port",
-               NumberParam, default=None, optional=True)
+    _set_param(config[nengo.Node], "remote_rx_iptag",
+               TupleParam, default=None, optional=True)
 
     # Add optimisation control parameters to (passthrough) Nodes. None means
     # that a heuristic will be used to determine if the passthrough Node should
