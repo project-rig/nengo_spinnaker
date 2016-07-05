@@ -107,7 +107,7 @@ class Ethernet(NodeIOController):
                 if remote_rx_iptag is not None:
                     # Select chip 0,0 for ethernet and create a reverse IP tag to forward packet
                     with controller(x=0, y=0):
-                        controller.iptag_reverse_set(
+                        controller.reverse_iptag_set(
                             iptag=remote_rx_iptag[0], sdp_port=1,
                             port=remote_rx_iptag[1],
                             dest_x=x, dest_y=y, dest_p=p)
