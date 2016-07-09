@@ -110,7 +110,7 @@ class Ethernet(NodeIOController):
                         controller.reverse_iptag_set(
                             iptag=remote_rx_iptag[0], sdp_port=1,
                             port=remote_rx_iptag[1],
-                            dest_x=x, dest_y=y, dest_p=p)
+                            dest_x=x, dest_y=y, dest_p=p, strip=True)
 
                 # Otherwise store this transmission parameters to (x, y, p) map
                 else:
