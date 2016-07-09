@@ -28,7 +28,7 @@ class SDPTransmitter(object):
         """Create vertices that will simulate the SDPTransmitter."""
         # Build the system region
         self._sys_region = SystemRegion(model.machine_timestep,
-                                        self.size_in, 1, self.iptag, self.label)
+                                        self.size_in, 10, self.iptag, self.label)
 
         # Build the filter regions
         in_sigs = model.get_signals_to_object(self)[InputPort.standard]
