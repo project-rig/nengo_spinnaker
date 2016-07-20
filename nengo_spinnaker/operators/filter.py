@@ -304,13 +304,9 @@ class FilterCore(Vertex):
 
     def accepts_signal(self, signal_params, transmission_params):
         """Choose whether to receive this signal or not."""
-        if isinstance(transmission_params, EnsembleTransmissionParameters):
-            # If the connection is from an ensemble only return true if the
-            # decoders contain non-zero values in the input dimensions we care
-            # about.
-            return np.any(transmission_params.decoders[self.column_slice, :])
-        elif isinstance(transmission_params,
-                        PassthroughNodeTransmissionParameters):
+        if isinstance(transmission_params,
+                      (PassthroughNodeTransmissionParameters,
+                       EnsembleTransmissionParameters)):
             # If the connection is from a Node of some variety then only return
             # true if the transform contains non-zero values in the rows which
             # relate to the subspace we receive input in.

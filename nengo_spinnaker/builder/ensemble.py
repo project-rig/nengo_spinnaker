@@ -259,8 +259,9 @@ def build_from_ensemble_connection(model, conn):
             np.all(transform[0, :] == transform[1:, :])):
         transform = np.array([transform[0]])
 
-    return EnsembleTransmissionParameters(decoders, transform,
-                                          conn.learning_rule)
+    transform = np.dot(transform, decoders.T)
+
+    return EnsembleTransmissionParameters(transform, conn.learning_rule)
 
 
 @Model.transmission_parameter_builders.register(nengo.ensemble.Neurons)

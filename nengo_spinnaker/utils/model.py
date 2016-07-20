@@ -374,7 +374,6 @@ def _combine_transmission_params(in_transmission_parameters,
     if isinstance(in_transmission_parameters,
                   EnsembleTransmissionParameters):
         transmission_params = EnsembleTransmissionParameters(
-            in_transmission_parameters.untransformed_decoders,
             new_transform, in_transmission_parameters.learning_rule
         )
     elif isinstance(in_transmission_parameters,

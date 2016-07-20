@@ -323,8 +323,8 @@ def test_remove_operator_from_connection_map_unforced():
             transform[i*SD:(i+1)*SD, :] = np.eye(SD)
 
             # Get the parameters
-            tps = EnsembleTransmissionParameters(np.ones((1, SD)), transform,
-                                                 None)
+            tps = EnsembleTransmissionParameters(
+                np.dot(transform, np.ones((SD, 1))), None)
     
             cm.add_connection(source_object=source, source_port=None,
                               signal_parameters=sps,
@@ -417,8 +417,7 @@ def test_remove_operator_from_connection_map_unforced():
 
         ((signal_parameters, transmission_parameters), sinks) = from_a[None][0]
         assert signal_parameters == model.SignalParameters(True, SD, None)
-        assert transmission_parameters.transform.shape == (SD, SD)
-        assert np.all(transmission_parameters.transform == np.eye(SD))
+        assert transmission_parameters.transform.shape == (SD, 1)
         assert sinks == [(d, None, model.ReceptionParameters(None, SD, None))]
 
         # Connection(s) from D[n]
@@ -428,7 +427,7 @@ def test_remove_operator_from_connection_map_unforced():
 
         ((signal_parameters, transmission_parameters), sinks) = from_d[None][0]
         assert signal_parameters == model.SignalParameters(True, D, None)
-        assert transmission_parameters.transform.shape == (D, SD)
+        assert transmission_parameters.transform.shape == (D, 1)
 
     # Check that there are many connections from E
     from_e = cm._connections[op_E]
@@ -446,7 +445,7 @@ class TestCombineTransmissionAndReceptionParameters(object):
     def test_ens_to_x(self, final_port):
         # Create the ingoing connection parameters
         in_transmission_params = EnsembleTransmissionParameters(
-            np.random.uniform(size=(100, 10)), 1.0, None,
+            np.random.uniform(size=(10, 100)), None,
         )
 
         # Create the outgoing connection parameters
@@ -462,11 +461,7 @@ class TestCombineTransmissionAndReceptionParameters(object):
             )
 
         # Check that all the parameters are correct
-        assert np.all(new_tps.untransformed_decoders ==
-                      in_transmission_params.untransformed_decoders)
-        assert np.all(new_tps.transform ==
-                      out_transmission_params.transform)
-        assert new_tps.decoders.shape == (5, 100)
+        assert new_tps.transform.shape == (5, 100)
         assert new_in_port is final_port
 
     # Node and Passthrough Node to Standard Input or Neurons - NOT global
@@ -515,7 +510,7 @@ class TestCombineTransmissionAndReceptionParameters(object):
     def test_ens_to_gi(self):
         # Create the ingoing connection parameters
         in_transmission_params = EnsembleTransmissionParameters(
-            np.random.uniform(size=(100, 7)), 1.0, None
+            np.random.uniform(size=(7, 100)), None
         )
 
         # Create the outgoing connection parameters
@@ -531,9 +526,7 @@ class TestCombineTransmissionAndReceptionParameters(object):
             )
 
         # Check that all the parameters are correct
-        assert np.all(new_tps.transform == 1.0)
-        assert new_tps.transform.shape == (1, 7)
-        assert new_tps.decoders.shape == (1, 100)
+        assert new_tps.transform.shape == (1, 100)
         assert new_in_port is EnsembleInputPort.global_inhibition
 
     # Node and Passthrough Node to Neurons (Global Inhibition)
@@ -582,10 +575,7 @@ class TestCombineTransmissionAndReceptionParameters(object):
     def test_x_to_x_optimize_out(self, from_type, final_port):
         # Create the ingoing connection parameters
         in_transmission_params = {
-            "ensemble": EnsembleTransmissionParameters(
-                            np.random.uniform(size=(100, 1)),
-                            np.array([[1.0], [0.0]]), None
-                        ),
+            "ensemble": EnsembleTransmissionParameters(np.dot([[1.0], [0.0]], np.random.uniform(size=(100, 1)).T), None),
             "node": NodeTransmissionParameters(
                         slice(10, 20),
                         mock.Mock(),
