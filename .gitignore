@@ -68,3 +68,5 @@ spinnaker_components/*/nengo_*.txt
 
 # Nengo cache
 .cache/
+
+*.nm
