@@ -6,7 +6,7 @@ import nengo.synapses
 import numpy as np
 from six.moves import filter as sfilter
 from six import iteritems, itervalues
-from toposort import toposort_flatten
+from toposort import toposort
 
 from nengo_spinnaker.builder.ensemble import EnsembleTransmissionParameters
 from nengo_spinnaker.builder.model import (
@@ -98,9 +98,38 @@ def get_passthrough_node_dependencies(model, passthrough_nodes):
 
 def order_passthrough_nodes(model, passthrough_nodes):
     """Order passthrough Nodes for removal."""
-    return reversed(toposort_flatten(
-        get_passthrough_node_dependencies(model, passthrough_nodes)
-    ))
+    # Passthrough nodes form a series of "chains", for example a model might
+    # contain the chains:
+    #
+    #    A --> B --> C
+    #            \-> D --> E
+    #
+    #    F --> G
+    #
+    # These are sorted using `toposort` into the form:
+    #
+    #     [{A, F}, {B, G}, {C, D}, {E}]
+    #
+    # Such that passthrough nodes of equivalent "depths" in the network are
+    # placed in the same set. We re-order this list into the form:
+    #
+    #     [{B, G}, {C, D}, {E}, {A, F}]
+    #
+    # So that passthrough nodes at the start of chains are removed from the
+    # network last.
+    first_ptns = None
+
+    for ptns in toposort(get_passthrough_node_dependencies(
+            model, passthrough_nodes)):
+        if first_ptns is None:
+            first_ptns = ptns
+        else:
+            for ptn in ptns:
+                yield ptn
+
+    if first_ptns is not None:
+        for ptn in first_ptns:
+            yield ptn
 
 
 def optimise_out_passthrough_nodes(model, passthrough_nodes, config,
