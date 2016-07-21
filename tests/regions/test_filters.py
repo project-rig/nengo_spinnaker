@@ -118,6 +118,23 @@ class TestLowpassFilter(object):
         assert a == exp_a
         assert b == exp_b
 
+    def test_pack_data_tau_zero(self):
+        # Create the filter
+        f = LowpassFilter(0, False, 0)
+
+        # Pack into an array
+        data = bytearray(8)
+        f.pack_data(0.001, data, 0)
+
+        # Compute expected values
+        exp_a = tp.value_to_fix(0.0)
+        exp_b = tp.value_to_fix(1.0)
+
+        # Unpack and check for accuracy
+        (a, b) = struct.unpack_from("<2I", data)
+        assert a == exp_a
+        assert b == exp_b
+
     @pytest.mark.parametrize("width, latching, tc",
                              [(3, False, 0.01), (1, True, 0.2)])
     def test_from_parameters(self, width, latching, tc):
