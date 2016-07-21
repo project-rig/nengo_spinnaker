@@ -91,6 +91,7 @@ class TestEnsembleTransmissionParameters(object):
 
         tp5 = EnsembleTransmissionParameters(np.ones((3, 3)), None)
         assert tp1 == tp5
+        assert hash(tp1) == hash(tp5)
 
         learning_rule = mock.Mock()
         tp7 = EnsembleTransmissionParameters(np.ones((3, 1)), learning_rule)

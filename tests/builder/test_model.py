@@ -53,14 +53,15 @@ class TestConnectionMap(object):
 
         # Create the connection map and add the connection
         cm = model.ConnectionMap()
-        assert len(cm._connections) == 0
+        assert len(list(cm.get_signals())) == 0
         cm.add_connection(source1, soport1, sp1, None, sink1, siport1, rp1)
 
         # Assert that this connection was added correctly
+        assert len(list(cm.get_signals())) == 1
         assert len(cm._connections) == 1
         assert len(cm._connections[source1]) == 1
-        assert (cm._connections[source1][soport1] ==
-                [((sp1, None), [(sink1, siport1, rp1)])])
+        assert (cm._connections[source1][soport1][(sp1, None)] ==
+                [(sink1, siport1, rp1)])
 
     def test_add_connection_repeated(self):
         # Create parameters for the first connection
@@ -83,8 +84,8 @@ class TestConnectionMap(object):
         cm.add_connection(source1, soport1, sp1, tp1, sink1, siport1, rp1)
 
         # Check that the connection was added twice
-        assert (cm._connections[source1][soport1] ==
-                [((sp1, tp1), [(sink1, siport1, rp1)]*2)])
+        assert (cm._connections[source1][soport1][(sp1, tp1)] ==
+                [(sink1, siport1, rp1)]*2)
 
     def test_add_connection_different_port(self):
         # Create parameters for the first connection
@@ -108,10 +109,10 @@ class TestConnectionMap(object):
         cm.add_connection(source1, soport2, sp1, tp1, sink1, siport1, rp1)
 
         # Assert the map is still correct
-        assert (cm._connections[source1][soport1] ==
-                [((sp1, tp1), [(sink1, siport1, rp1)])])
-        assert (cm._connections[source1][soport2] ==
-                [((sp1, tp1), [(sink1, siport1, rp1)])])
+        assert (cm._connections[source1][soport1][(sp1, tp1)] ==
+                [(sink1, siport1, rp1)])
+        assert (cm._connections[source1][soport2][(sp1, tp1)] ==
+                [(sink1, siport1, rp1)])
 
     def test_add_default_keyspace(self):
         # Adding a default keyspace will modify all transmission parameters
@@ -138,29 +139,13 @@ class TestConnectionMap(object):
         port21 = mock.Mock(name="Port 2.1")
         sp21 = model.SignalParameters()
 
-        # Manually create the connection map so that the order can be
-        # guaranteed.
+        # Add connections to the connection map
         cm = model.ConnectionMap()
-        cm._connections = collections.OrderedDict()
-
-        cm._connections[sources[0]] = collections.OrderedDict()
-        cm._connections[sources[0]][None] = [
-            model._ParsSinksPair((sp00, None)),
-            model._ParsSinksPair((sp01, None))
-        ]
-
-        cm._connections[sources[1]] = collections.OrderedDict()
-        cm._connections[sources[1]][None] = [
-            model._ParsSinksPair((sp10, None))
-        ]
-
-        cm._connections[sources[2]] = collections.OrderedDict()
-        cm._connections[sources[2]][None] = [
-            model._ParsSinksPair((sp20, None))
-        ]
-        cm._connections[sources[2]][port21] = [
-            model._ParsSinksPair((sp21, None))
-        ]
+        cm.add_connection(sources[0], None, sp00, None, None, None, None)
+        cm.add_connection(sources[0], None, sp01, None, None, None, None)
+        cm.add_connection(sources[1], None, sp10, None, None, None, None)
+        cm.add_connection(sources[2], None, sp20, None, None, None, None)
+        cm.add_connection(sources[2], port21, sp21, None, None, None, None)
 
         # Add the default keyspace
         ks = mock.Mock()
@@ -179,11 +164,13 @@ class TestConnectionMap(object):
 
         # Assert that the correct keyspaces were assigned to the correct
         # objects.
-        assert sp00.keyspace is kss[0]
-        assert sp01.keyspace is kss[1]
         assert sp10.keyspace is ks10
-        assert sp20.keyspace is kss[2]
-        assert sp21.keyspace is kss[3]
+
+        # Assert remaining keyspaces are unique
+        for a in (sp00, sp01, sp20, sp21):
+            for b in (sp00, sp01, sp20, sp21):
+                if a is not b:
+                    assert a.keyspace is not b.keyspace
 
     def test_get_signals_from_object(self):
         # Create two ports
@@ -356,9 +343,8 @@ def test_remove_sinkless_signals():
     )
 
     # Remove the sinks from one of the connections
-    for _, sinks in cm._connections[obj_b][None]:
-        for sink in sinks:
-            sinks.remove(sink)
+    for k in cm._connections[obj_b][None].keys():
+        cm._connections[obj_b][None] = dict()
 
     # Remove all the sinkless signals
     model.remove_sinkless_signals(cm)
@@ -407,7 +393,7 @@ def test_remove_sinkless_objects():
     cm.add_connection(c, None, model.SignalParameters(), None, e, None, None)
     cm.add_connection(d, None, model.SignalParameters(), None, e, None, None)
     cm.add_connection(e, None, model.SignalParameters(), None, f, None, None)
-    cm._connections[f][None] = list()
+    cm._connections[f]
 
     # Remove the sinkless filters
     removed = model.remove_sinkless_objects(cm, mock.Mock)

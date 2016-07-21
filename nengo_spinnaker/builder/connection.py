@@ -32,7 +32,8 @@ def build_generic_reception_params(model, conn):
 class TransmissionParameters(object):
     """Parameters describing generic connections."""
     def __init__(self, transform):
-        self.transform = transform
+        self.transform = np.array(transform)
+        self.transform.flags['WRITEABLE'] = False
 
     def __ne__(self, other):
         return not (self == other)
@@ -43,11 +44,16 @@ class TransmissionParameters(object):
             return False
 
         # and the transforms are equivalent
-        if (self.transform.shape != other.transform.shape or
-                np.any(self.transform != other.transform)):
+        if not np.array_equal(self.transform, other.transform):
             return False
 
         return True
+
+    def _get_hashables(self):
+        return (type(self), self.transform.data)
+
+    def __hash__(self):
+        return hash(self._get_hashables())
 
 
 class EnsembleTransmissionParameters(TransmissionParameters):
@@ -73,6 +79,12 @@ class EnsembleTransmissionParameters(TransmissionParameters):
             return False
 
         return super(EnsembleTransmissionParameters, self).__eq__(other)
+
+    def __hash__(self):
+        return hash(
+            super(EnsembleTransmissionParameters, self)._get_hashables() +
+            (self.learning_rule, )
+        )
 
 
 class PassthroughNodeTransmissionParameters(TransmissionParameters):
@@ -107,3 +119,7 @@ class NodeTransmissionParameters(PassthroughNodeTransmissionParameters):
             return False
 
         return True
+
+    def _get_hashables(self):
+        return (super(NodeTransmissionParameters, self)._get_hashables() +
+                (self.function, ))

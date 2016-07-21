@@ -2,8 +2,7 @@
 """
 import collections
 import enum
-from itertools import chain
-from six import iteritems, itervalues
+from six import iteritems, itervalues, iterkeys
 
 from ..utils.collections import counter
 
@@ -29,7 +28,10 @@ class ConnectionMap(object):
         """Create a new empty connection map."""
         # Construct the connection map internal structure
         self._connections = collections.defaultdict(
-            lambda: collections.defaultdict(list))
+            lambda: collections.defaultdict(
+                lambda: collections.defaultdict(list)
+            )
+        )
 
     def add_connection(self, source_object, source_port, signal_parameters,
                        transmission_parameters, sink_object, sink_port,
@@ -49,24 +51,11 @@ class ConnectionMap(object):
             treated.
         """
         # Combine the signal parameters with the transmission parameters
-        signal_parameters = (signal_parameters, transmission_parameters)
+        pars = (signal_parameters, transmission_parameters)
 
         # See if we can combine the connection with an existing set of
         # transmission parameters.
-        pars_list = self._connections[source_object][source_port]
-        for pars, sinks in pars_list:
-            # If the transmission parameters are equivalent then we can add the
-            # sink parameters to the list of sinks.
-            if pars == signal_parameters:
-                break
-        else:
-            # If we can't combine with an existing connection then we need to
-            # add a new transmission parameters and set of sinks.
-            psp = _ParsSinksPair(signal_parameters)
-            pars_list.append(psp)
-            sinks = psp.sinks
-
-        # Add the parameters to the list of sinks
+        sinks = self._connections[source_object][source_port][pars]
         sinks.append(_SinkPars(sink_object, sink_port, reception_parameters))
 
     def add_default_keyspace(self, keyspace):
@@ -78,15 +67,23 @@ class ConnectionMap(object):
 
         # For each source object
         for ports_params_and_sinks in itervalues(self._connections):
-            # For each transmission parameter, sinks pair
-            for params_and_sinks in chain(*itervalues(ports_params_and_sinks)):
-                # If the signal parameter doesn't have a keyspace assign one
-                # using the default keyspace.
-                sig_params, _ = params_and_sinks.parameters
+            # For each port
+            for params_and_sinks in itervalues(ports_params_and_sinks):
+                # Build a list of which connections need new parameters
+                update = list()
 
-                if sig_params.keyspace is None:
-                    # Assign the keyspace
+                for (signal_params, transmission_params) in \
+                        iterkeys(params_and_sinks):
+                    if signal_params.keyspace is None:
+                        update.append((signal_params, transmission_params))
+
+                # For each of these items in the update list build a new signal
+                # parameters key, remove the old object from the connection
+                # list and add the new.
+                for sig_params, trans_params in update:
+                    sinks = params_and_sinks.pop((sig_params, trans_params))
                     sig_params.keyspace = keyspace(connection_id=conn_id())
+                    params_and_sinks[(sig_params, trans_params)] = sinks
 
     def get_signals_from_object(self, source_object):
         """Get the signals transmitted by a source object.
@@ -102,7 +99,7 @@ class ConnectionMap(object):
         # For every port and list of (transmission pars, sinks) associated with
         # it add the transmission parameters to the correct list of signals.
         for port, sigs in iteritems(self._connections[source_object]):
-            signals[port] = list(pars.parameters for pars in sigs)
+            signals[port] = list(pars for pars in iterkeys(sigs))
 
         return signals
 
@@ -120,23 +117,20 @@ class ConnectionMap(object):
         # For all connections we have reference to identify those which
         # terminate at the given object. For those that do add a new entry to
         # the signal dictionary.
-        params_and_sinks = chain(*chain(*(itervalues(x) for x in
-                                          itervalues(self._connections))))
-        for param_and_sinks in params_and_sinks:
-            # tp_sinks are pairs of transmission parameters and sinks
-            # Extract the transmission parameters
-            sig_params, _ = param_and_sinks.parameters
-
-            # For each sink, if the sink object is the specified object
-            # then add signal to the list.
-            for sink in param_and_sinks.sinks:
-                if sink.sink_object is sink_object:
-                    # This is the desired sink object, so remember the
-                    # signal. First construction the reception
-                    # specification.
-                    signals[sink.port].append(
-                        ReceptionSpec(sig_params, sink.reception_parameters)
-                    )
+        for port_conns in itervalues(self._connections):
+            for conns in itervalues(port_conns):
+                for (sig_params, _), sinks in iteritems(conns):
+                    # For each sink, if the sink object is the specified object
+                    # then add signal to the list.
+                    for sink in sinks:
+                        if sink.sink_object is sink_object:
+                            # This is the desired sink object, so remember the
+                            # signal. First construction the reception
+                            # specification.
+                            signals[sink.port].append(
+                                ReceptionSpec(sig_params,
+                                              sink.reception_parameters)
+                            )
 
         return signals
 
@@ -151,14 +145,15 @@ class ConnectionMap(object):
         # For each source object and set of sinks yield a new signal
         for source, port_conns in iteritems(self._connections):
             # For each connection look at the sinks and the signal parameters
-            for (sig_pars, transmission_pars), par_sinks in \
-                    chain(*itervalues(port_conns)):
-                # Create a signal using these parameters
-                yield (Signal(source,
-                              (ps.sink_object for ps in par_sinks),  # Sinks
-                              sig_pars.keyspace,
-                              sig_pars.weight),
-                       transmission_pars)
+            for conns in itervalues(port_conns):
+                for (sig_pars, transmission_pars), par_sinks in \
+                        iteritems(conns):
+                    # Create a signal using these parameters
+                    yield (Signal(source,
+                                  (ps.sink_object for ps in par_sinks),
+                                  sig_pars.keyspace,
+                                  sig_pars.weight),
+                           transmission_pars)
 
 
 class OutputPort(enum.Enum):
@@ -192,6 +187,9 @@ class SignalParameters(object):
         self.latching = latching
         self.weight = weight
         self.keyspace = keyspace
+
+    def __hash__(self):
+        return hash((self.latching, self.weight))
 
     def __eq__(self, other):
         # Equivalent if the latching spec is the same, the weight is the same
@@ -283,27 +281,26 @@ def remove_sinkless_signals(conn_map):
     conn_map : :py:class:`~.ConnectionMap`
         A connection map to modify.
     """
-    # Create a new empty connection map dictionary.
-    conns = collections.defaultdict(lambda: collections.defaultdict(list))
+    for port_and_signals in itervalues(conn_map._connections):
+        # Prepare to remove any ports which don't connect to anything
+        remove_ports = list()
 
-    # Get the old connection map
-    old_conns = conn_map._connections
+        # Remove any parameter: sinks mappings where there are no sinks
+        for port, params_and_signals in iteritems(port_and_signals):
+            to_remove = [p for p, s in iteritems(params_and_signals) if not s]
 
-    # Iterate over the old connection map, copying everything across to the new
-    # map unless a signal has no sinks.
-    for source_object, source_port_and_signals in iteritems(old_conns):
-        for source_port, signals in iteritems(source_port_and_signals):
-            for parameters_and_sinks in signals:
-                if not parameters_and_sinks.sinks:
-                    # If there are no sinks associated with the transmission
-                    # parameters then don't bother copying the signal into the
-                    # new dictionary.
-                    continue
-                # Otherwise copy the signal across.
-                conns[source_object][source_port].append(parameters_and_sinks)
+            for r in to_remove:
+                params_and_signals.pop(r)
 
-    # Replace the connection map dictionary
-    conn_map._connections = conns
+            # If there is now nothing coming from this port then mark the port
+            # for removal.
+            if not params_and_signals:
+                remove_ports.append(port)
+
+        # Remove any port: {parameters: sinks} where {parameters: sinks} is
+        # empty.
+        for port in remove_ports:
+            port_and_signals.pop(port)
 
 
 def remove_sinkless_objects(conn_map, cls):
@@ -325,29 +322,27 @@ def remove_sinkless_objects(conn_map, cls):
     # Begin by removing all sinkless signals
     remove_sinkless_signals(conn_map)
 
-    # Create a new empty connection map dictionary.
-    conns = collections.defaultdict(lambda: collections.defaultdict(list))
-
-    # Get the old connection map
-    old_conns = conn_map._connections
-
     # Find all of the objects of the given type that do not have any outgoing
     # connections.
     transmitting_objects = set()
     receiving_objects = set()
 
-    for source_object, source_port_and_signals in iteritems(old_conns):
-        # Store this object as transmitting a value
-        if isinstance(source_object, cls):
-            transmitting_objects.add(source_object)
-
+    for source_object, source_port_and_signals in \
+            iteritems(conn_map._connections):
         # Store all the sinks for connections out of this object
+        has_sinks = False  # Count of objects receiving from this source
         for signals in itervalues(source_port_and_signals):
-            for parameters_and_sinks in signals:
-                for sink_object, _, _ in parameters_and_sinks.sinks:
+            for sinks in itervalues(signals):
+                for sink_object, _, _ in sinks:
+                    has_sinks = True
+
                     # Store each object in the sinks
                     if isinstance(sink_object, cls):
                         receiving_objects.add(sink_object)
+
+        # Store this object as transmitting a value
+        if has_sinks and isinstance(source_object, cls):
+            transmitting_objects.add(source_object)
 
     # Identify all objects which receive but do not transmit
     remove_objects = receiving_objects - transmitting_objects
@@ -356,26 +351,17 @@ def remove_sinkless_objects(conn_map, cls):
     if not remove_objects:
         return set()
 
-    # Create a new dictionary for the connection map, by copying across
-    # anything which doesn't target the objects to remove.
-    for source_object, source_port_and_signals in iteritems(old_conns):
-        for source_port, signals in iteritems(source_port_and_signals):
-            for parameters_and_sinks in signals:
-                # Construct a new list of sinks by filtering the original list
-                # of sinks.
-                sinks = [
-                    sink_pars for sink_pars in parameters_and_sinks.sinks if
-                    sink_pars.sink_object not in remove_objects
-                ]
+    # Remove target objects from the source of connections
+    for o in remove_objects:
+        conn_map._connections.pop(o, None)
 
-                # Add this to the new dictionary
-                conns[source_object][source_port].append(
-                    _ParsSinksPair(parameters_and_sinks.parameters,
-                                   sinks)
-                )
-
-    # Modify the connection map
-    conn_map._connections = conns
+    # Remove target objects from the sinks of connections
+    for sp_and_signals in itervalues(conn_map._connections):
+        for signals in itervalues(sp_and_signals):
+            for pars, sinks in iteritems(signals):
+                # Construct a new sinks list
+                signals[pars] = [sp for sp in sinks if
+                                 sp.sink_object not in remove_objects]
 
     # Recurse to remove any objects which we've just made sinkless
     return remove_objects | remove_sinkless_objects(conn_map, cls)
