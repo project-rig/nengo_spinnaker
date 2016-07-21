@@ -235,7 +235,11 @@ class LowpassFilter(Filter):
     def pack_data(self, dt, buffer, offset=0):
         """Pack the struct describing the filter into the buffer."""
         # Compute the coefficients
-        a = np.exp(-dt / self.time_constant)
+        if self.time_constant != 0.0:
+            a = np.exp(-dt / self.time_constant)
+        else:
+            a = 0.0
+
         b = 1.0 - a
         struct.pack_into("<2I", buffer, offset,
                          tp.value_to_fix(a), tp.value_to_fix(b))
