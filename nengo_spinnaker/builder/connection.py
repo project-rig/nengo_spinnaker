@@ -4,6 +4,11 @@ import numpy as np
 from .builder import Model, ObjectPort, spec
 from .model import ReceptionParameters, InputPort, OutputPort
 
+try:
+    from xxhash import xxh64 as fast_hash
+except ImportError:
+    from hashlib import md5 as fast_hash
+
 
 @Model.source_getters.register(nengo.base.NengoObject)
 def generic_source_getter(model, conn):
@@ -50,7 +55,7 @@ class TransmissionParameters(object):
         return True
 
     def _get_hashables(self):
-        return (type(self), self.transform.data)
+        return (type(self), fast_hash(self.transform).hexdigest())
 
     def __hash__(self):
         return hash(self._get_hashables())
