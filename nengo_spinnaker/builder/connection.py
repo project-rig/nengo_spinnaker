@@ -4,6 +4,11 @@ import numpy as np
 from .builder import Model, ObjectPort, spec
 from .model import ReceptionParameters, InputPort, OutputPort
 
+try:
+    from xxhash import xxh64 as fast_hash
+except ImportError:
+    from hashlib import md5 as fast_hash
+
 
 @Model.source_getters.register(nengo.base.NengoObject)
 def generic_source_getter(model, conn):
@@ -32,7 +37,8 @@ def build_generic_reception_params(model, conn):
 class TransmissionParameters(object):
     """Parameters describing generic connections."""
     def __init__(self, transform):
-        self.transform = transform
+        self.transform = np.array(transform)
+        self.transform.flags['WRITEABLE'] = False
 
     def __ne__(self, other):
         return not (self == other)
@@ -43,11 +49,17 @@ class TransmissionParameters(object):
             return False
 
         # and the transforms are equivalent
-        if (self.transform.shape != other.transform.shape or
-                np.any(self.transform != other.transform)):
+        if not np.array_equal(self.transform, other.transform):
             return False
 
         return True
+
+    @property
+    def _hashables(self):
+        return (type(self), fast_hash(self.transform).hexdigest())
+
+    def __hash__(self):
+        return hash(self._hashables)
 
 
 class EnsembleTransmissionParameters(TransmissionParameters):
@@ -73,6 +85,12 @@ class EnsembleTransmissionParameters(TransmissionParameters):
             return False
 
         return super(EnsembleTransmissionParameters, self).__eq__(other)
+
+    def __hash__(self):
+        return hash(
+            super(EnsembleTransmissionParameters, self)._hashables +
+            (self.learning_rule, )
+        )
 
 
 class PassthroughNodeTransmissionParameters(TransmissionParameters):
@@ -107,3 +125,8 @@ class NodeTransmissionParameters(PassthroughNodeTransmissionParameters):
             return False
 
         return True
+
+    @property
+    def _hashables(self):
+        return (super(NodeTransmissionParameters, self)._hashables +
+                (self.function, ))

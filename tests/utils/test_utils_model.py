@@ -2,6 +2,7 @@ import mock
 import nengo
 import numpy as np
 import pytest
+from six import iteritems
 
 from nengo_spinnaker.utils import model as model_utils
 from nengo_spinnaker.builder import model, Model
@@ -217,7 +218,7 @@ def test_remove_operator_from_connection_map():
     assert len(from_o1) == 1
     assert len(from_o1[None]) == 1
 
-    ((signal_parameters, transmission_parameters), sinks) = from_o1[None][0]
+    ((signal_parameters, transmission_parameters), sinks) = next(iteritems(from_o1[None]))
     assert signal_parameters == model.SignalParameters(True, 3, None)
     assert transmission_parameters.transform.shape == (3, 3)
     assert np.all(transmission_parameters.transform == np.eye(3)*2)
@@ -229,7 +230,7 @@ def test_remove_operator_from_connection_map():
     assert len(from_o2) == 1
     assert len(from_o2[None]) == 3
 
-    for ((signal_parameters, transmission_parameters), sinks) in from_o2[None]:
+    for ((signal_parameters, transmission_parameters), sinks) in iteritems(from_o2[None]):
         if transmission_parameters.transform.shape == (3, 3):
             assert (signal_parameters ==
                     model.SignalParameters(False, 3, None))
@@ -415,7 +416,7 @@ def test_remove_operator_from_connection_map_unforced():
         assert len(from_a) == 1
         assert len(from_a[None]) == 1
 
-        ((signal_parameters, transmission_parameters), sinks) = from_a[None][0]
+        ((signal_parameters, transmission_parameters), sinks) = next(iteritems(from_a[None]))
         assert signal_parameters == model.SignalParameters(True, SD, None)
         assert transmission_parameters.transform.shape == (SD, 1)
         assert sinks == [(d, None, model.ReceptionParameters(None, SD, None))]
@@ -425,14 +426,13 @@ def test_remove_operator_from_connection_map_unforced():
         assert len(from_d) == 1
         assert len(from_d[None]) == 1
 
-        ((signal_parameters, transmission_parameters), sinks) = from_d[None][0]
+        ((signal_parameters, transmission_parameters), sinks) = next(iteritems(from_d[None]))
         assert signal_parameters == model.SignalParameters(True, D, None)
         assert transmission_parameters.transform.shape == (D, 1)
 
     # Check that there are many connections from E
     from_e = cm._connections[op_E]
     assert len(from_e) == 1
-    print(from_e[None][0].parameters[1].transform)
     assert len(from_e[None]) == D
 
 

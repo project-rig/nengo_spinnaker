@@ -207,7 +207,11 @@ def remove_operator_from_connection_map(conn_map, target, force=True,
 
     # Create a new empty connection map dictionary and update the connection
     # map to use the new dictionary
-    conns = collections.defaultdict(lambda: collections.defaultdict(list))
+    conns = collections.defaultdict(
+        lambda: collections.defaultdict(
+            lambda: collections.defaultdict(list)
+        )
+    )
     conn_map._connections = conns
 
     # Copy across all connections from the old connection map; every time we
@@ -274,18 +278,13 @@ def _get_port_kwargs(ports_and_signals):
     """
     # Iterate through the dictionary
     for source_port, signals_and_sinks in iteritems(ports_and_signals):
-        for signal_and_sink in signals_and_sinks:
-            for (sink_object, sink_port,
-                 reception_parameters) in signal_and_sink.sinks:
-                # Break out the signal and transmission parameters
-                signal_parameters, transmission_parameters = \
-                    signal_and_sink.parameters
-
+        for (sig_pars, trans_pars), sinks in iteritems(signals_and_sinks):
+            for (sink_object, sink_port, reception_parameters) in sinks:
                 # Yield the keyword arguments for this connection
                 yield {
                     "source_port": source_port,
-                    "signal_parameters": signal_parameters,
-                    "transmission_parameters": transmission_parameters,
+                    "signal_parameters": sig_pars,
+                    "transmission_parameters": trans_pars,
                     "sink_object": sink_object,
                     "sink_port": sink_port,
                     "reception_parameters": reception_parameters,
