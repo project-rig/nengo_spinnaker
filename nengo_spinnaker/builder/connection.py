@@ -29,60 +29,10 @@ def build_generic_reception_params(model, conn):
                                conn.learning_rule)
 
 
-class EnsembleTransmissionParameters(object):
-    """Transmission parameters for a connection originating at an Ensemble.
-
-    Attributes
-    ----------
-    decoders : array
-        Decoders to use for the connection.
-    """
-    def __init__(self, decoders, transform, learning_rule):
-        # Copy the decoders
-        self.untransformed_decoders = np.array(decoders)
-        self.transform = np.array(transform)
-
-        # Cache learning rule
-        self.learning_rule = learning_rule
-
-        # Compute and store the transformed decoders
-        self.decoders = np.dot(transform, decoders.T)
-
-        # Make the arrays read-only
-        self.untransformed_decoders.flags['WRITEABLE'] = False
-        self.transform.flags['WRITEABLE'] = False
-        self.decoders.flags['WRITEABLE'] = False
-
-    def __ne__(self, other):
-        return not (self == other)
-
-    def __eq__(self, other):
-        # Equal iff. the objects are of the same type
-        if type(self) is not type(other):
-            return False
-
-        # Equal iff. neither connection has a learning rule
-        if self.learning_rule is not None or other.learning_rule is not None:
-            return False
-
-        # Equal iff. the decoders are the same shape
-        if self.decoders.shape != other.decoders.shape:
-            return False
-
-        # Equal iff. the decoder values are the same
-        if np.any(self.decoders != other.decoders):
-            return False
-
-        return True
-
-
-class PassthroughNodeTransmissionParameters(object):
-    """Parameters describing connections which originate from pass through
-    Nodes.
-    """
+class TransmissionParameters(object):
+    """Parameters describing generic connections."""
     def __init__(self, transform):
-        # Store the parameters, copying the transform
-        self.transform = np.array(transform)
+        self.transform = transform
 
     def __ne__(self, other):
         return not (self == other)
@@ -98,6 +48,37 @@ class PassthroughNodeTransmissionParameters(object):
             return False
 
         return True
+
+
+class EnsembleTransmissionParameters(TransmissionParameters):
+    """Transmission parameters for a connection originating at an Ensemble.
+
+    Attributes
+    ----------
+    transform : array
+        Decoders to use for the connection (n_dims x n_neurons)
+    """
+    def __init__(self, transform, learning_rule):
+        super(EnsembleTransmissionParameters, self).__init__(transform)
+
+        # Cache learning rule
+        self.learning_rule = learning_rule
+
+    def __ne__(self, other):
+        return not (self == other)
+
+    def __eq__(self, other):
+        # Equal iff. neither connection has a learning rule
+        if self.learning_rule is not None or other.learning_rule is not None:
+            return False
+
+        return super(EnsembleTransmissionParameters, self).__eq__(other)
+
+
+class PassthroughNodeTransmissionParameters(TransmissionParameters):
+    """Parameters describing connections which originate from pass through
+    Nodes.
+    """
 
 
 class NodeTransmissionParameters(PassthroughNodeTransmissionParameters):
