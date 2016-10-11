@@ -16,13 +16,32 @@ class ConnectionMap(object):
     be best expressed as::
 
         {source_object:
-            {source_port: [
-                ((signal_parameters, transmit_parameters),
-                 [(sink_object, sink_port, reception_parameters), ...]),
-                ...],
+            {source_port: {
+                (signal_parameters, transmit_parameters):
+                 [(sink_object, sink_port, reception_parameters), ...],
+                ...},
             ...},
         ...}
 
+    Alternatively: A nengo_spinnaker object can have multiple outgoing "ports".
+    Each port can transmit multiple outgoing signals, which are classified by
+    both how they are represented on SpiNNaker (their "signal_parameters") and
+    by what they represent in Nengo terms (their "transmit_parameters"). Each
+    signal can target multiple "sinks". Each sink is a combination of a
+    nengo_spinnaker object, a receiving port in that object and some
+    description of what to do with the signal when it is received. As there are
+    multiple objects this data structure is repeated for each.
+
+                  /-> Port ---> Signal --> Sink
+                 /         \--> Signal --> Sink
+                /
+        Object -
+                \
+                 \                     /-> Sink
+                  \-> Port --> Signal ---> Sink
+                                       \-> Sink
+
+        Object -----> Port --> Signal ---> Sink
     """
     def __init__(self):
         """Create a new empty connection map."""
@@ -51,6 +70,7 @@ class ConnectionMap(object):
             treated.
         """
         # Combine the signal parameters with the transmission parameters
+        # (These represent the signal and can be hashed)
         pars = (signal_parameters, transmission_parameters)
 
         # See if we can combine the connection with an existing set of
@@ -287,14 +307,15 @@ def remove_sinkless_signals(conn_map):
 
         # Remove any parameter: sinks mappings where there are no sinks
         for port, params_and_signals in iteritems(port_and_signals):
-            to_remove = [p for p, s in iteritems(params_and_signals) if not s]
+            to_remove = [p for p, s in iteritems(params_and_signals) if
+                         len(s) == 0]
 
             for r in to_remove:
                 params_and_signals.pop(r)
 
             # If there is now nothing coming from this port then mark the port
             # for removal.
-            if not params_and_signals:
+            if len(params_and_signals) == 0:
                 remove_ports.append(port)
 
         # Remove any port: {parameters: sinks} where {parameters: sinks} is
@@ -348,7 +369,7 @@ def remove_sinkless_objects(conn_map, cls):
     remove_objects = receiving_objects - transmitting_objects
 
     # If there are no objects to remove then return the empty set
-    if not remove_objects:
+    if len(remove_objects) == 0:
         return set()
 
     # Remove target objects from the source of connections
