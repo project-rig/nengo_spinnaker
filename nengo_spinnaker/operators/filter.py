@@ -112,13 +112,6 @@ class Filter(object):
         # Get the complete matrix to be applied by the filter
         out_signals = model.get_signals_from_object(self)
 
-        if OutputPort.standard not in out_signals:
-            # If there are no outgoing signals then return no vertices
-            return netlistspec(vertices=tuple())
-        else:
-            transform, keys, output_slices = \
-                get_transforms_and_keys(out_signals[OutputPort.standard])
-
         # Get the filter and filter routing regions
         filter_region, filter_routing_region = make_filter_regions(
             model.get_signals_to_object(self)[InputPort.standard],
@@ -132,8 +125,7 @@ class Filter(object):
 
         for group in self.groups:
             vertices.append(
-                group.make_vertices(np_to_fix(transform),
-                                    keys, output_slices,
+                group.make_vertices(out_signals,
                                     model.machine_timestep,
                                     filter_region,
                                     filter_routing_region)
@@ -167,49 +159,47 @@ class FilterGroup(object):
         self.size_in = column_slice.stop - column_slice.start
         self.max_rows = max_rows
 
-    def make_vertices(self, transform, output_keys, output_slices,
-                      machine_timestep, filter_region, filter_routing_region):
+    def make_vertices(self, output_signals, machine_timestep, filter_region,
+                      filter_routing_region):
         """Partition the transform matrix into groups of rows and assign each
         group of rows to a core for computation.
 
         If the group needs to be split over multiple chips (i.e., the group is
         larger than 17 cores) then partition the matrix such that any used
         chips are used in their entirety.
-
-        Parameters
-        ----------
-        transform : ndarray
-            The complete (unpartitioned) transform applied by the filter.
-        output_keys : [BitField, ...]
-            Keys transmitted by filter.
-        output_slices : [(TransmissionParameters, set), ...]
-            Pairs of transmission parameters and sets containing the row
-            indices of the transform matrix corresponding to the transmission
-            parameters.
         """
-        size_out = transform.shape[0]
+        if OutputPort.standard not in output_signals:
+            self.cores = list()
+        else:
+            # Get the output transform, keys and slices for this slice of the
+            # filter.
+            transform, keys, output_slices = \
+                get_transforms_and_keys(output_signals[OutputPort.standard],
+                                        self.column_slice)
 
-        # Build as many vertices as required to keep the number of rows handled
-        # by each core below max_rows.
-        n_cores = (
-            (size_out // self.max_rows) +
-            (1 if size_out % self.max_rows else 0)
-        )
+            size_out = transform.shape[0]
 
-        # Build the transform region for these cores
-        transform_region = regions.MatrixRegion(
-            transform[:, self.column_slice],
-            sliced_dimension=regions.MatrixPartitioning.rows
-        )
+            # Build as many vertices as required to keep the number of rows
+            # handled by each core below max_rows.
+            n_cores = (
+                (size_out // self.max_rows) +
+                (1 if size_out % self.max_rows else 0)
+            )
 
-        # Build all the vertices
-        self.cores = [
-            FilterCore(self.column_slice, out_slice,
-                       transform_region, output_keys, output_slices,
-                       machine_timestep,
-                       filter_region, filter_routing_region) for
-            out_slice in divide_slice(slice(0, size_out), n_cores)
-        ]
+            # Build the transform region for these cores
+            transform_region = regions.MatrixRegion(
+                np_to_fix(transform),
+                sliced_dimension=regions.MatrixPartitioning.rows
+            )
+
+            # Build all the vertices
+            self.cores = [
+                FilterCore(self.column_slice, out_slice,
+                           transform_region, keys, output_slices,
+                           machine_timestep,
+                           filter_region, filter_routing_region) for
+                out_slice in divide_slice(slice(0, size_out), n_cores)
+            ]
 
         return self.cores
 
@@ -369,7 +359,7 @@ class SystemRegion(object):
         fp.write(data)
 
 
-def get_transforms_and_keys(signals_connections):
+def get_transforms_and_keys(signals_connections, columns):
     """Get a combined transform matrix and a list of keys to use to transmit
     elements transformed with the matrix.  This method also returns a list of
     signal parameters, transmission parameters and the slice of the final
@@ -382,7 +372,7 @@ def get_transforms_and_keys(signals_connections):
     start = end = 0
     for signal, transmission_params in signals_connections:
         # Extract the transform
-        transform = transmission_params.transform
+        transform = transmission_params.transform[:, columns]
 
         if signal.latching:
             # If the signal is latching then we use the transform exactly as it
