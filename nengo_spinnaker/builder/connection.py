@@ -54,11 +54,12 @@ class TransmissionParameters(object):
 
         return True
 
-    def _get_hashables(self):
+    @property
+    def _hashables(self):
         return (type(self), fast_hash(self.transform).hexdigest())
 
     def __hash__(self):
-        return hash(self._get_hashables())
+        return hash(self._hashables)
 
 
 class EnsembleTransmissionParameters(TransmissionParameters):
@@ -87,7 +88,7 @@ class EnsembleTransmissionParameters(TransmissionParameters):
 
     def __hash__(self):
         return hash(
-            super(EnsembleTransmissionParameters, self)._get_hashables() +
+            super(EnsembleTransmissionParameters, self)._hashables +
             (self.learning_rule, )
         )
 
@@ -125,6 +126,7 @@ class NodeTransmissionParameters(PassthroughNodeTransmissionParameters):
 
         return True
 
-    def _get_hashables(self):
-        return (super(NodeTransmissionParameters, self)._get_hashables() +
+    @property
+    def _hashables(self):
+        return (super(NodeTransmissionParameters, self)._hashables +
                 (self.function, ))
