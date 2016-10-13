@@ -1,6 +1,8 @@
+import collections
 import nengo.synapses
 from nengo.utils.filter_design import cont2discrete
 import numpy as np
+from six import iteritems
 import struct
 
 from .region import Region
@@ -320,17 +322,48 @@ class FilterRoutingRegion(Region):
         """Write the routing region to a file-like object."""
         data = bytearray(self.sizeof())
 
+        # Generate a list of signals (hashing by ID) to the filters they
+        # target.
+        signal_id_to_signals = dict()
+        signal_id_to_targets = collections.defaultdict(list)
+        for signal, target in self.signal_routes:
+            signal_id_to_signals[id(signal)] = signal
+            signal_id_to_targets[id(signal)].append(target)
+
+        # Consequently build a list of keys and masks to the filters they
+        # target, checking that every instance of the same key and mask targets
+        # the exact same list of filters.
+        keymask_to_targets = dict()
+        for signal_id, signal in iteritems(signal_id_to_signals):
+            # Get the keyspace and hence the key and mask information
+            ks = signal.keyspace
+            keymask = (
+                ks.get_value(tag=self.filter_routing_tag),
+                ks.get_mask(tag=self.filter_routing_tag),
+                ks.get_mask(field=self.index_field)
+            )
+
+            if keymask not in keymask_to_targets:
+                keymask_to_targets[keymask] = sorted(
+                    signal_id_to_targets[signal_id])
+            else:
+                assert (
+                    sorted(signal_id_to_targets[signal_id]) ==
+                    keymask_to_targets[keymask]
+                ), "Signals with the same keys map to different filters."
+
+        # Finally, build the set of router entries
+        filter_routes = list()
+        for (key, mask, dmask), targets in iteritems(keymask_to_targets):
+            for target in targets:
+                filter_routes.append((key, mask, dmask, target))
+
         # Write the number of entries
-        struct.pack_into("<I", data, 0, len(self.signal_routes))
+        struct.pack_into("<I", data, 0, len(filter_routes))
 
         # Write each entry in turn
-        for i, (signal, index) in enumerate(self.signal_routes):
-            ks = signal.keyspace  # Extract the keyspace for the signal
-            struct.pack_into("<4I", data, 4 + 16*i,
-                             ks.get_value(tag=self.filter_routing_tag),
-                             ks.get_mask(tag=self.filter_routing_tag),
-                             ks.get_mask(field=self.index_field),
-                             index)
+        for i, route in enumerate(filter_routes):
+            struct.pack_into("<4I", data, 4 + 16*i, *route)
 
         # Write to file
         fp.write(data)

@@ -345,6 +345,35 @@ def test_filter_routing_region():
             assert False, "Unexpected key " + hex(key)
 
 
+def test_filter_routing_region_duplicate_connection():
+    """Test that an error is raised if mismatched connections with the same key
+    are identified.
+    """
+    # Define a single keyspace
+    ksc = KeyspaceContainer()
+    ks = ksc["nengo"](connection_id=3)
+    ksc.assign_fields()
+
+    # Define some signals to hold these keyspaces
+    sig_a = SignalParameters(keyspace=ks)
+    sig_b = SignalParameters(keyspace=ks)
+
+    # Define the filter routes, these map a keyspace to an integer
+    signal_routes = [(sig_a, 12), (sig_b, 12), (sig_b, 17)]
+
+    # Create the region
+    filter_region = FilterRoutingRegion(
+        signal_routes, filter_routing_tag=ksc.filter_routing_tag,
+        index_field="index"
+    )
+
+    # Check that an error is raised because two signals with the same key route
+    # in different directions
+    fp = tempfile.TemporaryFile()
+    with pytest.raises(AssertionError):
+        filter_region.write_subregion_to_file(fp)
+
+
 class TestMakeFilterRegions(object):
     """Test the helper for constructing these regions."""
     @pytest.mark.parametrize("minimise", [True, False])
