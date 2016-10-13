@@ -302,17 +302,21 @@ def test_filter_routing_region():
     ks_b = ksc["nengo"](connection_id=255, cluster=63, index=15)
     ksc.assign_fields()
 
+    # Define some signals to hold these keyspaces
+    sig_a = SignalParameters(keyspace=ks_a)
+    sig_b = SignalParameters(keyspace=ks_b)
+
     # Define the filter routes, these map a keyspace to an integer
-    ks_routes = [(ks_a, 12), (ks_b, 17)]
+    signal_routes = [(sig_a, 12), (sig_b, 17)]
 
     # Create the region
     filter_region = FilterRoutingRegion(
-        ks_routes, filter_routing_tag=ksc.filter_routing_tag,
+        signal_routes, filter_routing_tag=ksc.filter_routing_tag,
         index_field="index"
     )
 
     # Check that the memory requirement is sane
-    assert filter_region.sizeof() == 4 * (1 + 4*len(ks_routes))
+    assert filter_region.sizeof() == 4 * (1 + 4*len(signal_routes))
 
     # Check that the written out data is sensible
     fp = tempfile.TemporaryFile()
@@ -327,12 +331,13 @@ def test_filter_routing_region():
     valid_mask = ksc["nengo"].get_mask(tag=ksc.filter_routing_tag)
     valid_d_mask = ksc["nengo"].get_mask(field="index")
 
-    for _ in range(len(ks_routes)):
+    for _ in range(len(signal_routes)):
         key, mask, d_mask, i = struct.unpack("<4I", fp.read(16))
         assert mask == valid_mask, hex(mask) + " != " + hex(valid_mask)
         assert d_mask == valid_d_mask
 
-        for ks, j in ks_routes:
+        for signal, j in signal_routes:
+            ks = signal.keyspace
             if key == ks.get_value(tag=ksc.filter_routing_tag):
                 assert i == j
                 break
@@ -384,13 +389,13 @@ class TestMakeFilterRegions(object):
         assert routing_region.filter_routing_tag == "spam"
         assert routing_region.index_field == "eggs"
         if minimise:
-            assert (ks_a, 0) in routing_region.keyspace_routes
-            assert (ks_b, 0) in routing_region.keyspace_routes
+            assert (signal_a, 0) in routing_region.signal_routes
+            assert (signal_b, 0) in routing_region.signal_routes
         else:
-            if (ks_a, 0) in routing_region.keyspace_routes:
-                assert (ks_b, 1) in routing_region.keyspace_routes
+            if (signal_a, 0) in routing_region.signal_routes:
+                assert (signal_b, 1) in routing_region.signal_routes
             else:
-                assert (ks_b, 0) in routing_region.keyspace_routes
+                assert (signal_b, 0) in routing_region.signal_routes
 
     def test_different_filters(self):
         """Test construction of filter regions from signals and keyspaces."""
@@ -431,10 +436,10 @@ class TestMakeFilterRegions(object):
         assert routing_region.filter_routing_tag == "spam"
 
         assert routing_region.index_field == "eggs"
-        if (ks_a, 0) in routing_region.keyspace_routes:
-            assert (ks_b, 1) in routing_region.keyspace_routes
+        if (signal_a, 0) in routing_region.signal_routes:
+            assert (signal_b, 1) in routing_region.signal_routes
         else:
-            assert (ks_b, 0) in routing_region.keyspace_routes
+            assert (signal_b, 0) in routing_region.signal_routes
 
     def test_forced_filter_width(self):
         """Test construction of filter regions from signals and keyspaces."""
