@@ -155,12 +155,21 @@ class TestConnectionMap(object):
             2: mock.Mock(name="Keyspace20"),
             3: mock.Mock(name="Keyspace21"),
         }
-        ks.side_effect = lambda connection_id: kss[connection_id]
 
+        def call(connection_id=None, index=None):
+            assert connection_id is None or index is None
+
+            if connection_id is not None:
+                return kss[connection_id]
+            else:
+                return ks
+
+        ks.side_effect = call
         cm.add_default_keyspace(ks)
 
         # Ensure that the correct calls were made to "ks" in the correct order.
-        ks.assert_has_calls([mock.call(connection_id=j) for j in range(4)])
+        for j in range(4):
+            ks.assert_any_call(connection_id=j)
 
         # Assert that the correct keyspaces were assigned to the correct
         # objects.

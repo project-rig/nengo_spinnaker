@@ -8,6 +8,11 @@ from nengo_spinnaker.regions.keyspaces import (
     KeyspacesRegion, KeyField, MaskField)
 
 
+class Signal(object):
+    def __init__(self, ks):
+        self.keyspace = ks
+
+
 @pytest.fixture
 def ks():
     keyspace = BitField()
@@ -27,7 +32,7 @@ class TestKeyspacesRegion(object):
     def test_sizeof_no_prepends(self, key_bits, n_keys, n_fields, partitioned,
                                 vertex_slice):
         # Generate the list of keys, prepends and fields
-        keys = [BitField(key_bits) for _ in range(n_keys)]
+        keys = [(Signal(BitField(key_bits)), {}) for _ in range(n_keys)]
         fields = [mock.Mock() for _ in range(n_fields)]
 
         # Create the region
@@ -39,14 +44,20 @@ class TestKeyspacesRegion(object):
         assert r.sizeof(vertex_slice) == n_atoms * n_fields * 4
 
     def test_sizeof_with_prepends(self):
-        r = KeyspacesRegion([BitField(32)], fields=[],
-                            prepend_num_keyspaces=True)
+        r = KeyspacesRegion(
+            [(Signal(BitField(32)), {})],
+            fields=[],
+            prepend_num_keyspaces=True
+        )
         assert r.sizeof(slice(None)) == 4
 
     def test_sizeof_partitioned(self):
-        r = KeyspacesRegion([BitField(32)]*4, fields=[mock.Mock()],
-                            partitioned_by_atom=True,
-                            prepend_num_keyspaces=False)
+        r = KeyspacesRegion(
+            [(Signal(BitField(32)), {})]*4,
+            fields=[mock.Mock()],
+            partitioned_by_atom=True,
+            prepend_num_keyspaces=False
+        )
         assert r.sizeof(slice(1, 2)) == 4
         assert r.sizeof(slice(2, 4)) == 8
 
@@ -55,7 +66,7 @@ class TestKeyspacesRegion(object):
         with each key and that any extra arguments are passed along.
         """
         # Create some keyspaces
-        keys = [BitField(32) for _ in range(10)]
+        keys = [(Signal(BitField(32)), {}) for _ in range(10)]
 
         # Create two fields
         fields = [mock.Mock() for _ in range(2)]
@@ -71,7 +82,8 @@ class TestKeyspacesRegion(object):
         r.write_subregion_to_file(fp, slice(0, 1), **kwargs)
 
         for f in fields:
-            f.assert_has_calls([mock.call(k, **kwargs) for k in keys])
+            f.assert_has_calls([mock.call(k.keyspace, **kwargs) for
+                                k, _ in keys])
             f.reset_mock()
 
         # Create a PARTITIONED region and write out a slice, check that
@@ -85,14 +97,18 @@ class TestKeyspacesRegion(object):
             r.write_subregion_to_file(fp, sl, **kwargs)
 
             for f in fields:
-                f.assert_has_calls([mock.call(k, **kwargs) for k in keys[sl]])
+                f.assert_has_calls([mock.call(k.keyspace, **kwargs) for
+                                    k, _ in keys[sl]])
                 f.reset_mock()
 
     def test_write_subregion_simple(self, ks):
         """A simple test that ensures the appropriate keyspace data is written
         out."""
         # Create a simple keyspace and some instances of it
-        keyspaces = [ks(x=1, y=1, p=31), ks(x=3, y=7, p=2), ]
+        keyspaces = [
+            (Signal(ks), dict(x=1, y=1, p=31)),
+            (Signal(ks(x=3, y=7, p=2)), {}),
+        ]
 
         # Add two field instances, one to get the routing key the other to get
         # the mask.
@@ -108,13 +124,15 @@ class TestKeyspacesRegion(object):
         fp = tempfile.TemporaryFile()
         r.write_subregion_to_file(fp, slice(0, 10), c=5)
 
+        expected_ks = [s.keyspace(**kw) for s, kw in keyspaces]
+
         fp.seek(0)
         assert fp.read(4) == b'\x02\x00\x00\x00'  # Number of keyspaces
         assert fp.read() == struct.pack('4I',
-                                        keyspaces[0](c=5).get_value(),
-                                        keyspaces[0].get_mask(tag='routing'),
-                                        keyspaces[1](c=5).get_value(),
-                                        keyspaces[1].get_mask(tag='routing'))
+                                        expected_ks[0](c=5).get_value(),
+                                        expected_ks[0].get_mask(tag='routing'),
+                                        expected_ks[1](c=5).get_value(),
+                                        expected_ks[1].get_mask(tag='routing'))
 
 
 class TestMaskField(object):

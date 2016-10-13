@@ -105,6 +105,9 @@ class ConnectionMap(object):
                     sig_params.keyspace = keyspace(connection_id=conn_id())
                     params_and_sinks[(sig_params, trans_params)] = sinks
 
+                    # Expand the keyspace to fit the required indices
+                    keyspace(index=sig_params.weight - 1)
+
     def get_signals_from_object(self, source_object):
         """Get the signals transmitted by a source object.
 
