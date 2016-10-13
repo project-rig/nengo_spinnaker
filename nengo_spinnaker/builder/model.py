@@ -171,8 +171,7 @@ class ConnectionMap(object):
                     # Create a signal using these parameters
                     yield (Signal(source,
                                   (ps.sink_object for ps in par_sinks),
-                                  sig_pars.keyspace,
-                                  sig_pars.weight),
+                                  sig_pars),
                            transmission_pars)
 
 
@@ -284,13 +283,20 @@ class Signal(object):
     weight : int
         Number of packets expected to be sent across the packet each time-step.
     """
-    def __init__(self, source, sinks, keyspace, weight):
+    def __init__(self, source, sinks, params):
         """Create a new signal."""
         # Store all the parameters, copying the list of sinks.
         self.source = source
         self.sinks = list(sinks)
-        self.keyspace = keyspace
-        self.weight = weight
+        self._params = params
+
+    @property
+    def keyspace(self):
+        return self._params.keyspace
+
+    @property
+    def weight(self):
+        return self._params.weight
 
 
 def remove_sinkless_signals(conn_map):
