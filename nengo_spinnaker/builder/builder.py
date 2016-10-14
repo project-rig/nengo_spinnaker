@@ -317,9 +317,6 @@ class Model(object):
         removed_operators = model.remove_sinkless_objects(self.connection_map,
                                                           operators.Filter)
 
-        # Apply the default keyspace to any signals without keyspaces
-        self.connection_map.add_default_keyspace(self.keyspaces["nengo"])
-
         # Call each operator to make vertices
         operator_vertices = dict()
         vertices = collections_ext.flatinsertionlist()

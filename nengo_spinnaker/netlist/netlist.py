@@ -1,3 +1,4 @@
+import collections
 import logging
 from rig import place_and_route  # noqa : F401
 
@@ -11,7 +12,7 @@ from rig.place_and_route import Cores
 from rig.machine_control.utils import sdram_alloc_for_vertices
 from six import iteritems, itervalues
 
-from nengo_spinnaker.netlist import utils
+from nengo_spinnaker.netlist import key_allocation, utils
 
 logger = logging.getLogger(__name__)
 
@@ -135,18 +136,27 @@ class Netlist(object):
          derived_nets) = utils.get_nets_for_routing(
             vertices_resources, self.nets, self.placements, self.allocations)
 
+        # Finally, route all nets using the extended resource dictionary,
+        # placements and allocations.
+        self.routes = route(vertices_resources, route_nets, machine,
+                            constraints, extended_placements,
+                            extended_allocations, **route_kwargs)
+
+        # Assign keyspaces based on the placement
+        signal_routes = collections.defaultdict(collections.deque)
+        for signal, nmnet in iteritems(self.nets):
+            for net in itervalues(derived_nets[nmnet]):
+                signal_routes[signal].append(self.routes[net])
+
+        key_allocation.allocate_signal_keyspaces(signal_routes,
+                                                 self.keyspaces)
+
         # Get a map from the nets we will route with to keyspaces
         self.net_keyspaces = utils.get_net_keyspaces(
             self.placements, self.nets, derived_nets)
 
         # Fix all keyspaces
         self.keyspaces.assign_fields()
-
-        # Finally, route all nets using the extended resource dictionary,
-        # placements and allocations.
-        self.routes = route(vertices_resources, route_nets, machine,
-                            constraints, extended_placements,
-                            extended_allocations, **route_kwargs)
 
     def load_application(self, controller, system_info):
         """Load the netlist to a SpiNNaker machine.

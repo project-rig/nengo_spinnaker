@@ -78,36 +78,6 @@ class ConnectionMap(object):
         sinks = self._connections[source_object][source_port][pars]
         sinks.append(_SinkPars(sink_object, sink_port, reception_parameters))
 
-    def add_default_keyspace(self, keyspace):
-        """Add a unique entry to all signals which have not yet been assigned a
-        keyspace.
-        """
-        # Hold the count of connection IDs
-        conn_id = counter()
-
-        # For each source object
-        for ports_params_and_sinks in itervalues(self._connections):
-            # For each port
-            for params_and_sinks in itervalues(ports_params_and_sinks):
-                # Build a list of which connections need new parameters
-                update = list()
-
-                for (signal_params, transmission_params) in \
-                        iterkeys(params_and_sinks):
-                    if signal_params.keyspace is None:
-                        update.append((signal_params, transmission_params))
-
-                # For each of these items in the update list build a new signal
-                # parameters key, remove the old object from the connection
-                # list and add the new.
-                for sig_params, trans_params in update:
-                    sinks = params_and_sinks.pop((sig_params, trans_params))
-                    sig_params.keyspace = keyspace(connection_id=conn_id())
-                    params_and_sinks[(sig_params, trans_params)] = sinks
-
-                    # Expand the keyspace to fit the required indices
-                    keyspace(index=sig_params.weight - 1)
-
     def get_signals_from_object(self, source_object):
         """Get the signals transmitted by a source object.
 
@@ -296,6 +266,10 @@ class Signal(object):
     @property
     def keyspace(self):
         return self._params.keyspace
+
+    @keyspace.setter
+    def keyspace(self, ks):
+        self._params.keyspace = ks
 
     @property
     def weight(self):
