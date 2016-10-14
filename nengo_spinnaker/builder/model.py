@@ -4,8 +4,6 @@ import collections
 import enum
 from six import iteritems, itervalues, iterkeys
 
-from ..utils.collections import counter
-
 
 class ConnectionMap(object):
     """A container which represents all of the connections in a model and the
