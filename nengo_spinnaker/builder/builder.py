@@ -359,7 +359,7 @@ class Model(object):
                 groups.append(set(vxs))
 
         # Construct nets from the signals
-        nets = list()
+        nets = dict()
         for signal, transmission_parameters in \
                 self.connection_map.get_signals():
             # Get the source and sink vertices
@@ -399,8 +399,7 @@ class Model(object):
                              s.accepts_signal(signal, transmission_parameters))
 
             # Create the net(s)
-            nets.append(NMNet(sources, list(sinks),
-                              signal.weight, signal.keyspace))
+            nets[signal] = NMNet(sources, list(sinks), signal.weight)
 
         # Return a netlist
         return Netlist(

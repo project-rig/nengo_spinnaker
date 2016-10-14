@@ -1,6 +1,7 @@
 import pytest
 from rig.place_and_route import Cores
 
+from nengo_spinnaker.builder.model import Signal, SignalParameters
 from nengo_spinnaker.utils.keyspaces import KeyspaceContainer
 from nengo_spinnaker.netlist import NMNet, Vertex, utils
 
@@ -15,8 +16,8 @@ def test_get_nets_for_placement():
     e = object()
 
     # Create the nets
-    ab_cd = NMNet([a, b], [c, d], 1.0, None)
-    c_e = NMNet(c, e, 2.0, None)
+    ab_cd = NMNet([a, b], [c, d], 1.0)
+    c_e = NMNet(c, e, 2.0)
     nets = [ab_cd, c_e]
 
     # Get the placement nets
@@ -53,9 +54,13 @@ def test_get_nets_for_routing():
     e = object()
 
     # Create the nets
-    ab_cd = NMNet([a, b], [c, d], 1.0, None)
-    cd_e = NMNet([c, d], e, 2.0, None)
-    nets = [ab_cd, cd_e]
+    ab_cd = NMNet([a, b], [c, d], 1.0)
+    cd_e = NMNet([c, d], e, 2.0)
+
+    # Create some signals
+    signal_a = object()
+    signal_b = object()
+    nets = {signal_a: ab_cd, signal_b: cd_e}
 
     # Create some placements:
     #  - a and b placed on the same chip
@@ -177,12 +182,20 @@ def test_get_net_keyspaces():
     # Create a container for the keyspaces
     ksc = KeyspaceContainer()
 
-    # Create the nets
-    nets = [
-        NMNet(vertex_A, vertex_B, 1.0, ksc["nengo"](connection_id=0)),
-        NMNet(vertex_B, vertex_A, 2.0, ksc["nengo"](connection_id=1)),
-        NMNet(vertex_A, vertex_A, 3.0, ksc["spam"]),
-    ]
+    # Create the signals and nets
+    signal_a = Signal(
+        object(), [], SignalParameters(keyspace=ksc["nengo"](connection_id=0))
+    )
+    signal_b = Signal(
+        object(), [], SignalParameters(keyspace=ksc["nengo"](connection_id=1))
+    )
+    signal_c = Signal(object(), [], SignalParameters(keyspace=ksc["spam"]))
+
+    nets = {
+        signal_a: NMNet(vertex_A, vertex_B, 1.0),
+        signal_b: NMNet(vertex_B, vertex_A, 2.0),
+        signal_c: NMNet(vertex_A, vertex_A, 3.0),
+    }
 
     # Identify groups
     groups = [set(vertex_A)]
@@ -196,23 +209,23 @@ def test_get_net_keyspaces():
         resources, nets, placements, allocations)
 
     # Get the net keyspaces
-    net_keyspaces = utils.get_net_keyspaces(placements, derived_nets)
+    net_keyspaces = utils.get_net_keyspaces(placements, nets, derived_nets)
 
     # Check the net keyspaces are correct
     # A -> B
     for xy, vertex in [((0, 0), vertex_A[0]), ((0, 1), vertex_A[2])]:
-        net = derived_nets[nets[0]][xy]
+        net = derived_nets[nets[signal_a]][xy]
         cluster = vertex.cluster
-        assert net_keyspaces[net] == nets[0].keyspace(cluster=cluster)
+        assert net_keyspaces[net] == signal_a.keyspace(cluster=cluster)
 
     # B -> A
-    net = derived_nets[nets[1]][(0, 0)]
-    assert net_keyspaces[net] == nets[1].keyspace(cluster=0)
+    net = derived_nets[nets[signal_b]][(0, 0)]
+    assert net_keyspaces[net] == signal_b.keyspace(cluster=0)
 
     # A -> A
     for xy in [(0, 0), (0, 1)]:
-        net = derived_nets[nets[2]][xy]
-        assert net_keyspaces[net] == nets[2].keyspace  # No change
+        net = derived_nets[nets[signal_c]][xy]
+        assert net_keyspaces[net] == signal_c.keyspace  # No change
 
 
 def test_get_net_keyspaces_fails_for_inconsistent_cluster():
@@ -237,12 +250,20 @@ def test_get_net_keyspaces_fails_for_inconsistent_cluster():
     # Create a container for the keyspaces
     ksc = KeyspaceContainer()
 
-    # Create the nets
-    nets = [
-        NMNet(vertex_A, vertex_B, 1.0, ksc["nengo"](connection_id=0)),
-        NMNet(vertex_B, vertex_A, 2.0, ksc["nengo"](connection_id=1)),
-        NMNet(vertex_A, vertex_A, 3.0, ksc["spam"]),
-    ]
+    # Create the signals and nets
+    signal_a = Signal(
+        object(), [], SignalParameters(keyspace=ksc["nengo"](connection_id=0))
+    )
+    signal_b = Signal(
+        object(), [], SignalParameters(keyspace=ksc["nengo"](connection_id=1))
+    )
+    signal_c = Signal(object(), [], SignalParameters(keyspace=ksc["spam"]))
+
+    nets = {
+        signal_a: NMNet(vertex_A, vertex_B, 1.0),
+        signal_b: NMNet(vertex_B, vertex_A, 2.0),
+        signal_c: NMNet(vertex_A, vertex_A, 3.0),
+    }
 
     # Identify groups
     groups = [set(vertex_A)]
@@ -259,4 +280,4 @@ def test_get_net_keyspaces_fails_for_inconsistent_cluster():
 
     # Get the net keyspaces
     with pytest.raises(AssertionError):
-        utils.get_net_keyspaces(placements, derived_nets)
+        utils.get_net_keyspaces(placements, nets, derived_nets)

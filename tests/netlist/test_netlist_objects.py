@@ -38,10 +38,9 @@ def test_net(single_source, single_sink):
     sources = object() if single_source else [object() for _ in range(3)]
     sinks = object() if single_sink else [object() for _ in range(3)]
     weight = random.randint(0, 100)
-    keyspace = object()
 
     # Create the net
-    net = NMNet(sources, sinks, weight, keyspace)
+    net = NMNet(sources, sinks, weight)
 
     # Check the net
     if single_source:
@@ -57,4 +56,3 @@ def test_net(single_source, single_sink):
         assert net.sinks is not sinks
 
     assert net.weight == weight
-    assert net.keyspace is keyspace
