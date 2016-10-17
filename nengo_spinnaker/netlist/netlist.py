@@ -56,7 +56,8 @@ class Netlist(object):
     """
     def __init__(self, nets, vertices, keyspaces, groups, constraints=list(),
                  load_functions=list(), before_simulation_functions=list(),
-                 after_simulation_functions=list()):
+                 after_simulation_functions=list(),
+                 signal_id_constraints=dict()):
         # Store given parameters
         self.nets = nets
         self.vertices = vertices
@@ -66,6 +67,7 @@ class Netlist(object):
         self.load_functions = list(load_functions)
         self.before_simulation_functions = list(before_simulation_functions)
         self.after_simulation_functions = list(after_simulation_functions)
+        self.signal_id_constraints = signal_id_constraints
 
         # Create containers for the attributes that are filled in by place and
         # route.
@@ -149,6 +151,7 @@ class Netlist(object):
                 signal_routes[signal].append(self.routes[net])
 
         key_allocation.allocate_signal_keyspaces(signal_routes,
+                                                 self.signal_id_constraints,
                                                  self.keyspaces)
 
         # Get a map from the nets we will route with to keyspaces

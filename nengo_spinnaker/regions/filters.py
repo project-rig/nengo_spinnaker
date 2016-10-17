@@ -1,8 +1,9 @@
 import collections
+from itertools import combinations
 import nengo.synapses
 from nengo.utils.filter_design import cont2discrete
 import numpy as np
-from six import iteritems
+from six import iteritems, itervalues
 import struct
 
 from .region import Region
@@ -317,6 +318,36 @@ class FilterRoutingRegion(Region):
         """Get the memory requirements of this region as a number of bytes."""
         # 1 word + 4 words per entry
         return 4 * (1 + 4*len(self.signal_routes))
+
+    def get_signal_constraints(self):
+        """Return a set of constraints on which signal parameters may share the
+        same keyspace.
+
+        Returns
+        -------
+        {id(SignalParameters): {id(SignalParameters), ...}}
+            A (moderately unpleasant) dictionary of which signal parameters
+            cannot share a routing identifier.
+        """
+        # Generate a list of signals (hashing by ID) to the filters they
+        # target.
+        id_to_targets = collections.defaultdict(list)
+        for signal, target in self.signal_routes:
+            id_to_targets[id(signal)].append(target)
+
+        # Invert this to build a map of targets to signals
+        targets_to_ids = collections.defaultdict(list)
+        for signal_id, targets in iteritems(id_to_targets):
+            targets_to_ids[tuple(sorted(targets))].append(signal_id)
+
+        # The signals in different target-sets cannot share routing identifiers
+        constraints = collections.defaultdict(set)
+        for xs, ys in combinations(itervalues(targets_to_ids), 2):
+            for x, y in ((i, j) for j in ys for i in xs if i != j):
+                constraints[x].add(y)
+                constraints[y].add(x)
+
+        return constraints
 
     def write_subregion_to_file(self, fp, *args, **kwargs):
         """Write the routing region to a file-like object."""

@@ -6,17 +6,14 @@ from six import iteritems, iterkeys, itervalues
 logger = logging.getLogger(__name__)
 
 
-def allocate_signal_keyspaces(signal_routes, keyspaces):
+def allocate_signal_keyspaces(signal_routes, signal_id_constraints, keyspaces):
     # Filter signals and routes to be only those without a keyspace
     signal_routes = {signal: routes for signal, routes in
                      iteritems(signal_routes) if
                      signal.keyspace is None}
 
-    # Get constraints based on the signal properties
-    prior_constraints = get_signal_id_constraints(signal_routes)
-
     # Get unique identifiers for each signal
-    signal_ids = assign_mn_net_ids(signal_routes, prior_constraints)
+    signal_ids = assign_mn_net_ids(signal_routes, signal_id_constraints)
 
     # Assign keyspaces to the signals
     for signal, i in iteritems(signal_ids):
@@ -28,29 +25,6 @@ def allocate_signal_keyspaces(signal_routes, keyspaces):
     if (signal_ids):
         logger.info("%u signals assigned %u IDs", len(signal_ids),
                     max(itervalues(signal_ids)))
-
-
-def get_signal_id_constraints(nets):
-    """Get a set of constraints on which signals can share identifiers.
-
-    As an initial pass Signals which connect to the same sink may not share a
-    identifier.
-    """
-    # Build a mapping from sinks to the signals which target them
-    sink_signals = defaultdict(deque)
-    for signal in nets:
-        for sink in signal.sinks:
-            sink_signals[sink].append(signal)
-
-    # Signals which target the same sink may not share an identifier, so we add
-    # constraints to the graph of constraints
-    constraints = defaultdict(set)
-    for signals in itervalues(sink_signals):
-        for u, v in itertools.combinations(signals, 2):
-            constraints[u].add(v)
-            constraints[v].add(u)
-
-    return constraints
 
 
 def assign_mn_net_ids(nets_routes, prior_constraints=None):
@@ -114,9 +88,9 @@ def build_mn_net_graph(nets_routes, prior_constraints=None):
     # in the net graph.
     net_graph = {net: set() for net in iterkeys(nets_routes)}
     for route_nets in itervalues(chip_route_nets):
-        for x, y in _combinations(itervalues(route_nets)):
-            # Add an edge iff. it would connect two *different* vertices
-            if x != y:
+        for xs, ys in itertools.combinations(itervalues(route_nets), 2):
+            for x, y in ((i, j) for j in ys for i in xs if i != j):
+                # Add an edge iff. it would connect two *different* vertices
                 net_graph[x].add(y)
                 net_graph[y].add(x)
 
@@ -129,19 +103,6 @@ def build_mn_net_graph(nets_routes, prior_constraints=None):
                 net_graph[v].add(u)
 
     return net_graph
-
-
-def _combinations(items):
-    """Provides combinations of nets which cannot share a routing identifier.
-    """
-    # _combinations([(1, 2), (3, 4), (5, )]):
-    #  (1, 3), (1, 4), (1, 5), (2, 3), (2, 4), (2, 5), (3, 5), (4, 5)
-    items = tuple(items)
-
-    for i, xs in enumerate(items, start=1):
-        for x in xs:
-            for y in itertools.chain(*items[i:]):
-                yield x, y
 
 
 def colour_net_graph(net_graph):

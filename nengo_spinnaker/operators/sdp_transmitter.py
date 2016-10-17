@@ -48,6 +48,18 @@ class SDPTransmitter(object):
         return netlistspec(self._vertex,
                            load_function=self.load_to_machine)
 
+    def get_signal_constraints(self):
+        """Return a set of constraints on which signal parameters may share the
+        same keyspace.
+
+        Returns
+        -------
+        {id(SignalParameters): {id(SignalParameters), ...}}
+            A (moderately unpleasant) dictionary of which signal parameters
+            cannot share a routing identifier.
+        """
+        return self._routing_region.get_signal_constraints()
+
     def load_to_machine(self, netlist, controller):
         """Load data to the machine."""
         # Get the memory

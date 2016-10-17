@@ -367,6 +367,12 @@ def test_filter_routing_region_duplicate_connection():
         index_field="index"
     )
 
+    # Extract a dictionary of the constraints on the signal keys
+    assert filter_region.get_signal_constraints() == {
+        id(sig_a): {id(sig_b)},
+        id(sig_b): {id(sig_a)},
+    }
+
     # Check that an error is raised because two signals with the same key route
     # in different directions
     fp = tempfile.TemporaryFile()
