@@ -182,8 +182,10 @@ void c_main(void)
   packet_queue_init(&packets);
   queue_overflows = 0;
 
-  // Register callbacks
-  spin1_set_timer_tick(params.machine_timestep);
+  // Register callbacks, and set the timer up to be out of phase with other
+  // executables.
+  spin1_set_timer_tick_and_phase(params.machine_timestep,
+                                 params.machine_timestep / 2);
   spin1_callback_on(MCPL_PACKET_RECEIVED, multicast_packet_payload, -1);
   spin1_callback_on(TIMER_TICK, timer_tick, 1);
   spin1_callback_on(USER_EVENT, user_event, 1);
