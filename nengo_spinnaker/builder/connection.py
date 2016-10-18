@@ -37,7 +37,7 @@ def build_generic_reception_params(model, conn):
 class TransmissionParameters(object):
     """Parameters describing generic connections."""
     def __init__(self, transform):
-        self.transform = np.array(transform)
+        self.transform = np.array(transform, order='C')
         self.transform.flags['WRITEABLE'] = False
 
     def __ne__(self, other):
