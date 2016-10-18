@@ -89,10 +89,11 @@ def build_mn_net_graph(nets_routes, prior_constraints=None):
     net_graph = {net: set() for net in iterkeys(nets_routes)}
     for route_nets in itervalues(chip_route_nets):
         for xs, ys in itertools.combinations(itervalues(route_nets), 2):
-            for x, y in ((i, j) for j in ys for i in xs if i != j):
+            for x, y in itertools.product(xs, ys):
                 # Add an edge iff. it would connect two *different* vertices
-                net_graph[x].add(y)
-                net_graph[y].add(x)
+                if x != y:
+                    net_graph[x].add(y)
+                    net_graph[y].add(x)
 
     # Add any prior constraints into the net graph (doing so in such a way that
     # ensures that the prior constraints are undirected).

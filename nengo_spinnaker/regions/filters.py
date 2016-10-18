@@ -1,5 +1,5 @@
 import collections
-from itertools import combinations
+from itertools import combinations, product
 import nengo.synapses
 from nengo.utils.filter_design import cont2discrete
 import numpy as np
@@ -343,9 +343,10 @@ class FilterRoutingRegion(Region):
         # The signals in different target-sets cannot share routing identifiers
         constraints = collections.defaultdict(set)
         for xs, ys in combinations(itervalues(targets_to_ids), 2):
-            for x, y in ((i, j) for j in ys for i in xs if i != j):
-                constraints[x].add(y)
-                constraints[y].add(x)
+            for x, y in product(xs, ys):
+                if x != y:
+                    constraints[x].add(y)
+                    constraints[y].add(x)
 
         return constraints
 

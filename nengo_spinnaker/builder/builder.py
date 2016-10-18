@@ -421,7 +421,7 @@ class Model(object):
 
         # Get the constraints on the signal identifiers
         signal_id_constraints = dict()
-        for u, vs in id_constraints:
+        for u, vs in iteritems(id_constraints):
             signal_id_constraints[id_to_signal[u]] = {
                 id_to_signal[v] for v in vs
             }
