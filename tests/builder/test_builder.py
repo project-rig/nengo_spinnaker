@@ -4,6 +4,7 @@ import nengo
 from nengo.cache import NoDecoderCache
 import numpy as np
 import pytest
+from six import itervalues
 
 from nengo_spinnaker.builder.builder import (
     Model, spec, ObjectPort, _make_signal_parameters
@@ -454,23 +455,6 @@ class TestMakeSignalParameters(object):
 
 class TestMakeNetlist(object):
     """Test production of netlists from operators and signals."""
-    def test_calls_add_default_keyspace(self):
-        """Test that creating a netlist assigns from default keyspace to the
-        network.
-        """
-        # Create a model and patch out the default keyspace and the connection
-        # map.
-        default_ks = mock.Mock()
-        model = Model(keyspaces={"nengo": default_ks})
-
-        # Create the netlist, ensure that this results in a call to
-        # `add_default_keyspace'
-        with mock.patch.object(model.connection_map,
-                               "add_default_keyspace") as f:
-            model.make_netlist()
-
-        f.assert_called_once_with(default_ks)
-
     def test_single_vertices(self):
         """Test that operators which produce single vertices work correctly and
         that all functions and signals are correctly collected and included in
@@ -520,10 +504,9 @@ class TestMakeNetlist(object):
 
         # Check that the netlist is as expected
         assert len(netlist.nets) == 1
-        for net in netlist.nets:
+        for net in itervalues(netlist.nets):
             assert net.sources == [vertex_a]
             assert net.sinks == [vertex_b]
-            assert net.keyspace is keyspace
             assert net.weight == signal_ab_parameters.weight
 
         assert set(netlist.vertices) == set([vertex_a, vertex_b])
@@ -565,7 +548,7 @@ class TestMakeNetlist(object):
         netlist = model.make_netlist(1)
 
         # The netlist should contain vertex a and no nets
-        assert netlist.nets == list()
+        assert len(netlist.nets) == 0
         assert netlist.vertices == [vertex_a]
 
     def test_extra_operators_and_signals(self):
@@ -671,10 +654,9 @@ class TestMakeNetlist(object):
         assert set(netlist.vertices) == set(
             [vertex_a, vertex_b0, vertex_b1, vertex_c])
         assert len(netlist.nets) == 1
-        for net in netlist.nets:
+        for net in itervalues(netlist.nets):
             assert net.sources == [vertex_a]
             assert net.sinks == [vertex_b0, vertex_b1]
-            assert net.keyspace is keyspace
             assert net.weight == signal_ab_parameters.weight
 
         # Check that the groups are correct
@@ -738,7 +720,7 @@ class TestMakeNetlist(object):
         assert set(netlist.vertices) == set([vertex_a0, vertex_a1,
                                              vertex_a2, vertex_b])
         assert len(netlist.nets) == 1
-        for net in netlist.nets:
+        for net in itervalues(netlist.nets):
             assert net.sources == [vertex_a0, vertex_a1]
             assert net.sinks == [vertex_b]
 

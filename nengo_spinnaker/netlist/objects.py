@@ -8,11 +8,8 @@ class NMNet(object):
     weight : int
         Number of packets transmitted across the net every simulation
         time-step.
-    keyspace : :py:class:`rig.bitfield.BitField`
-        32-bit bitfield instance that can be used to derive the routing key and
-        mask for the net.
     """
-    def __init__(self, sources, sinks, weight, keyspace):
+    def __init__(self, sources, sinks, weight):
         # Source(s) and sink(s) must be stored as lists
         if not isinstance(sources, list):
             sources = [sources]
@@ -24,7 +21,6 @@ class NMNet(object):
         self.sources = list(sources)
         self.sinks = list(sinks)
         self.weight = weight
-        self.keyspace = keyspace
 
 
 class Vertex(object):

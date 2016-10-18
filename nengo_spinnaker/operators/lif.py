@@ -1155,7 +1155,7 @@ def get_decoders_and_keys(signals_connections, minimise=False):
         decoders.append(decoder[keep, :])
         for i, k in zip(range(decoder.shape[0]), keep):
             if k:
-                keys.append(signal.keyspace(index=i))
+                keys.append((signal, {"index": i}))
 
     # Stack the decoders
     if len(decoders) > 0:

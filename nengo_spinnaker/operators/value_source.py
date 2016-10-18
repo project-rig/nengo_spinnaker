@@ -220,7 +220,7 @@ def get_transform_keys(sig, transmission_params):
 
     for i, k in zip(range(transform.shape[0]), keep):
         if k:
-            keys.append(sig.keyspace(index=i))
+            keys.append((sig, {"index": i}))
 
     # Return the transform and the list of keys
     return transform[keep], keys

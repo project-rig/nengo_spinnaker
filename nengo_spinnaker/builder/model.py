@@ -4,8 +4,6 @@ import collections
 import enum
 from six import iteritems, itervalues, iterkeys
 
-from ..utils.collections import counter
-
 
 class ConnectionMap(object):
     """A container which represents all of the connections in a model and the
@@ -78,33 +76,6 @@ class ConnectionMap(object):
         sinks = self._connections[source_object][source_port][pars]
         sinks.append(_SinkPars(sink_object, sink_port, reception_parameters))
 
-    def add_default_keyspace(self, keyspace):
-        """Add a unique entry to all signals which have not yet been assigned a
-        keyspace.
-        """
-        # Hold the count of connection IDs
-        conn_id = counter()
-
-        # For each source object
-        for ports_params_and_sinks in itervalues(self._connections):
-            # For each port
-            for params_and_sinks in itervalues(ports_params_and_sinks):
-                # Build a list of which connections need new parameters
-                update = list()
-
-                for (signal_params, transmission_params) in \
-                        iterkeys(params_and_sinks):
-                    if signal_params.keyspace is None:
-                        update.append((signal_params, transmission_params))
-
-                # For each of these items in the update list build a new signal
-                # parameters key, remove the old object from the connection
-                # list and add the new.
-                for sig_params, trans_params in update:
-                    sinks = params_and_sinks.pop((sig_params, trans_params))
-                    sig_params.keyspace = keyspace(connection_id=conn_id())
-                    params_and_sinks[(sig_params, trans_params)] = sinks
-
     def get_signals_from_object(self, source_object):
         """Get the signals transmitted by a source object.
 
@@ -171,8 +142,7 @@ class ConnectionMap(object):
                     # Create a signal using these parameters
                     yield (Signal(source,
                                   (ps.sink_object for ps in par_sinks),
-                                  sig_pars.keyspace,
-                                  sig_pars.weight),
+                                  sig_pars),
                            transmission_pars)
 
 
@@ -284,13 +254,28 @@ class Signal(object):
     weight : int
         Number of packets expected to be sent across the packet each time-step.
     """
-    def __init__(self, source, sinks, keyspace, weight):
+    def __init__(self, source, sinks, params):
         """Create a new signal."""
         # Store all the parameters, copying the list of sinks.
         self.source = source
         self.sinks = list(sinks)
-        self.keyspace = keyspace
-        self.weight = weight
+        self._params = params
+
+    @property
+    def keyspace(self):
+        return self._params.keyspace
+
+    @keyspace.setter
+    def keyspace(self, ks):
+        self._params.keyspace = ks
+
+    @property
+    def weight(self):
+        return self._params.weight
+
+    @property
+    def width(self):
+        return self.weight
 
 
 def remove_sinkless_signals(conn_map):

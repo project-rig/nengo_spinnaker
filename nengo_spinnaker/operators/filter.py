@@ -391,7 +391,7 @@ def get_transforms_and_keys(signals_connections, columns):
 
         for i, k in zip(range(transform.shape[0]), keep):
             if k:
-                keys.append(signal.keyspace(index=i))
+                keys.append((signal, {"index": i}))
 
     # Combine all the transforms
     if len(transforms) > 0:

@@ -12,7 +12,7 @@ def get_nets_for_placement(nets):
     Parameters
     ----------
     nets : [:py:class:`~nengo_spinnaker.netlist.NMNet`, ...]
-        N:M nets to convert
+        Iterable of N:M nets to convert
 
     Yields
     ------
@@ -32,7 +32,7 @@ def get_nets_for_routing(resources, nets, placements, allocations):
     Parameters
     ----------
     resources : {vertex: {resource: requirement}, ...}
-    nets : [:py:class:`~nengo_spinnaker.netlist.NMNet`, ...]
+    nets : {Signal: :py:class:`~nengo_spinnaker.netlist.NMNet`, ...}
     placements : {vertex: (x, y), ...}
     allocations : {vertex: {resource: :py:class:`slice`}, ...}
 
@@ -62,7 +62,7 @@ def get_nets_for_routing(resources, nets, placements, allocations):
 
     # For each Net build a set of all the co-ordinates from which the net now
     # originates.
-    for net in nets:
+    for net in itervalues(nets):
         start_placements = set(placements[v] for v in net.sources)
 
         # For each of these co-ordinates create a new Rig Net with a new source
@@ -135,7 +135,7 @@ def identify_clusters(groups, placements):
                 vertex.cluster = cluster_id
 
 
-def get_net_keyspaces(placements, derived_nets):
+def get_net_keyspaces(placements, nets, derived_nets):
     """Get a map from the nets used during routing to the keyspaces (NOT the
     keys and masks) that should be used when building routing tables.
 
@@ -145,6 +145,8 @@ def get_net_keyspaces(placements, derived_nets):
     Parameters
     ----------
     placements : {vertex: (x, y), ...}
+    nets : {Signal: NMNet, ...}
+        Map from Signals to the multisource nets which implement them.
     derived_nets : {:py:class:`~nengo_spinnaker.netlist.NMNet`:
                     {(x, y): :py:class:`~rig.netlist.Net`, ...}, ...}
         Map from original nets to co-ordinates and the derived nets which
@@ -158,11 +160,13 @@ def get_net_keyspaces(placements, derived_nets):
     """
     net_keyspaces = dict()  # Map from derived nets to keyspaces
 
-    for original_net, placement_nets in iteritems(derived_nets):
-        for placement, net in iteritems(placement_nets):
+    for signal, original_net in iteritems(nets):
+        ks = signal.keyspace
+
+        for placement, net in iteritems(derived_nets[original_net]):
             # If the keyspace is the default Nengo keyspace then add a cluster
             # ID, otherwise just store the keyspace as is.
-            if is_nengo_keyspace(original_net.keyspace):
+            if is_nengo_keyspace(ks):
                 # Get all the cluster IDs assigned to vertices with the given
                 # placement (there should only be one cluster ID, if there are
                 # more it would imply that multiple Nengo objects ended up in
@@ -174,9 +178,9 @@ def get_net_keyspaces(placements, derived_nets):
                 cluster_id = next(iter(cluster_ids)) or 0  # Get the ID
 
                 # Store the keyspace with the cluster ID attached
-                net_keyspaces[net] = original_net.keyspace(cluster=cluster_id)
+                net_keyspaces[net] = ks(cluster=cluster_id)
             else:
                 # Store the keyspace as is
-                net_keyspaces[net] = original_net.keyspace
+                net_keyspaces[net] = ks
 
     return net_keyspaces

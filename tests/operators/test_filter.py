@@ -1,15 +1,11 @@
-import mock
 import numpy as np
 import pytest
 from rig.place_and_route import Cores
-import struct
-import tempfile
 
 from nengo_spinnaker.builder import Model
 from nengo_spinnaker.builder.model import SignalParameters, OutputPort
-from nengo_spinnaker.operators.filter import (SystemRegion, Filter, Regions,
+from nengo_spinnaker.operators.filter import (Filter, Regions,
                                               get_transforms_and_keys)
-from nengo_spinnaker.builder.ensemble import EnsembleTransmissionParameters
 from nengo_spinnaker.builder.node import PassthroughNodeTransmissionParameters
 
 
@@ -74,10 +70,11 @@ class TestFilter(object):
             assert vx.regions[Regions.system].column_slice == slice(0, 3)
 
             keys_region = vx.regions[Regions.keys]
-            assert keys_region.keyspaces == [
-                signal_parameters.keyspace(index=i) for i in range(32*3)]
+            assert keys_region.signals_and_arguments == [
+                (signal_parameters, dict(index=i)) for i in range(32*3)
+            ]
             assert len(keys_region.fields) == 1
-            assert keys_region.partitioned == True
+            assert keys_region.partitioned is True
 
             assert vx.regions[Regions.transform].matrix.shape == (32*3, 3)
 
@@ -87,28 +84,10 @@ def test_get_transforms_and_keys():
     that appropriate keys are assigned.
     """
     # Create 2 mock signals and associated connections
-    sig_a_ks_0 = mock.Mock()
-    sig_a_ks_1 = mock.Mock()
-    sig_a_kss = {
-        0: sig_a_ks_0,
-        1: sig_a_ks_1,
-    }
-
-    sig_a_ks = mock.Mock()
-    sig_a_ks.side_effect = lambda index: sig_a_kss[index]
-    sig_a = SignalParameters(keyspace=sig_a_ks)
-
+    sig_a = SignalParameters()
     conn_a = PassthroughNodeTransmissionParameters(np.eye(2))
 
-    sig_b_ks_0 = mock.Mock()
-    sig_b_kss = {
-        0: sig_b_ks_0,
-    }
-
-    sig_b_ks = mock.Mock()
-    sig_b_ks.side_effect = lambda index: sig_b_kss[index]
-    sig_b = SignalParameters(keyspace=sig_b_ks)
-
+    sig_b = SignalParameters()
     conn_b = PassthroughNodeTransmissionParameters(np.array([[0.5, 0.5]]))
     transform_b = conn_b.transform
 
@@ -120,7 +99,14 @@ def test_get_transforms_and_keys():
         get_transforms_and_keys(pars, slice(0, 2))
 
     # Check that the transforms and keys are correct
-    assert set(keys) == set([sig_a_ks_0, sig_a_ks_1, sig_b_ks_0])
+    assert (
+        keys == [(sig_b, {"index": 0}),
+                 (sig_a, {"index": 0}),
+                 (sig_a, {"index": 1})] or
+        keys == [(sig_a, {"index": 0}),
+                 (sig_a, {"index": 1}),
+                 (sig_b, {"index": 0})]
+    )
     assert transforms.shape == (len(keys), 2)
     assert (np.all(transforms[0] == transform_b) or
             np.all(transforms[2] == transform_b))
@@ -139,28 +125,10 @@ def test_get_transforms_and_keys_for_columns():
     that appropriate keys are assigned.
     """
     # Create 2 mock signals and associated connections
-    sig_a_ks_0 = mock.Mock()
-    sig_a_ks_1 = mock.Mock()
-    sig_a_kss = {
-        0: sig_a_ks_0,
-        1: sig_a_ks_1,
-    }
-
-    sig_a_ks = mock.Mock()
-    sig_a_ks.side_effect = lambda index: sig_a_kss[index]
-    sig_a = SignalParameters(keyspace=sig_a_ks)
-
+    sig_a = SignalParameters()
     conn_a = PassthroughNodeTransmissionParameters(np.ones((2, 2)))
 
-    sig_b_ks_0 = mock.Mock()
-    sig_b_kss = {
-        0: sig_b_ks_0,
-    }
-
-    sig_b_ks = mock.Mock()
-    sig_b_ks.side_effect = lambda index: sig_b_kss[index]
-    sig_b = SignalParameters(keyspace=sig_b_ks)
-
+    sig_b = SignalParameters()
     conn_b = PassthroughNodeTransmissionParameters(np.array([[0.5, 0.5]]))
     transform_b = conn_b.transform
 
@@ -172,7 +140,14 @@ def test_get_transforms_and_keys_for_columns():
         get_transforms_and_keys(pars, slice(0, 1))
 
     # Check that the transforms and keys are correct
-    assert set(keys) == set([sig_a_ks_0, sig_a_ks_1, sig_b_ks_0])
+    assert (
+        keys == [(sig_b, {"index": 0}),
+                 (sig_a, {"index": 0}),
+                 (sig_a, {"index": 1})] or
+        keys == [(sig_a, {"index": 0}),
+                 (sig_a, {"index": 1}),
+                 (sig_b, {"index": 0})]
+    )
     assert transforms.shape == (len(keys), 1)
     assert (np.all(transforms[0] == transform_b[:, 0]) or
             np.all(transforms[2] == transform_b[:, 0]))
@@ -191,17 +166,13 @@ def test_get_transforms_and_keys_removes_zeroed_rows(latching):
     """Check that zeroed rows (those that would always result in zero valued
     packets) are removed, and the keys miss this value as well.
     """
-    ks = mock.Mock()
     transform = np.ones((10, 5))
     transform[1, :] = 0.0
     transform[4:7, :] = 0.0
     transform[:, 1] = 0.0
 
     # Create a signal and keyspace
-    sig = mock.Mock()
-    sig.keyspace = ks
-    sig.latching = latching
-    sig = SignalParameters(keyspace=ks, latching=latching)
+    sig = SignalParameters(latching=latching)
 
     # Create a mock connection
     conn = PassthroughNodeTransmissionParameters(transform)
@@ -217,81 +188,13 @@ def test_get_transforms_and_keys_removes_zeroed_rows(latching):
                       np.vstack((transform[0], transform[2:4], transform[7:])))
 
         # Check the keys were called for correctly
-        ks.assert_has_calls([mock.call(index=0),
-                             mock.call(index=2),
-                             mock.call(index=3),
-                             mock.call(index=7),
-                             mock.call(index=8),
-                             mock.call(index=9)])
+        assert keys == [(sig, {"index": i}) for i in [0, 2, 3, 7, 8, 9]]
     else:
         # Check the transform is correct
         assert np.all(t == t)
 
         # Check the keys were called for correctly
-        ks.assert_has_calls([mock.call(index=0),
-                             mock.call(index=1),
-                             mock.call(index=2),
-                             mock.call(index=3),
-                             mock.call(index=4),
-                             mock.call(index=5),
-                             mock.call(index=6),
-                             mock.call(index=7),
-                             mock.call(index=8),
-                             mock.call(index=9)])
-
-
-@pytest.mark.parametrize("latching", [False, True])
-def test_get_transforms_and_keys_removes_zeroed_rows(latching):
-    """Check that zeroed rows (those that would always result in zero valued
-    packets) are removed, and the keys miss this value as well.
-    """
-    ks = mock.Mock()
-    transform = np.ones((10, 5))
-    transform[1, :] = 0.0
-    transform[4:7, :] = 0.0
-    transform[:, 1] = 0.0
-
-    # Create a signal and keyspace
-    sig = mock.Mock()
-    sig.keyspace = ks
-    sig.latching = latching
-    sig = SignalParameters(keyspace=ks, latching=latching)
-
-    # Create a mock connection
-    conn = PassthroughNodeTransmissionParameters(transform)
-
-    signals_connections = [(sig, conn)]
-
-    # Get the transform and keys
-    t, keys, _ = get_transforms_and_keys(signals_connections, slice(0, 5))
-
-    if not latching:
-        # Check the transform is correct
-        assert np.all(t ==
-                      np.vstack((transform[0], transform[2:4], transform[7:])))
-
-        # Check the keys were called for correctly
-        ks.assert_has_calls([mock.call(index=0),
-                             mock.call(index=2),
-                             mock.call(index=3),
-                             mock.call(index=7),
-                             mock.call(index=8),
-                             mock.call(index=9)])
-    else:
-        # Check the transform is correct
-        assert np.all(t == t)
-
-        # Check the keys were called for correctly
-        ks.assert_has_calls([mock.call(index=0),
-                             mock.call(index=1),
-                             mock.call(index=2),
-                             mock.call(index=3),
-                             mock.call(index=4),
-                             mock.call(index=5),
-                             mock.call(index=6),
-                             mock.call(index=7),
-                             mock.call(index=8),
-                             mock.call(index=9)])
+        assert keys == [(sig, {"index": i}) for i in range(10)]
 
 
 def test_get_transforms_and_keys_nothing():
