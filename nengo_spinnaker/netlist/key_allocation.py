@@ -23,10 +23,11 @@ def allocate_signal_keyspaces(signal_routes, keyspaces):
         signal.keyspace = keyspaces["nengo"](connection_id=i)
 
         # Expand the keyspace to fit the required indices
-        signal.keyspace(index=signal.weight - 1)
+        signal.keyspace(index=signal.width - 1)
 
-    logger.info("%u signals assigned %u IDs", len(signal_ids),
-                max(itervalues(signal_ids)))
+    if (signal_ids):
+        logger.info("%u signals assigned %u IDs", len(signal_ids),
+                    max(itervalues(signal_ids)))
 
 
 def get_signal_id_constraints(nets):
@@ -178,7 +179,7 @@ def colour_net_graph(net_graph):
     #               (e)
     #
     # Where a valid colouring would be:
-    #   0: (b), (f), (h)
+    #   0: (b), (f), (i)
     #   1: (a), (c), (d), (e), (g)
     #   2: (h)
     #

@@ -273,6 +273,10 @@ class Signal(object):
     def weight(self):
         return self._params.weight
 
+    @property
+    def width(self):
+        return self.weight
+
 
 def remove_sinkless_signals(conn_map):
     """Remove any signals which do not have any sinks from a connection map.

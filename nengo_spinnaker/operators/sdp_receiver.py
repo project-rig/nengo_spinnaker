@@ -31,7 +31,7 @@ class SDPReceiver(object):
                 model.get_signals_from_object(self)[OutputPort.standard]:
             # Get the transform, and from this the keys
             transform = transmission_params.transform
-            keys = [(signal, dict(index=i)) for i in
+            keys = [(signal, {"index": i}) for i in
                     range(transform.shape[0])]
 
             # Create a vertex for this connection (assuming its size out <= 64)

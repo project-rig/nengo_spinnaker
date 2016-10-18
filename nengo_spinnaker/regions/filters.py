@@ -347,6 +347,10 @@ class FilterRoutingRegion(Region):
                 keymask_to_targets[keymask] = sorted(
                     signal_id_to_targets[signal_id])
             else:
+                # Test that there is no case in which two sets of signals with
+                # the same key and mask combination map to different sets of
+                # signals. This would be a problem because it would be
+                # impossible to distinguish between the two different routings.
                 assert (
                     sorted(signal_id_to_targets[signal_id]) ==
                     keymask_to_targets[keymask]
