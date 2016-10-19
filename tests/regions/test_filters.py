@@ -367,17 +367,35 @@ def test_filter_routing_region_duplicate_connection():
         index_field="index"
     )
 
-    # Extract a dictionary of the constraints on the signal keys
-    assert filter_region.get_signal_constraints() == {
-        id(sig_a): {id(sig_b)},
-        id(sig_b): {id(sig_a)},
-    }
+    # Extract a dictionary of the constraints on the signal keys (no
+    # constraints because the keyspace was specified before).
+    assert len(filter_region.get_signal_constraints()) == 0
 
     # Check that an error is raised because two signals with the same key route
     # in different directions
     fp = tempfile.TemporaryFile()
     with pytest.raises(AssertionError):
         filter_region.write_subregion_to_file(fp)
+
+
+def test_filter_routing_region_get_signal_constraints():
+    """Test the reporting of which signals cannot share a routing identifier.
+    """
+    # Define some signals
+    sig_a = SignalParameters()
+    sig_b = SignalParameters()
+
+    # Define the filter routes, these map a keyspace to an integer
+    signal_routes = [(sig_a, 12), (sig_b, 12), (sig_b, 17)]
+
+    # Create the region
+    filter_region = FilterRoutingRegion(signal_routes)
+
+    # Extract a dictionary of the constraints on the signal keys
+    assert filter_region.get_signal_constraints() == {
+        id(sig_a): {id(sig_b)},
+        id(sig_b): {id(sig_a)},
+    }
 
 
 class TestMakeFilterRegions(object):

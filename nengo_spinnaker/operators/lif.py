@@ -8,6 +8,7 @@ appropriate sized slices.
 
 import collections
 import enum
+import itertools
 import math
 from nengo.base import ObjView
 from nengo.connection import LearningRule
@@ -15,7 +16,7 @@ from nengo.learning_rules import PES, Voja
 import numpy as np
 from rig.place_and_route import Cores, SDRAM
 from rig.place_and_route.constraints import SameChipConstraint
-from six import iteritems
+from six import iteritems, itervalues
 import struct
 
 from nengo_spinnaker.builder.model import InputPort, OutputPort
@@ -81,7 +82,7 @@ class EnsembleLIF(object):
         """
         # Build encoders, gain and bias regions
         params = model.params[self.ensemble]
-        ens_regions = dict()
+        self.regions = ens_regions = dict()
 
         # Extract all the filters from the incoming connections
         incoming = model.get_signals_to_object(self)
@@ -461,6 +462,54 @@ class EnsembleLIF(object):
         return netlistspec(vertices, self.load_to_machine,
                            after_simulation_function=self.after_simulation,
                            constraints=constraints)
+
+    def get_signal_constraints(self):
+        """Return a set of constraints on which signal parameters may share the
+        same keyspace.
+
+        Returns
+        -------
+        {id(SignalParameters): {id(SignalParameters), ...}}
+            A (moderately unpleasant) dictionary of which signal parameters
+            cannot share a routing identifier.
+        """
+        # Prepare to build a set of routing identifier constraints
+        constraints = collections.defaultdict(set)
+
+        # Signals which target different sets of routing regions cannot share a
+        # routing identifier. Build a mapping from signal to the sets of
+        # routing regions they target.
+        signal_regions = collections.defaultdict(set)
+        for region in (Regions.inhibition_routing,
+                       Regions.learnt_encoder_routing,
+                       Regions.modulatory_routing,
+                       Regions.input_routing):
+            # Grab the regions targeted by the keyspace
+            for signal, _ in self.regions[region].signal_routes:
+                if signal.keyspace is None:
+                    signal_regions[id(signal)].add(region)
+
+            # Also get any constraints reported by the region
+            for u, vs in self.regions[region].get_signal_constraints():
+                for v in vs:
+                    constraints[u].add(v)
+                    constraints[v].add(u)
+
+        # Reverse this dictionary to get a dictionary mapping unique sets of
+        # targets to signals.
+        targets_signals = collections.defaultdict(set)
+        for signal, targets in iteritems(signal_regions):
+            targets_signals[frozenset(targets)].add(signal)
+
+        # Signals which target different sets of regions cannot share a routing
+        # key.
+        for xs, ys in itertools.combinations(itervalues(targets_signals), 2):
+            for x, y in itertools.product(xs, ys):
+                if x != y:
+                    constraints[x].add(y)
+                    constraints[y].add(x)
+
+        return constraints
 
     def load_to_machine(self, netlist, controller):
         """Load the ensemble data into memory."""

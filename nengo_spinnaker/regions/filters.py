@@ -333,7 +333,8 @@ class FilterRoutingRegion(Region):
         # target.
         id_to_targets = collections.defaultdict(list)
         for signal, target in self.signal_routes:
-            id_to_targets[id(signal)].append(target)
+            if signal.keyspace is None:
+                id_to_targets[id(signal)].append(target)
 
         # Invert this to build a map of targets to signals
         targets_to_ids = collections.defaultdict(list)

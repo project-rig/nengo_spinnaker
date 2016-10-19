@@ -24,7 +24,7 @@ def allocate_signal_keyspaces(signal_routes, signal_id_constraints, keyspaces):
 
     if (signal_ids):
         logger.info("%u signals assigned %u IDs", len(signal_ids),
-                    max(itervalues(signal_ids)))
+                    max(itervalues(signal_ids)) + 1)
 
 
 def assign_mn_net_ids(nets_routes, prior_constraints=None):
