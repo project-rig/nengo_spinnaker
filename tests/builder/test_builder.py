@@ -468,7 +468,7 @@ class TestMakeNetlist(object):
         constraint_a = mock.Mock(name="Constraint B")
 
         object_a = mock.Mock(name="object A")
-        operator_a = mock.Mock(name="operator A")
+        operator_a = mock.Mock(name="operator A", spec_set=["make_vertices"])
         operator_a.make_vertices.return_value = \
             netlistspec(vertex_a, load_fn_a, pre_fn_a, post_fn_a,
                         constraint_a)
@@ -479,7 +479,7 @@ class TestMakeNetlist(object):
         constraint_b = mock.Mock(name="Constraint B")
 
         object_b = mock.Mock(name="object B")
-        operator_b = mock.Mock(name="operator B")
+        operator_b = mock.Mock(name="operator B", spec_set=["make_vertices"])
         operator_b.make_vertices.return_value = \
             netlistspec(vertex_b, load_fn_b, constraints=[constraint_b])
 
@@ -528,12 +528,12 @@ class TestMakeNetlist(object):
         pre_fn_a = mock.Mock(name="pre function A")
         post_fn_a = mock.Mock(name="post function A")
 
-        operator_a = mock.Mock(name="operator A")
+        operator_a = mock.Mock(name="operator A", spec_set=["make_vertices"])
         operator_a.make_vertices.return_value = \
             netlistspec(vertex_a, load_fn_a, pre_fn_a, post_fn_a)
 
         # Create the second operator
-        object_b = mock.Mock(name="object B")
+        object_b = mock.Mock(name="object B", spec_set=["make_vertices"])
         operator_b = operators.Filter(16)  # Shouldn't need building
 
         # Create the model, add the items and add an entry to the connection
@@ -561,7 +561,7 @@ class TestMakeNetlist(object):
         pre_fn_a = mock.Mock(name="pre function A")
         post_fn_a = mock.Mock(name="post function A")
 
-        operator_a = mock.Mock(name="operator A")
+        operator_a = mock.Mock(name="operator A", spec_set=["make_vertices"])
         operator_a.make_vertices.return_value = \
             netlistspec(vertex_a, load_fn_a, pre_fn_a, post_fn_a)
 
@@ -569,7 +569,7 @@ class TestMakeNetlist(object):
         vertex_b = mock.Mock(name="vertex B")
         load_fn_b = mock.Mock(name="load function B")
 
-        operator_b = mock.Mock(name="operator B")
+        operator_b = mock.Mock(name="operator B", spec_set=["make_vertices"])
         operator_b.make_vertices.return_value = \
             netlistspec(vertex_b, load_fn_b)
 
@@ -604,7 +604,7 @@ class TestMakeNetlist(object):
         post_fn_a = mock.Mock(name="post function A")
 
         object_a = mock.Mock(name="object A")
-        operator_a = mock.Mock(name="operator A")
+        operator_a = mock.Mock(name="operator A", spec_set=["make_vertices"])
         operator_a.make_vertices.return_value = \
             netlistspec(vertex_a, load_fn_a, pre_fn_a, post_fn_a)
 
@@ -614,7 +614,7 @@ class TestMakeNetlist(object):
         load_fn_b = mock.Mock(name="load function B")
 
         object_b = mock.Mock(name="object B")
-        operator_b = mock.Mock(name="operator B")
+        operator_b = mock.Mock(name="operator B", spec_set=["make_vertices"])
         operator_b.make_vertices.return_value = \
             netlistspec([vertex_b0, vertex_b1], load_fn_b)
 
@@ -623,7 +623,7 @@ class TestMakeNetlist(object):
         vertex_c.accepts_signal.side_effect = lambda _, __: False
 
         object_c = mock.Mock(name="object C")
-        operator_c = mock.Mock(name="operator C")
+        operator_c = mock.Mock(name="operator C", spec_set=["make_vertices"])
         operator_c.make_vertices.return_value = netlistspec(vertex_c)
 
         # Create a signal between the operators
@@ -687,7 +687,7 @@ class TestMakeNetlist(object):
         post_fn_a = mock.Mock(name="post function A")
 
         object_a = mock.Mock(name="object A")
-        operator_a = mock.Mock(name="operator A")
+        operator_a = mock.Mock(name="operator A", spec_set=["make_vertices"])
         operator_a.make_vertices.return_value = \
             netlistspec([vertex_a0, vertex_a1, vertex_a2],
                         load_fn_a, pre_fn_a, post_fn_a)
@@ -697,7 +697,7 @@ class TestMakeNetlist(object):
         load_fn_b = mock.Mock(name="load function B")
 
         object_b = mock.Mock(name="object B")
-        operator_b = mock.Mock(name="operator B")
+        operator_b = mock.Mock(name="operator B", spec_set=["make_vertices"])
         operator_b.make_vertices.return_value = \
             netlistspec(vertex_b, load_fn_b)
 

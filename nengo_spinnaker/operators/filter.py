@@ -119,6 +119,7 @@ class Filter(object):
             model.keyspaces.filter_routing_tag,
             width=self.size_in
         )
+        self._routing_region = filter_routing_region
 
         # Generate the vertices
         vertices = flatinsertionlist()
@@ -134,6 +135,18 @@ class Filter(object):
         # Return the netlist specification
         return netlistspec(vertices=vertices,
                            load_function=self.load_to_machine)
+
+    def get_signal_constraints(self):
+        """Return a set of constraints on which signal parameters may share the
+        same keyspace.
+
+        Returns
+        -------
+        {id(SignalParameters): {id(SignalParameters), ...}}
+            A (moderately unpleasant) dictionary of which signal parameters
+            cannot share a routing identifier.
+        """
+        return self._routing_region.get_signal_constraints()
 
     def load_to_machine(self, netlist, controller):
         """Load the data to the machine."""

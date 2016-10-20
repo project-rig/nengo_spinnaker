@@ -57,6 +57,7 @@ class ValueSink(object):
         signals_conns = model.get_signals_to_object(self)[InputPort.standard]
         filter_region, filter_routing_region = make_filter_regions(
             signals_conns, model.dt, True, model.keyspaces.filter_routing_tag)
+        self._routing_region = filter_routing_region
 
         # Make sufficient vertices to ensure that each has a size_in of less
         # than max_width.
@@ -73,6 +74,18 @@ class ValueSink(object):
         # Return the spec
         return netlistspec(self.vertices, self.load_to_machine,
                            after_simulation_function=self.after_simulation)
+
+    def get_signal_constraints(self):
+        """Return a set of constraints on which signal parameters may share the
+        same keyspace.
+
+        Returns
+        -------
+        {id(SignalParameters): {id(SignalParameters), ...}}
+            A (moderately unpleasant) dictionary of which signal parameters
+            cannot share a routing identifier.
+        """
+        return self._routing_region.get_signal_constraints()
 
     def load_to_machine(self, netlist, controller):
         """Load the ensemble data into memory."""

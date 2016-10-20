@@ -5,7 +5,7 @@ import nengo
 from nengo.cache import NoDecoderCache
 from nengo.utils import numpy as npext
 import numpy as np
-from six import itervalues
+from six import iteritems, itervalues
 
 from . import model
 from nengo_spinnaker.netlist import NMNet, Netlist
@@ -325,6 +325,9 @@ class Model(object):
         after_simulation_functions = collections_ext.noneignoringlist()
         constraints = collections_ext.flatinsertionlist()
 
+        # Prepare to build a list of signal constraints
+        id_constraints = collections.defaultdict(set)
+
         for op in itertools.chain(itervalues(self.object_operators),
                                   self.extra_operators):
             # Skip any operators that were previously removed
@@ -347,6 +350,22 @@ class Model(object):
             if constraint is not None:
                 constraints.append(constraint)
 
+            # Get the constraints on signal identifiers
+            if hasattr(op, "get_signal_constraints"):
+                # Ask the operator what constraints exist upon the keys it can
+                # accept.
+                for u, vs in iteritems(op.get_signal_constraints()):
+                    id_constraints[u].update(vs)
+            else:
+                # Otherwise assume that all signals arriving at the operator
+                # must be uniquely identified.
+                incoming_all = itertools.chain(
+                    *itervalues(self.connection_map.get_signals_to_object(op)))
+                for (u, _), (v, _) in itertools.combinations(incoming_all, 2):
+                    if u != v:
+                        id_constraints[u].add(v)
+                        id_constraints[v].add(u)
+
         # Construct the groups set
         groups = list()
         for vxs in itervalues(operator_vertices):
@@ -357,6 +376,7 @@ class Model(object):
 
         # Construct nets from the signals
         nets = dict()
+        id_to_signal = dict()
         for signal, transmission_parameters in \
                 self.connection_map.get_signals():
             # Get the source and sink vertices
@@ -396,7 +416,15 @@ class Model(object):
                              s.accepts_signal(signal, transmission_parameters))
 
             # Create the net(s)
+            id_to_signal[id(signal._params)] = signal  # Yuck
             nets[signal] = NMNet(sources, list(sinks), signal.weight)
+
+        # Get the constraints on the signal identifiers
+        signal_id_constraints = dict()
+        for u, vs in iteritems(id_constraints):
+            signal_id_constraints[id_to_signal[u]] = {
+                id_to_signal[v] for v in vs
+            }
 
         # Return a netlist
         return Netlist(
@@ -407,7 +435,8 @@ class Model(object):
             constraints=constraints,
             load_functions=load_functions,
             before_simulation_functions=before_simulation_functions,
-            after_simulation_functions=after_simulation_functions
+            after_simulation_functions=after_simulation_functions,
+            signal_id_constraints=signal_id_constraints
         )
 
 
