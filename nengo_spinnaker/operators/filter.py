@@ -150,6 +150,9 @@ class Filter(object):
 
     def load_to_machine(self, netlist, controller):
         """Load the data to the machine."""
+        # Prepare the filter routing region
+        self._routing_region.build_routes()
+
         # Get each group to load itself
         for g in self.groups:
             g.load_to_machine(netlist, controller)

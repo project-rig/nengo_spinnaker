@@ -63,6 +63,12 @@ class Regions(enum.IntEnum):
     encoder_recording = 25
 
 
+RoutingRegions = (Regions.input_routing,
+                  Regions.inhibition_routing,
+                  Regions.modulatory_routing,
+                  Regions.learnt_encoder_routing)
+
+
 class EnsembleLIF(object):
     """Controller for an ensemble of LIF neurons."""
     def __init__(self, ensemble):
@@ -480,10 +486,7 @@ class EnsembleLIF(object):
         # routing identifier. Build a mapping from signal to the sets of
         # routing regions they target.
         signal_regions = collections.defaultdict(set)
-        for region in (Regions.inhibition_routing,
-                       Regions.learnt_encoder_routing,
-                       Regions.modulatory_routing,
-                       Regions.input_routing):
+        for region in RoutingRegions:
             # Grab the regions targeted by the keyspace
             for signal, _ in self.regions[region].signal_routes:
                 if signal.keyspace is None:
@@ -513,6 +516,10 @@ class EnsembleLIF(object):
 
     def load_to_machine(self, netlist, controller):
         """Load the ensemble data into memory."""
+        # Prepare the routing regions
+        for region in RoutingRegions:
+            self.regions[region].build_routes()
+
         # Delegate the task of loading to the machine
         for cluster in self.clusters:
             cluster.load_to_machine(netlist, controller)

@@ -320,6 +320,7 @@ def test_filter_routing_region():
 
     # Check that the written out data is sensible
     fp = tempfile.TemporaryFile()
+    filter_region.build_routes()
     filter_region.write_subregion_to_file(fp)
 
     # Check that the data is sensible
@@ -375,7 +376,7 @@ def test_filter_routing_region_duplicate_connection():
     # in different directions
     fp = tempfile.TemporaryFile()
     with pytest.raises(AssertionError):
-        filter_region.write_subregion_to_file(fp)
+        filter_region.build_routes()
 
 
 def test_filter_routing_region_get_signal_constraints():
