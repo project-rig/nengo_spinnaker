@@ -311,6 +311,7 @@ class FilterRoutingRegion(Region):
                  index_field="index"):
         """Create a new routing region."""
         self.signal_routes = signal_routes
+        self.filter_routes = list()
         self.filter_routing_tag = filter_routing_tag
         self.index_field = index_field
 
@@ -351,10 +352,8 @@ class FilterRoutingRegion(Region):
 
         return constraints
 
-    def write_subregion_to_file(self, fp, *args, **kwargs):
-        """Write the routing region to a file-like object."""
-        data = bytearray(self.sizeof())
-
+    def build_routes(self):
+        """Build the data structure to be written to memory."""
         # Generate a list of signals (hashing by ID) to the filters they
         # target.
         signal_id_to_signals = dict()
@@ -390,16 +389,20 @@ class FilterRoutingRegion(Region):
                 ), "Signals with the same keys map to different filters."
 
         # Finally, build the set of router entries
-        filter_routes = list()
+        self.filter_routes = list()
         for (key, mask, dmask), targets in iteritems(keymask_to_targets):
             for target in targets:
-                filter_routes.append((key, mask, dmask, target))
+                self.filter_routes.append((key, mask, dmask, target))
+
+    def write_subregion_to_file(self, fp, *args, **kwargs):
+        """Write the routing region to a file-like object."""
+        data = bytearray(self.sizeof())
 
         # Write the number of entries
-        struct.pack_into("<I", data, 0, len(filter_routes))
+        struct.pack_into("<I", data, 0, len(self.filter_routes))
 
         # Write each entry in turn
-        for i, route in enumerate(filter_routes):
+        for i, route in enumerate(self.filter_routes):
             struct.pack_into("<4I", data, 4 + 16*i, *route)
 
         # Write to file
