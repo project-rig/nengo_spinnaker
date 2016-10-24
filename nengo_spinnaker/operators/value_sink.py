@@ -90,7 +90,7 @@ class ValueSink(object):
     def load_to_machine(self, netlist, controller):
         """Load the ensemble data into memory."""
         # Prepare the filter routing region
-        self._routing_region.build_routes()
+        self._routing_region.build_routes(minimise=True)
 
         # Load each vertex in turn
         for v in self.vertices:

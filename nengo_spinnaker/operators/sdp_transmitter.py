@@ -63,7 +63,7 @@ class SDPTransmitter(object):
     def load_to_machine(self, netlist, controller):
         """Load data to the machine."""
         # Prepare the filter routing region
-        self._routing_region.build_routes()
+        self._routing_region.build_routes(minimise=True)
 
         # Get the memory
         sys_mem, filter_mem, routing_mem = \

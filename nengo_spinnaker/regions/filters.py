@@ -3,10 +3,11 @@ from itertools import combinations, product
 import nengo.synapses
 from nengo.utils.filter_design import cont2discrete
 import numpy as np
-from six import iteritems, itervalues
+from six import iterkeys, iteritems, itervalues
 import struct
 
 from .region import Region
+from nengo_spinnaker.utils.ccf import minimise as ccf_minimise
 from nengo_spinnaker.utils.collections import registerabledict
 from nengo_spinnaker.utils import type_casts as tp
 
@@ -352,7 +353,7 @@ class FilterRoutingRegion(Region):
 
         return constraints
 
-    def build_routes(self):
+    def build_routes(self, minimise=False):
         """Build the data structure to be written to memory."""
         # Generate a list of signals (hashing by ID) to the filters they
         # target.
@@ -362,37 +363,45 @@ class FilterRoutingRegion(Region):
             signal_id_to_signals[id(signal)] = signal
             signal_id_to_targets[id(signal)].append(target)
 
-        # Consequently build a list of keys and masks to the filters they
-        # target, checking that every instance of the same key and mask targets
-        # the exact same list of filters.
-        keymask_to_targets = dict()
-        for signal_id, signal in iteritems(signal_id_to_signals):
-            # Get the keyspace and hence the key and mask information
-            ks = signal.keyspace
-            keymask = (
-                ks.get_value(tag=self.filter_routing_tag),
-                ks.get_mask(tag=self.filter_routing_tag),
-                ks.get_mask(field=self.index_field)
-            )
+        # Consequently build a list of (dmask, targets) to keys and masks
+        targets_to_keymasks = collections.defaultdict(set)
+        for signal_id, targets in iteritems(signal_id_to_targets):
+            # Get the signal to get the key, mask and dmask
+            ks = signal_id_to_signals[signal_id].keyspace
+            keymask = (ks.get_value(tag=self.filter_routing_tag),
+                       ks.get_mask(tag=self.filter_routing_tag))
+            dmask = ks.get_mask(field=self.index_field)
 
-            if keymask not in keymask_to_targets:
-                keymask_to_targets[keymask] = sorted(
-                    signal_id_to_targets[signal_id])
-            else:
-                # Test that there is no case in which two sets of signals with
-                # the same key and mask combination map to different sets of
-                # signals. This would be a problem because it would be
-                # impossible to distinguish between the two different routings.
-                assert (
-                    sorted(signal_id_to_targets[signal_id]) ==
-                    keymask_to_targets[keymask]
-                ), "Signals with the same keys map to different filters."
+            # Include this in the set of targets to keymasks
+            targets_to_keymasks[(dmask, tuple(sorted(targets)))].add(keymask)
 
-        # Finally, build the set of router entries
+        # Assert that the sets of keymasks are disjoint
+        keymask_sets = list(itervalues(targets_to_keymasks))
+        for a, b in combinations(keymask_sets, 2):
+            assert a.isdisjoint(b)
+
+        # Build the off-sets for minimisation. Each target_set has an off-set
+        # associated with it, this off-set is formed as the union of the sets
+        # of keys and masks which are intended to match against all other
+        # targets.
+        offsets = collections.defaultdict(set)
+        for target_set in iterkeys(targets_to_keymasks):
+            for other_target_set, keymasks in iteritems(targets_to_keymasks):
+                if target_set != other_target_set:
+                    offsets[target_set].update(keymasks)
+
+        # (Minimise) and build the routing entries.
         self.filter_routes = list()
-        for (key, mask, dmask), targets in iteritems(keymask_to_targets):
+        for (dmask, targets), keymasks in iteritems(targets_to_keymasks):
             for target in targets:
-                self.filter_routes.append((key, mask, dmask, target))
+                all_keymasks = (
+                    keymasks if not minimise else
+                    ccf_minimise(keymasks, offsets[(dmask, targets)])
+                )
+
+                # Write in an entry for each key and mask as usual
+                for key, mask in all_keymasks:
+                    self.filter_routes.append((key, mask, dmask, target))
 
     def write_subregion_to_file(self, fp, *args, **kwargs):
         """Write the routing region to a file-like object."""
