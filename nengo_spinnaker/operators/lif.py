@@ -518,8 +518,28 @@ class EnsembleLIF(object):
     def load_to_machine(self, netlist, controller):
         """Load the ensemble data into memory."""
         # Prepare the routing regions
+        # Begin by building the set of keys and masks expected by each region
+        on_sets = {
+            region: self.regions[region].get_expected_keys_and_masks() for
+            region in RoutingRegions
+        }
+
+        # Hence build the set of keys and masks which should NOT match against
+        # each routing region.
+        off_sets = collections.defaultdict(set)
+        for a, on_set in iteritems(on_sets):
+            for b in RoutingRegions:
+                # Add the on-set for this region `b` to the off-set
+                off_sets[a].update(on_sets[b])
+
+            # Elements which are in the on-set for `a` cannot be in the off-set
+            off_sets[a].difference_update(on_sets[a])
+
+        # Build the filter routing region, minimising the entries subject to
+        # the off-sets which were just constructed.
         for region in RoutingRegions:
-            self.regions[region].build_routes()
+            self.regions[region].build_routes(minimise=True,
+                                              off_set=off_sets[region])
 
         # Delegate the task of loading to the machine
         for cluster in self.clusters:

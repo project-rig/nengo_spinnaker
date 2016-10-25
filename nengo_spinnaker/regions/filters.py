@@ -353,8 +353,40 @@ class FilterRoutingRegion(Region):
 
         return constraints
 
-    def build_routes(self, minimise=False):
-        """Build the data structure to be written to memory."""
+    def get_expected_keys_and_masks(self):
+        """Extract the set of keys and masks which are expected to match
+        against the filter routing region.
+
+        Returns
+        -------
+        {(key, mask), ...}
+            Set of keys and masks.
+        """
+        keys_and_masks = set()
+
+        # Loop of the list of signals matched by this region and extract their
+        # keys and masks.
+        for signal, _ in self.signal_routes:
+            ks = signal.keyspace
+            keys_and_masks.add((ks.get_value(tag=self.filter_routing_tag),
+                                ks.get_mask(tag=self.filter_routing_tag)))
+
+        return keys_and_masks
+
+    def build_routes(self, minimise=False, off_set=set()):
+        """Build the data structure to be written to memory.
+
+        Parameters
+        ----------
+        minimise : bool
+            Whether to use logic minimisation to reduce the size of the routing
+            tables. The minimisation used is greedy (not exact) so an off-set
+            (`off_set`) must be provided if it is desired that some packets do
+            not match against the minimised table.
+        off_set : {(key, mask), ...}
+            Set of keys and masks which should not match against the minimised
+            set of filter routes.
+        """
         # Generate a list of signals (hashing by ID) to the filters they
         # target.
         signal_id_to_signals = dict()
@@ -391,13 +423,15 @@ class FilterRoutingRegion(Region):
                 if target_set != other_target_set:
                     off_sets[target_set].update(keymasks)
 
-        # (Minimise) and build the routing entries.
+        # (Minimise) and build the routing entries using the off-sets that were
+        # created above and the general off-set provided to this function.
         self.filter_routes = list()
         for (dmask, targets), keymasks in iteritems(targets_to_keymasks):
             for target in targets:
                 all_keymasks = (
                     keymasks if not minimise else
-                    ccf_minimise(keymasks, off_sets[(dmask, targets)])
+                    ccf_minimise(keymasks,
+                                 off_set.union(off_sets[(dmask, targets)]))
                 )
 
                 # Write in an entry for each key and mask as usual
