@@ -67,12 +67,12 @@ def minimise(on_set, off_set, used_columns=set()):
 
         used_columns.add(best_column)  # Mark the column as used
 
-        if len(new_on_set_zeros) >= 1:
+        if len(new_on_set_zeros) > 0:
             for entry in minimise(new_on_set_zeros, new_off_set_zeros,
                                   used_columns):
                 yield entry
 
-        if len(new_on_set_ones) >= 1:
+        if len(new_on_set_ones) > 0:
             for entry in minimise(new_on_set_ones, new_off_set_ones,
                                   used_columns):
                 yield entry

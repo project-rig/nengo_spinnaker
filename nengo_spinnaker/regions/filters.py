@@ -375,7 +375,8 @@ class FilterRoutingRegion(Region):
             # Include this in the set of targets to keymasks
             targets_to_keymasks[(dmask, tuple(sorted(targets)))].add(keymask)
 
-        # Assert that the sets of keymasks are disjoint
+        # Assert that no key/mask combination appears in the list of keys and
+        # masks of two separate sets of targets.
         keymask_sets = list(itervalues(targets_to_keymasks))
         for a, b in combinations(keymask_sets, 2):
             assert a.isdisjoint(b)
@@ -384,11 +385,11 @@ class FilterRoutingRegion(Region):
         # associated with it, this off-set is formed as the union of the sets
         # of keys and masks which are intended to match against all other
         # targets.
-        offsets = collections.defaultdict(set)
+        off_sets = collections.defaultdict(set)
         for target_set in iterkeys(targets_to_keymasks):
             for other_target_set, keymasks in iteritems(targets_to_keymasks):
                 if target_set != other_target_set:
-                    offsets[target_set].update(keymasks)
+                    off_sets[target_set].update(keymasks)
 
         # (Minimise) and build the routing entries.
         self.filter_routes = list()
@@ -396,7 +397,7 @@ class FilterRoutingRegion(Region):
             for target in targets:
                 all_keymasks = (
                     keymasks if not minimise else
-                    ccf_minimise(keymasks, offsets[(dmask, targets)])
+                    ccf_minimise(keymasks, off_sets[(dmask, targets)])
                 )
 
                 # Write in an entry for each key and mask as usual
