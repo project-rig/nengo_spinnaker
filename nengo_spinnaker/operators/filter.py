@@ -266,13 +266,13 @@ class FilterCore(Vertex):
         self.column_slice = column_slice
 
         # Store which signal parameter slices we contain
-        self.transmission_params = list()
+        self.transmission_params = set()
         out_set = set(range(output_slice.start, output_slice.stop))
         for transmission_params, outs in output_slices:
             # If there is an intersection between the outs and the set of outs
             # we're responsible for then store transmission parameters.
             if out_set & outs:
-                self.transmission_params.append(transmission_params)
+                self.transmission_params.add(transmission_params)
 
         # Construct the regions
         self.regions = {
