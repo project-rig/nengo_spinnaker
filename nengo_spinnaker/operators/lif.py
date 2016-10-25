@@ -493,7 +493,8 @@ class EnsembleLIF(object):
                     signal_regions[id(signal)].add(region)
 
             # Also get any constraints reported by the region
-            for u, vs in self.regions[region].get_signal_constraints():
+            r = self.regions[region]
+            for u, vs in iteritems(r.get_signal_constraints()):
                 for v in vs:
                     constraints[u].add(v)
                     constraints[v].add(u)
