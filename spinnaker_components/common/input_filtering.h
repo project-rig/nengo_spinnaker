@@ -125,8 +125,16 @@ typedef struct _if_route_t
 
   uint32_t dimension_mask;  // Mask to extract the index of the component
 
-  uint32_t input_index; // Index of the input add the packet to
+  if_filter_t *filter;  // Filter in which to include the packet contribution
 } if_route_t;
+
+/* A collection of filter routes.
+ */
+typedef struct _if_routing_table_t
+{
+  uint32_t n_routes;   // Number of routes in the routing table
+  if_route_t *routes;  // Entries in the routing table
+} if_routing_table_t;
 
 /* A collection of filters which share routing information (and possibly an
  * accumulated output value).
@@ -135,9 +143,8 @@ typedef struct _if_collection_t
 {
   // Mandatory components
   uint32_t n_filters;  // Number of filters
-  uint32_t n_routes;   // Number of routing entries
   if_filter_t *filters;  // Filters
-  if_route_t *routes;    // Packet to filter routes
+  if_routing_table_t routing;  // Routing information for filters
 
   // Optional components
   uint32_t output_size;  // Size of output vector (may be 0)
@@ -162,11 +169,10 @@ static inline bool input_filtering_input_with_dimension_offset(
 
   // Look at all the routing entries, if we match an entry then include the
   // packet in the indicated input vector.
-  for (uint32_t n = 0; n < filters->n_routes; n++)
+  for (uint32_t n = 0; n < filters->routing.n_routes; n++)
   {
     // Get the routing entry and the filter referred to by the entry
-    if_route_t route = filters->routes[n];
-    if_filter_t *filter = &filters->filters[route.input_index];
+    if_route_t route = filters->routing.routes[n];
 
     if ((key & route.mask) == route.key)
     {
@@ -181,7 +187,7 @@ static inline bool input_filtering_input_with_dimension_offset(
         // The packet matches this entry and is in the range of dimensions
         // expected; include the contribution from the packet and indicate that
         // we have handled the packet.
-        _if_filter_input(filter, dim, kbits(payload));
+        _if_filter_input(route.filter, dim, kbits(payload));
         handled = true;
       }
     }

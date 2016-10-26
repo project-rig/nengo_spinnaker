@@ -229,19 +229,38 @@ FilterInit filter_types[] = {
  * `routes` should be an array of `_if_routes` preceded with a single word
  * indicating the number of entries.
  */
+typedef struct _i_entry
+{
+  uint32_t key, mask, dimension_mask, filter_index;
+} i_entry_t;
+
 void input_filtering_get_routes(if_collection_t *filters, uint32_t *routes)
 {
   // Copy in the number of routing entries
-  filters->n_routes = routes[0];
+  filters->routing.n_routes = routes[0];
   routes++;  // Advance the pointer to the first entry
   debug("Loading %d filter routes\n", filters->n_routes);
 
   // Malloc sufficient room for the entries
-  MALLOC_OR_DIE(filters->routes, filters->n_routes * sizeof(if_route_t));
+  MALLOC_OR_DIE(filters->routing.routes,
+                filters->routing.n_routes * sizeof(if_route_t));
 
   // Copy the entries across
-  spin1_memcpy(filters->routes, routes,
-               filters->n_routes * sizeof(if_route_t));
+  i_entry_t *entries = (i_entry_t *) routes;
+  for (unsigned int i = 0; i < filters->routing.n_routes; i++)
+  {
+    // Get the entry in the table
+    if_route_t *route = &(filters->routing.routes[i]);
+    i_entry_t entry = entries[i];
+
+    // Copy across the key, mask and dimension mask
+    route->key = entry.key;
+    route->mask = entry.mask;
+    route->dimension_mask = entry.dimension_mask;
+
+    // Get a pointer to the intended filter
+    route->filter = &filters->filters[entry.filter_index];
+  }
 
   // DEBUG: Print the route entries
 #ifdef DEBUG
@@ -250,7 +269,7 @@ void input_filtering_get_routes(if_collection_t *filters, uint32_t *routes)
     io_printf(IO_BUF, "\tRoute[%d] = (0x%08x, 0x%08x) dmask=0x%08x => %d\n",
               n, filters->routes[n].key, filters->routes[n].mask,
               filters->routes[n].dimension_mask,
-              filters->routes[n].input_index);
+              entries[n].filter_index);
   }
 #endif
 }
