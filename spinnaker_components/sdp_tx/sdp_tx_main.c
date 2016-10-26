@@ -3,6 +3,7 @@
 sdp_tx_parameters_t g_sdp_tx;
 uint delay_remaining;
 if_collection_t g_input;
+if_routing_table_t filter_routing;
 
 void sdp_tx_update(uint ticks, uint arg1) {
   use(arg1);
@@ -58,13 +59,13 @@ bool data_system(address_t addr) {
 }
 
 void mcpl_callback(uint key, uint payload) {
-  input_filtering_input(&g_input.routing, key, payload);
+  input_filtering_input(&filter_routing, key, payload);
 }
 
 void c_main(void) {
   address_t address = system_load_sram();
   input_filtering_get_filters(&g_input, region_start(2, address), NULL);
-  input_filtering_get_routes(&g_input, region_start(3, address));
+  input_filtering_get_routes(&g_input, &filter_routing, region_start(3, address));
   if (!data_system(region_start(1, address)))
   {
     io_printf(IO_BUF, "[Tx] Failed to initialise.\n");

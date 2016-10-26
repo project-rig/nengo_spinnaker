@@ -144,7 +144,6 @@ typedef struct _if_collection_t
   // Mandatory components
   uint32_t n_filters;  // Number of filters
   if_filter_t *filters;  // Filters
-  if_routing_table_t routing;  // Routing information for filters
 
   // Optional components
   uint32_t output_size;  // Size of output vector (may be 0)
@@ -260,6 +259,7 @@ static inline void input_filtering_step(
  */
 void input_filtering_get_routes(
     if_collection_t *filters,
+    if_routing_table_t *routing_table,
     uint32_t *routes);
 
 /* Copy in a set of filters.

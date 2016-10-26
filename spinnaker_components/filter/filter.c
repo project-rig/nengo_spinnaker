@@ -44,6 +44,7 @@ typedef struct filter_parameters
 
 static filter_parameters_t params;
 static if_collection_t filters;  // Locally applied filters
+static if_routing_table_t filter_routing;
 static value_t *transform;       // Transform matrix
 uint32_t *keys;                  // Multicast keys
 
@@ -92,7 +93,7 @@ void process_queue()
       uint32_t payload = packet.payload;
 
       input_filtering_input_with_dimension_offset(
-        &filters.routing, key, payload,
+        &filter_routing, key, payload,
         params.input_offset,   // Offset for all packets
         params.input_size - 1  // Max expected dimension
       );
@@ -174,7 +175,7 @@ void c_main(void)
 
   // Prepare the filters for receiving packets
   input_filtering_get_filters(&filters, region_start(3, address), NULL);
-  input_filtering_get_routes(&filters, region_start(4, address));
+  input_filtering_get_routes(&filters, &filter_routing, region_start(4, address));
   input_filtering_initialise_output(&filters, params.input_size);
 
   // Multicast packet queue

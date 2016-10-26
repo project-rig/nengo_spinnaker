@@ -234,23 +234,25 @@ typedef struct _i_entry
   uint32_t key, mask, dimension_mask, filter_index;
 } i_entry_t;
 
-void input_filtering_get_routes(if_collection_t *filters, uint32_t *routes)
+void input_filtering_get_routes(if_collection_t *filters,
+                                if_routing_table_t *routing_table,
+                                uint32_t *routes)
 {
   // Copy in the number of routing entries
-  filters->routing.n_routes = routes[0];
+  routing_table->n_routes = routes[0];
   routes++;  // Advance the pointer to the first entry
   debug("Loading %d filter routes\n", filters->n_routes);
 
   // Malloc sufficient room for the entries
-  MALLOC_OR_DIE(filters->routing.routes,
-                filters->routing.n_routes * sizeof(if_route_t));
+  MALLOC_OR_DIE(routing_table->routes,
+                routing_table->n_routes * sizeof(if_route_t));
 
   // Copy the entries across
   i_entry_t *entries = (i_entry_t *) routes;
-  for (unsigned int i = 0; i < filters->routing.n_routes; i++)
+  for (unsigned int i = 0; i < routing_table->n_routes; i++)
   {
     // Get the entry in the table
-    if_route_t *route = &(filters->routing.routes[i]);
+    if_route_t *route = &(routing_table->routes[i]);
     i_entry_t entry = entries[i];
 
     // Copy across the key, mask and dimension mask
@@ -264,11 +266,11 @@ void input_filtering_get_routes(if_collection_t *filters, uint32_t *routes)
 
   // DEBUG: Print the route entries
 #ifdef DEBUG
-  for (uint32_t n = 0; n < filters->n_routes; n++)
+  for (uint32_t n = 0; n < routing_table->n_routes; n++)
   {
     io_printf(IO_BUF, "\tRoute[%d] = (0x%08x, 0x%08x) dmask=0x%08x => %d\n",
-              n, filters->routes[n].key, filters->routes[n].mask,
-              filters->routes[n].dimension_mask,
+              n, routing_table->routes[n].key, routing_table->routes[n].mask,
+              routing_table->routes[n].dimension_mask,
               entries[n].filter_index);
   }
 #endif

@@ -15,6 +15,7 @@ region_system_t params;
 address_t rec_start, rec_curr;
 
 if_collection_t filters;
+if_routing_table_t filter_routing;
 
 static packet_queue_t packets;  // Queued multicast packets
 static bool queue_processing;   // Indicate if the queue is being handled
@@ -58,7 +59,7 @@ void process_queue()
       uint32_t payload = packet.payload;
 
       input_filtering_input_with_dimension_offset(
-        &filters.routing, key, payload,
+        &filter_routing, key, payload,
         params.input_offset,   // Offset for all packets
         params.input_size - 1  // Max expected dimension
       );
@@ -108,7 +109,7 @@ void c_main(void)
   // Prepare filtering
   input_filtering_initialise_output(&filters, params.input_size);
   input_filtering_get_filters(&filters, region_start(2, address), NULL);
-  input_filtering_get_routes(&filters, region_start(3, address));
+  input_filtering_get_routes(&filters, &filter_routing, region_start(3, address));
 
   // Retrieve the recording region
   rec_start = region_start(15, address);
