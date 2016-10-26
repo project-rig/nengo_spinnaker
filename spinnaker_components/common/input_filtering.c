@@ -238,42 +238,54 @@ void input_filtering_get_routes(if_collection_t *filters,
                                 if_routing_table_t *routing_table,
                                 uint32_t *routes)
 {
-  // Copy in the number of routing entries
-  routing_table->n_routes = routes[0];
-  routes++;  // Advance the pointer to the first entry
-  debug("Loading %d filter routes\n", filters->n_routes);
+  filter_arg_t args[] = {{filters, routes}};
+  input_filter_build_combined_routes(
+    routing_table, sizeof(args) / sizeof(filter_arg_t), args);
+}
+
+void input_filter_build_combined_routes(
+    if_routing_table_t *routing_table,
+    unsigned int n,
+    filter_arg_t *args
+)
+{
+  // Compute the number of routing table entries
+  routing_table->n_routes = 0;
+  for (unsigned int i = 0; i < n; i++)
+  {
+    routing_table->n_routes += args[i].data[0];
+  }
+
+  debug("Loading %u filter routes\n", routing_table->n_routes);
 
   // Malloc sufficient room for the entries
   MALLOC_OR_DIE(routing_table->routes,
                 routing_table->n_routes * sizeof(if_route_t));
 
   // Copy the entries across
-  i_entry_t *entries = (i_entry_t *) routes;
-  for (unsigned int i = 0; i < routing_table->n_routes; i++)
+  unsigned int current_entry = 0;
+
+  for (unsigned int i = 0; i < n; i++)
   {
-    // Get the entry in the table
-    if_route_t *route = &(routing_table->routes[i]);
-    i_entry_t entry = entries[i];
+    if_collection_t *filters = args[i].filters;
+    i_entry_t *entries = (i_entry_t *) &args[i].data[1];
 
-    // Copy across the key, mask and dimension mask
-    route->key = entry.key;
-    route->mask = entry.mask;
-    route->dimension_mask = entry.dimension_mask;
+    for (unsigned int j = 0; j < args[i].data[0]; j++)
+    {
+      // Get the entry in the table
+      if_route_t *route = &(routing_table->routes[current_entry]);
+      current_entry++;
+      i_entry_t entry = entries[j];
 
-    // Get a pointer to the intended filter
-    route->filter = &filters->filters[entry.filter_index];
+      // Copy across the key, mask and dimension mask
+      route->key = entry.key;
+      route->mask = entry.mask;
+      route->dimension_mask = entry.dimension_mask;
+
+      // Get a pointer to the intended filter
+      route->filter = &filters->filters[entry.filter_index];
+    }
   }
-
-  // DEBUG: Print the route entries
-#ifdef DEBUG
-  for (uint32_t n = 0; n < routing_table->n_routes; n++)
-  {
-    io_printf(IO_BUF, "\tRoute[%d] = (0x%08x, 0x%08x) dmask=0x%08x => %d\n",
-              n, routing_table->routes[n].key, routing_table->routes[n].mask,
-              routing_table->routes[n].dimension_mask,
-              entries[n].filter_index);
-  }
-#endif
 }
 
 // Filter specification flags

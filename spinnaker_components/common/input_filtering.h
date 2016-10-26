@@ -274,6 +274,18 @@ void input_filtering_get_filters(
     uint32_t *data,
     value_t **filter_output_array);
 
+typedef struct _filter_arg
+{
+  if_collection_t *filters;
+  uint32_t *data;
+} filter_arg_t;
+
+/* Copy multiple sets of filter routes into a single routing table.
+ */
+void input_filter_build_combined_routes(
+  if_routing_table_t *routing_table, unsigned int n, filter_arg_t *args
+);
+
 /* Initialise a filter collection with an output accumulator.
  *
  * Use zero to indicate that no output accumulator should be assigned.
