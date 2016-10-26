@@ -161,7 +161,7 @@ typedef struct _if_collection_t
  * handled as normal, otherwise it is deemed to have not matched the route.
  */
 static inline bool input_filtering_input_with_dimension_offset(
-    if_collection_t* filters, uint32_t key, uint32_t payload,
+    if_routing_table_t* routes, uint32_t key, uint32_t payload,
     uint32_t dim_offset, uint32_t max_dim_sub_one
 )
 {
@@ -169,10 +169,10 @@ static inline bool input_filtering_input_with_dimension_offset(
 
   // Look at all the routing entries, if we match an entry then include the
   // packet in the indicated input vector.
-  for (uint32_t n = 0; n < filters->routing.n_routes; n++)
+  for (uint32_t n = 0; n < routes->n_routes; n++)
   {
     // Get the routing entry and the filter referred to by the entry
-    if_route_t route = filters->routing.routes[n];
+    if_route_t route = routes->routes[n];
 
     if ((key & route.mask) == route.key)
     {
@@ -200,13 +200,13 @@ static inline bool input_filtering_input_with_dimension_offset(
  * packet matched any routing entries, otherwise returns false.
  */
 static inline bool input_filtering_input(
-    if_collection_t* filters, uint32_t key, uint32_t payload
+    if_routing_table_t* routes, uint32_t key, uint32_t payload
 )
 {
   // Input with no dimensional offset, the given arguments result in an
   // optimised version of the previous method being inlined.
   return input_filtering_input_with_dimension_offset(
-    filters, key, payload, 0, UINT32_MAX
+    routes, key, payload, 0, UINT32_MAX
   );
 }
 

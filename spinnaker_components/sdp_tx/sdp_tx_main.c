@@ -58,7 +58,7 @@ bool data_system(address_t addr) {
 }
 
 void mcpl_callback(uint key, uint payload) {
-  input_filtering_input(&g_input, key, payload);
+  input_filtering_input(&g_input.routing, key, payload);
 }
 
 void c_main(void) {

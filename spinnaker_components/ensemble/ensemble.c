@@ -406,19 +406,19 @@ void process_queue()
 
       // Standard input
       input_filtering_input_with_dimension_offset(
-        &input_filters, key, payload, offset, max_dim_sub_one
+        &input_filters.routing, key, payload, offset, max_dim_sub_one
       );
 
       // Learnt encoder input
       input_filtering_input_with_dimension_offset(
-        &learnt_encoder_filters, key, payload, offset, max_dim_sub_one
+        &learnt_encoder_filters.routing, key, payload, offset, max_dim_sub_one
       );
 
       // Inhibitory
-      input_filtering_input(&inhibition_filters, key, payload);
+      input_filtering_input(&inhibition_filters.routing, key, payload);
 
       // Modulatory
-      input_filtering_input(&modulatory_filters, key, payload);
+      input_filtering_input(&modulatory_filters.routing, key, payload);
     }
     else
     {

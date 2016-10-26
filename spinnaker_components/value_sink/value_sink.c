@@ -58,7 +58,7 @@ void process_queue()
       uint32_t payload = packet.payload;
 
       input_filtering_input_with_dimension_offset(
-        &filters, key, payload,
+        &filters.routing, key, payload,
         params.input_offset,   // Offset for all packets
         params.input_size - 1  // Max expected dimension
       );
