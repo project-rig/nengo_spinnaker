@@ -318,6 +318,14 @@ def test_filter_routing_region():
     # Check that the memory requirement is sane
     assert filter_region.sizeof() == 4 * (1 + 4*len(signal_routes))
 
+    # Check that the set of expected keys and masks can be extracted
+    assert filter_region.get_expected_keys_and_masks() == {
+        (ks_a.get_value(tag=ksc.filter_routing_tag),
+         ks_a.get_mask(tag=ksc.filter_routing_tag)),
+        (ks_b.get_value(tag=ksc.filter_routing_tag),
+         ks_b.get_mask(tag=ksc.filter_routing_tag)),
+    }
+
     # Check that the written out data is sensible
     fp = tempfile.TemporaryFile()
     filter_region.build_routes()
