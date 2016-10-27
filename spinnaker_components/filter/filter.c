@@ -175,7 +175,8 @@ void c_main(void)
 
   // Prepare the filters for receiving packets
   input_filtering_get_filters(&filters, region_start(3, address), NULL);
-  input_filtering_get_routes(&filters, &filter_routing, region_start(4, address));
+  input_filtering_get_routes(&filters, &filter_routing,
+                             (filter_routes_t *) region_start(4, address));
   input_filtering_initialise_output(&filters, params.input_size);
 
   // Multicast packet queue

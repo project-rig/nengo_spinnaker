@@ -109,7 +109,8 @@ void c_main(void)
   // Prepare filtering
   input_filtering_initialise_output(&filters, params.input_size);
   input_filtering_get_filters(&filters, region_start(2, address), NULL);
-  input_filtering_get_routes(&filters, &filter_routing, region_start(3, address));
+  input_filtering_get_routes(&filters, &filter_routing,
+                             (filter_routes_t *) region_start(3, address));
 
   // Retrieve the recording region
   rec_start = region_start(15, address);

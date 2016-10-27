@@ -229,23 +229,19 @@ FilterInit filter_types[] = {
  * `routes` should be an array of `_if_routes` preceded with a single word
  * indicating the number of entries.
  */
-typedef struct _i_entry
-{
-  uint32_t key, mask, dimension_mask, filter_index;
-} i_entry_t;
 
 void input_filtering_get_routes(if_collection_t *filters,
                                 if_routing_table_t *routing_table,
-                                uint32_t *routes)
+                                filter_routes_t *routes)
 {
-  filter_arg_t args[] = {{filters, routes}};
+  filter_arg_t args[] = {{.filters = filters, .routes = routes}};
   input_filter_build_combined_routes(
     routing_table, sizeof(args) / sizeof(filter_arg_t), args);
 }
 
 void input_filter_build_combined_routes(
     if_routing_table_t *routing_table,
-    unsigned int n,
+    const unsigned int n,
     filter_arg_t *args
 )
 {
@@ -253,7 +249,7 @@ void input_filter_build_combined_routes(
   routing_table->n_routes = 0;
   for (unsigned int i = 0; i < n; i++)
   {
-    routing_table->n_routes += args[i].data[0];
+    routing_table->n_routes += args[i].routes->n_routes;
   }
 
   debug("Loading %u filter routes\n", routing_table->n_routes);
@@ -267,23 +263,32 @@ void input_filter_build_combined_routes(
 
   for (unsigned int i = 0; i < n; i++)
   {
+    debug("Filter block %u\n", n);
     if_collection_t *filters = args[i].filters;
-    i_entry_t *entries = (i_entry_t *) &args[i].data[1];
 
-    for (unsigned int j = 0; j < args[i].data[0]; j++)
+    for (unsigned int j = 0; j < args[i].routes->n_routes; j++)
     {
       // Get the entry in the table
       if_route_t *route = &(routing_table->routes[current_entry]);
-      current_entry++;
-      i_entry_t entry = entries[j];
+      const input_filter_route_t *entry = &args[i].routes->routes[j];
 
       // Copy across the key, mask and dimension mask
-      route->key = entry.key;
-      route->mask = entry.mask;
-      route->dimension_mask = entry.dimension_mask;
+      route->key = entry->key;
+      route->mask = entry->mask;
+      route->dimension_mask = entry->dimension_mask;
 
       // Get a pointer to the intended filter
-      route->filter = &filters->filters[entry.filter_index];
+      route->filter = &filters->filters[entry->filter_index];
+
+      debug("\t[%u] key=%032x, mask=%032x, dmask=%032x -> %u\n",
+            current_entry,
+            entry->key,
+            entry->mask,
+            entry->dimension_mask,
+            entry->filter_index);
+
+      // Point to the next entry
+      current_entry++;
     }
   }
 }

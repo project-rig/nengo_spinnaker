@@ -693,8 +693,12 @@ void c_main(void)
                               ensemble.learnt_input_local);
 
   filter_arg_t sliced_inputs[] = {
-    {&input_filters, region_start(INPUT_ROUTING_REGION, address)},
-    {&learnt_encoder_filters, region_start(LEARNT_ENCODER_ROUTING_REGION, address)},
+    {.filters = &input_filters,
+     .routes = (filter_routes_t *) region_start(INPUT_ROUTING_REGION, address)
+    },
+    {.filters = &learnt_encoder_filters,
+     .routes = (filter_routes_t *) region_start(LEARNT_ENCODER_ROUTING_REGION, address)
+    },
   };
   input_filter_build_combined_routes(
     &filter_routing_sliced_inputs,
@@ -703,8 +707,12 @@ void c_main(void)
   );
 
   filter_arg_t unsliced_inputs[] = {
-    {&inhibition_filters, region_start(INHIB_ROUTING_REGION, address)},
-    {&modulatory_filters, region_start(MODULATORY_ROUTING_REGION, address)},
+    {.filters = &inhibition_filters,
+     .routes = (filter_routes_t *) region_start(INHIB_ROUTING_REGION, address)
+    },
+    {.filters = &modulatory_filters,
+     .routes = (filter_routes_t *) region_start(MODULATORY_ROUTING_REGION, address)
+    },
   };
   input_filter_build_combined_routes(
     &filter_routing_unsliced_inputs,

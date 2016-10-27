@@ -257,10 +257,22 @@ static inline void input_filtering_step(
  * `routes` should be an array of `_if_routes` preceded with a single word
  * indicating the number of entries.
  */
+typedef struct
+{
+  uint32_t key, mask, dimension_mask, filter_index;
+} input_filter_route_t;
+
+typedef struct
+{
+  uint32_t n_routes;
+  input_filter_route_t routes[];
+} filter_routes_t;
+
 void input_filtering_get_routes(
     if_collection_t *filters,
     if_routing_table_t *routing_table,
-    uint32_t *routes);
+    filter_routes_t *routes
+);
 
 /* Copy in a set of filters.
  *
@@ -274,14 +286,14 @@ void input_filtering_get_filters(
     uint32_t *data,
     value_t **filter_output_array);
 
+/* Copy multiple sets of filter routes into a single routing table.
+ */
 typedef struct _filter_arg
 {
   if_collection_t *filters;
-  uint32_t *data;
+  filter_routes_t *routes;
 } filter_arg_t;
 
-/* Copy multiple sets of filter routes into a single routing table.
- */
 void input_filter_build_combined_routes(
   if_routing_table_t *routing_table, unsigned int n, filter_arg_t *args
 );
