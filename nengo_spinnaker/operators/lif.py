@@ -525,15 +525,16 @@ class EnsembleLIF(object):
         }
 
         # Hence build the set of keys and masks which should NOT match against
-        # each routing region.
+        # each routing region. Do this by building a set of all the expected
+        # keys and masks and then subtracting from that set the ones which are
+        # expected to match in each region.
         off_sets = collections.defaultdict(set)
         for a, on_set in iteritems(on_sets):
-            for b in RoutingRegions:
-                # Add the on-set for this region `b` to the off-set
-                off_sets[a].update(on_sets[b])
+            for off_set in itervalues(on_sets):
+                off_sets[a].update(off_set)
 
             # Elements which are in the on-set for `a` cannot be in the off-set
-            off_sets[a].difference_update(on_sets[a])
+            off_sets[a].difference_update(on_set)
 
         # Build the filter routing region, minimising the entries subject to
         # the off-sets which were just constructed.
