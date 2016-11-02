@@ -4,7 +4,9 @@ from rig.routing_table import Routes
 from six import iteritems
 
 from nengo_spinnaker.netlist.key_allocation import (
-    build_mn_net_graph, colour_net_graph, assign_mn_net_ids)
+    build_mn_net_graph, colour_graph, assign_mn_net_ids,
+    build_cluster_graph
+)
 
 
 @pytest.mark.parametrize(
@@ -176,11 +178,11 @@ def test_build_net_graph_complex():
     assert net_graph == {'a': {'b'}, 'b': {'a'}}
 
 
-def test_colour_net_graph():
-    """Test that the produced colouring is valid and that all nets are assigned
+def test_colour_graph():
+    """Test that the produced colouring is valid and that all nodes are assigned
     a colour.
     """
-    net_graph = {
+    graph = {
         'a': {'c', 'd'},
         'b': {'d'},
         'c': {'a'},
@@ -189,10 +191,10 @@ def test_colour_net_graph():
     }
 
     # Perform the colouring
-    colours = colour_net_graph(net_graph)
+    colours = colour_graph(graph)
 
     # Check the validity
-    for net, others in iteritems(net_graph):
+    for net, others in iteritems(graph):
         for other in others:
             assert colours[net] != colours[other]
 
@@ -299,3 +301,72 @@ def test_assign_net_ids(prior_constraints):
     for net, others in iteritems(net_graph):
         for other in others:
             assert net_ids[net] != net_ids[other]
+
+
+def test_build_cluster_graph_completely_connected():
+    """Test the construction of a graph which indicates which of the clusters
+    of the vertices of an operator may not share an identifier.
+
+    In this case none of the clusters may share an ID as they have multiple
+    crossing connections.
+    """
+    # Create the vertices
+    a = object()
+    b = object()
+    c = object()
+
+    # Create the routing trees for the entirely recurrent connections
+    tree_a10 = RoutingTree((1, 0), [(Routes.core(1), c)])
+    tree_a01 = RoutingTree((0, 1), [(Routes.core(1), b)])
+    tree_a00 = RoutingTree((0, 0), [(Routes.north, tree_a01),
+                                    (Routes.east, tree_a10),
+                                    (Routes.core(1), a)])
+
+    tree_b00 = RoutingTree((0, 0), [(Routes.east, tree_a10),
+                                    (Routes.core(1), a)])
+    tree_b01 = RoutingTree((0, 1), [(Routes.south, tree_b00),
+                                    (Routes.core(1), b)])
+
+    tree_c00 = RoutingTree((0, 0), [(Routes.north, tree_a01),
+                                    (Routes.core(1), a)])
+    tree_c10 = RoutingTree((1, 0), [(Routes.west, tree_c00),
+                                    (Routes.core(1), c)])
+
+    # Build the graph indicating which cluster placements cannot share
+    # identifiers, in this case none of the clusters may share an ID
+    graph = build_cluster_graph({object(): [tree_a00, tree_b01, tree_c10]})
+    assert graph == {
+        (0, 0): {(0, 1), (1, 0)},
+        (0, 1): {(0, 0), (1, 0)},
+        (1, 0): {(0, 0), (0, 1)},
+    }
+
+
+def test_build_cluster_graph_some_edges():
+    """Test the construction of a graph which indicates which of the clusters
+    of the vertices of an operator may not share an identifier.
+
+    In this, slightly strange, case two of the clusters may not share an ID.
+    """
+    # Create the vertices
+    a = object()
+    b = object()
+    c = object()
+
+    # Create the routing trees
+    tree_a10 = RoutingTree((1, 0), [(Routes.core(1), b)])
+    tree_a00 = RoutingTree((0, 0), [(Routes.east, tree_a10)])
+
+    tree_b00 = RoutingTree((0, 0), [(Routes.core(1), a)])
+    tree_b10 = RoutingTree((1, 0), [(Routes.west, tree_b00)])
+
+    tree_c01 = RoutingTree((0, 1), [(Routes.south, tree_b00)])
+
+    # Build the graph
+    graph = build_cluster_graph({object(): [tree_a00, tree_b10],
+                                 object(): [tree_c01]})
+    assert graph == {
+        (0, 0): {(1, 0)},
+        (1, 0): {(0, 0)},
+        (0, 1): set(),  # Every cluster should be in the graph
+    }

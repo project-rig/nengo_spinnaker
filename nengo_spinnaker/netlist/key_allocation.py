@@ -1,6 +1,6 @@
 import logging
 from collections import defaultdict, deque
-import itertools
+from itertools import combinations, product
 from six import iteritems, iterkeys, itervalues
 
 logger = logging.getLogger(__name__)
@@ -51,7 +51,7 @@ def assign_mn_net_ids(nets_routes, prior_constraints=None):
     {net: int}
         Mapping from each multiple source net to a valid identifier.
     """
-    return colour_net_graph(
+    return colour_graph(
         build_mn_net_graph(nets_routes, prior_constraints)
     )
 
@@ -88,8 +88,8 @@ def build_mn_net_graph(nets_routes, prior_constraints=None):
     # in the net graph.
     net_graph = {net: set() for net in iterkeys(nets_routes)}
     for route_nets in itervalues(chip_route_nets):
-        for xs, ys in itertools.combinations(itervalues(route_nets), 2):
-            for x, y in itertools.product(xs, ys):
+        for xs, ys in combinations(itervalues(route_nets), 2):
+            for x, y in product(xs, ys):
                 # Add an edge iff. it would connect two *different* vertices
                 if x != y:
                     net_graph[x].add(y)
@@ -106,26 +106,145 @@ def build_mn_net_graph(nets_routes, prior_constraints=None):
     return net_graph
 
 
-def colour_net_graph(net_graph):
-    """Assign colours to each net such that the colouring constraints are
-    satisfied.
+def assign_cluster_ids(operator_vertices, signal_routes, placements):
+    """Assign identifiers to the clusters of vertices owned by each operator to
+    the extent that multicast nets belonging to the same signal which originate
+    at multiple chips can be differentiated if required.
+
+    An operator may be partitioned into a number of vertices which are placed
+    onto the cores of two SpiNNaker chips.  The vertices on these chips form
+    two clusters; packets from these clusters need to be differentiated in
+    order to be routed correctly.  For example:
+
+        +--------+                      +--------+
+        |        | ------- (a) ------>  |        |
+        |   (A)  |                      |   (B)  |
+        |        | <------ (b) -------  |        |
+        +--------+                      +--------+
+
+    Packets traversing `(a)` need to be differentiated from packets traversing
+    `(b)`.  This can be done by including an additional field in the packet
+    keys which indicates from which chip the packet was sent - in this case a
+    single bit will suffice with packets from `(A)` using a key with the bit
+    not set and packets from `(B)` setting the bit.
+
+    This method will assign an ID to each cluster of vertices (e.g., `(A)` and
+    `(B)`) by storing the index in the `cluster` attribute of each vertex.
+    Later this ID can be used in the keyspace of all nets originating from the
+    cluster.
+    """
+    # Build a dictionary mapping each operator to the signals and routes for
+    # which it is the source.
+    operators_signal_routes = defaultdict(dict)
+    for signal, routes in iteritems(signal_routes):
+        operators_signal_routes[signal.source][signal] = routes
+
+    # Assign identifiers to each of the clusters of vertices contained within
+    # each operator.
+    for operator, vertices in iteritems(operator_vertices):
+        signal_routes = operators_signal_routes[operator]
+        n_clusters = len({placements[vx] for vx in vertices})
+
+        if len(signal_routes) == 0 or n_clusters == 1:
+            # If the operator has no outgoing signals, or only one cluster,
+            # then assign the same identifier to all of the vertices.
+            for vertex in vertices:
+                vertex.cluster = 0
+        else:
+            # Otherwise try to allocate as few cluster IDs as are required to
+            # differentiate between multicast nets which take different routes
+            # at the same router.
+            #
+            # Build a graph identifying which clusters may or may not share
+            # identifiers.
+            graph = build_cluster_graph(operators_signal_routes[operator])
+
+            # Colour this graph to assign identifiers to the clusters
+            cluster_ids = colour_graph(graph)
+
+            # Assign these colours to the vertices.
+            for vertex in vertices:
+                placement = placements[vertex]
+                vertex.cluster = cluster_ids[placement]
+
+
+def build_cluster_graph(signal_routes):
+    """Build a graph the nodes of which represent the chips on which the
+    vertices representing a single operator have been placed and the edges of
+    which represent constraints upon which of these chips may share routing
+    identifiers for the purposes of this set of vertices.
 
     Parameters
     ----------
-    net_graph : {net: {net, ...}, ...}
-        An adjacency list representation of a graph where the presence of an
-        edge indicates that two multicast nets may not share a routing key.
+    signal_routes : {net: [RoutingTree, ...], ...}
+        Dictionary mapping multi-source nets to the routing trees which
+        describe them. The signals *MUST* all originate at the same vertex.
 
     Returns
     -------
-    {Net: int}
-        Mapping from each net (key of the net graph) to an identifier.
+    {(x, y): {(x, y), ...}, ...}
+        An adjacency list representation of the graph described above.
+    """
+    cluster_graph = defaultdict(set)  # Adjacency list represent of the graph
+
+    # Look at the multicast trees associated with each signal in turn.
+    for trees in itervalues(signal_routes):
+        # Build up a dictionary which maps each chip to a mapping of the routes
+        # from this chip to the source cluster of the multicast nets which take
+        # these routes. This will allow us to determine which clusters need to
+        # be uniquely identified.
+        chips_routes_clusters = defaultdict(lambda: defaultdict(set))
+
+        # For every multicast tree associated with the signal we're currently
+        # investigating:
+        for tree in trees:
+            source = tree.chip  # Get the origin of the multicast net
+            cluster_graph[source]  # Ensure every cluster is in the graph
+
+            # Traverse the multicast tree to build up the dictionary mapping
+            # chips to routes and clusters.
+            for _, chip, route in tree.traverse():
+                route = frozenset(route)  # Get the key for the routes taken
+
+                # Add this cluster to the set of clusters whose net takes this
+                # route at this point.
+                chips_routes_clusters[chip][route].add(source)
+
+                # Add constraints to the cluster graph dependent on which
+                # multicast nets take different routes at this point.
+                routes_from_chip = chips_routes_clusters[chip]
+                for other_route, clusters in iteritems(routes_from_chip):
+                    if other_route != route:  # We care about different routes
+                        for cluster in clusters:
+                            # This cluster cannot share an identifier with any
+                            # of the clusters whose nets take a different route
+                            # at this point.
+                            cluster_graph[source].add(cluster)
+                            cluster_graph[cluster].add(source)
+
+    return cluster_graph
+
+
+def colour_graph(graph):
+    """Assign colours to each node in a graph such that connected nodes do not
+    share a colour.
+
+    Parameters
+    ----------
+    graph : {node: {node, ...}, ...}
+        An adjacency list representation of a graph where the presence of an
+        edge indicates that two nodes may not share a colour.
+
+    Returns
+    -------
+    {node: int}
+        Mapping from each node to an identifier (colour).
     """
     # This follows a heuristic of first assigning a colour to the node with the
     # highest degree and then progressing through other nodes in a
     # breadth-first search.
     colours = deque()  # List of sets which contain vertices
-    unvisited = set(iterkeys(net_graph))  # Nodes which haven't been visited
+    unvisited = set(iterkeys(graph))  # Nodes which haven't been visited
 
     # While there are still unvisited nodes -- note that this may be true more
     # than once if there are disconnected cliques in the graph, e.g.:
@@ -151,7 +270,7 @@ def colour_net_graph(net_graph):
         queue = deque()  # Queue of nodes to visit
 
         # Add the node with the greatest degree to the queue
-        queue.append(max(unvisited, key=lambda vx: len(net_graph[vx])))
+        queue.append(max(unvisited, key=lambda vx: len(graph[vx])))
 
         # Perform a breadth-first search of the tree and colour nodes as we
         # touch them.
@@ -165,7 +284,7 @@ def colour_net_graph(net_graph):
                 # Colour the node, using the first legal colour or by creating
                 # a new colour for the node.
                 for group in colours:
-                    if net_graph[node].isdisjoint(group):
+                    if graph[node].isdisjoint(group):
                         group.add(node)
                         break
                 else:
@@ -174,10 +293,10 @@ def colour_net_graph(net_graph):
                     colours.append({node})
 
                 # Add unvisited connected nodes to the queue
-                for vx in net_graph[node]:
+                for vx in graph[node]:
                     queue.append(vx)
 
-    # Reverse the data format to result in {net: colour, ...}, for each group
+    # Reverse the data format to result in {node: colour, ...}, for each group
     # of equivalently coloured nodes mark the colour on the node.
     colouring = dict()
     for i, group in enumerate(colours):

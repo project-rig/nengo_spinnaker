@@ -135,34 +135,6 @@ def test_get_nets_for_routing():
         assert extended_allocations[v] == allocations[v]
 
 
-def test_identify_clusters():
-    """Test the correct assignation of clusters."""
-    # Create two vertices
-    vertex_A = [Vertex() for _ in range(4)]
-    vertex_B = [Vertex() for _ in range(2)]
-
-    # Create placements such that vertex A and B fall on two chips and A[0] and
-    # A[1] are on the same chip.
-    placements = {
-        vertex_A[0]: (0, 0), vertex_A[1]: (0, 0),
-        vertex_A[2]: (0, 1), vertex_A[3]: (0, 1),
-        vertex_B[0]: (0, 0), vertex_B[1]: (1, 0),
-    }
-
-    # Identify groups
-    groups = [set(vertex_A), set(vertex_B)]
-
-    # Identify clusters
-    utils.identify_clusters(groups, placements)
-
-    # Ensure that appropriate cluster indices are assigned to all vertices
-    assert vertex_A[0].cluster == vertex_A[1].cluster  # 1 cluster of A
-    assert vertex_A[2].cluster == vertex_A[3].cluster  # The other
-    assert vertex_A[0].cluster != vertex_A[2].cluster  # Different IDs
-
-    assert vertex_B[0].cluster != vertex_B[1].cluster  # Different IDs
-
-
 def test_get_net_keyspaces():
     """Test the correct specification of keyspaces for nets."""
     # Create the vertices
@@ -178,6 +150,12 @@ def test_get_net_keyspaces():
     }
     resources = {v: {} for v in placements}
     allocations = {v: {} for v in placements}
+
+    # Manually assign cluster IDs
+    vertex_A[0].cluster = 0
+    vertex_A[1].cluster = 0
+    vertex_A[2].cluster = 1
+    vertex_A[3].cluster = 1
 
     # Create a container for the keyspaces
     ksc = KeyspaceContainer()
@@ -196,13 +174,6 @@ def test_get_net_keyspaces():
         signal_b: NMNet(vertex_B, vertex_A, 2.0),
         signal_c: NMNet(vertex_A, vertex_A, 3.0),
     }
-
-    # Identify groups
-    groups = [set(vertex_A)]
-
-    # Identify clusters
-    utils.identify_clusters(groups, placements)
-    assert vertex_B.cluster is None  # Not clustered
 
     # Get the routing nets
     _, _, _, _, derived_nets = utils.get_nets_for_routing(

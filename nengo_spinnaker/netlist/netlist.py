@@ -135,10 +135,6 @@ class Netlist(object):
                                     constraints, self.placements,
                                     **allocate_kwargs)
 
-        # Identify clusters and modify vertices appropriately
-        utils.identify_clusters(itervalues(self.operator_vertices),
-                                self.placements)
-
         # Get the nets for routing
         (route_nets,
          vertices_resources,  # Can safely overwrite the resource dictionary
@@ -162,6 +158,11 @@ class Netlist(object):
         key_allocation.allocate_signal_keyspaces(signal_routes,
                                                  self.signal_id_constraints,
                                                  self.keyspaces)
+
+        # Assign cluster IDs based on the placement and the routing
+        key_allocation.assign_cluster_ids(self.operator_vertices,
+                                          signal_routes,
+                                          self.placements)
 
         # Get a map from the nets we will route with to keyspaces
         self.net_keyspaces = utils.get_net_keyspaces(

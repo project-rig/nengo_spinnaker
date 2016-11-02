@@ -85,56 +85,6 @@ def get_nets_for_routing(resources, nets, placements, allocations):
             extended_allocations, derived_nets)
 
 
-def identify_clusters(groups, placements):
-    """Group vertices in clusters (based on chip assignation).
-
-    A vertex may be partitioned into a number of vertex slices which are placed
-    onto the cores of two SpiNNaker chips.  The vertex slices on these chips
-    form two clusters; packets from these clusters need to be differentiated in
-    order to route packets correctly.  For example::
-
-       +--------+                      +--------+
-       |        | ------- (a) ------>  |        |
-       |   (A)  |                      |   (B)  |
-       |        | <------ (b) -------  |        |
-       +--------+                      +--------+
-
-    Packets traversing `(a)` need to be differentiated from packets traversing
-    `(b)`.  This can be done by including an additional field in the packet
-    keys which indicates from which chip the packet was sent - in this case a
-    single bit will suffice with packets from `(A)` using a key with the bit
-    not set and packets from `(B)` setting the bit.
-
-    This method will assign a unique ID to each cluster of vertices (e.g.,
-    `(A)` and `(B)`) by storing the index in the `cluster` attribute of each
-    subvertex. Later this ID can be used in the keyspace of all nets
-    originating from the cluster.
-
-    Parameters
-    ----------
-    groups : [{Vertex, ...}, ...]
-        List of groups of vertices. This is used to identify objects which may
-        be joined into a cluster.
-    placements : {vertex: (x, y), ...}
-    """
-    # Perform clustering for each group of vertices in turn.
-    for group in groups:
-        # Build a map of placements to vertices, this will be used to identify
-        # clusters.
-        clusters = collections.defaultdict(list)  # Map co-ordinate to cluster
-
-        # Add each vertex in the group to a cluster.
-        for vertex in group:
-            coord = placements[vertex]
-            clusters[coord].append(vertex)
-
-        # Assign a unique ID to each cluster in the group
-        for cluster_id, cluster in enumerate(itervalues(clusters)):
-            # Store the cluster ID in each vertex in the cluster
-            for vertex in cluster:
-                vertex.cluster = cluster_id
-
-
 def get_net_keyspaces(placements, nets, derived_nets):
     """Get a map from the nets used during routing to the keyspaces (NOT the
     keys and masks) that should be used when building routing tables.
