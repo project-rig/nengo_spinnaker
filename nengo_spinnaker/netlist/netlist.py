@@ -1,4 +1,5 @@
 import collections
+import itertools
 import logging
 from rig import place_and_route  # noqa : F401
 
@@ -25,12 +26,10 @@ class Netlist(object):
     ----------
     nets : {Signal: :py:class:`~.Net`, ...}
         Map of signals to the (multisource Nets) which implement them.
-    vertices : [:py:class:`~.Vertex` or :py:class:`~.VertexSlice`, ...]
-        List of vertex objects (executables).
+    operator_vertices : {operator: (vertex, ...), ...}
+        Map of operators to the vertices which implement them on SpiNNaker.
     keyspaces : :py:class:`~nengo_spinnaker.utils.keyspaces.KeyspaceContainer`
         Object containing keyspaces for nets.
-    groups : [{:py:class:`~.Vertex`, ...}, ...]
-        List of groups of vertices.
     constraints : [contraint, ...]
         List of additional constraints.
     load_functions : [`fn(netlist, controller)`, ...]
@@ -54,15 +53,14 @@ class Netlist(object):
         Map of vertices to file-like views of the SDRAM they have been
         allocated.
     """
-    def __init__(self, nets, vertices, keyspaces, groups, constraints=list(),
+    def __init__(self, nets, operator_vertices, keyspaces, constraints=list(),
                  load_functions=list(), before_simulation_functions=list(),
                  after_simulation_functions=list(),
                  signal_id_constraints=dict()):
         # Store given parameters
         self.nets = nets
-        self.vertices = vertices
+        self.operator_vertices = operator_vertices
         self.keyspaces = keyspaces
-        self.groups = groups
         self.constraints = list(constraints)
         self.load_functions = list(load_functions)
         self.before_simulation_functions = list(before_simulation_functions)
@@ -76,6 +74,16 @@ class Netlist(object):
         self.net_keyspaces = dict()
         self.routes = dict()
         self.vertices_memory = dict()
+
+    @property
+    def vertices(self):
+        """Iterable of all the vertices contained within the netlist."""
+        return itertools.chain(*itervalues(self.operator_vertices))
+
+    @property
+    def n_cores(self):
+        """Total number of cores required by the netlist."""
+        return sum(v.resources.get(Cores, 0) for v in self.vertices)
 
     def place_and_route(self, system_info,
                         place=place_and_route.place,
@@ -128,7 +136,8 @@ class Netlist(object):
                                     **allocate_kwargs)
 
         # Identify clusters and modify vertices appropriately
-        utils.identify_clusters(self.groups, self.placements)
+        utils.identify_clusters(itervalues(self.operator_vertices),
+                                self.placements)
 
         # Get the nets for routing
         (route_nets,

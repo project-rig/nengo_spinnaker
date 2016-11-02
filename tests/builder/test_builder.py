@@ -509,9 +509,12 @@ class TestMakeNetlist(object):
             assert net.sinks == [vertex_b]
             assert net.weight == signal_ab_parameters.weight
 
-        assert set(netlist.vertices) == set([vertex_a, vertex_b])
+        assert netlist.operator_vertices == {
+            operator_a: (vertex_a, ),
+            operator_b: (vertex_b, ),
+        }
+
         assert netlist.keyspaces is model.keyspaces
-        assert netlist.groups == list()
         assert set(netlist.constraints) == set([constraint_a, constraint_b])
         assert set(netlist.load_functions) == set([load_fn_a, load_fn_b])
         assert netlist.before_simulation_functions == [pre_fn_a]
@@ -549,7 +552,7 @@ class TestMakeNetlist(object):
 
         # The netlist should contain vertex a and no nets
         assert len(netlist.nets) == 0
-        assert netlist.vertices == [vertex_a]
+        assert netlist.operator_vertices == {operator_a: (vertex_a, )}
 
     def test_extra_operators_and_signals(self):
         """Test the operators in the extra_operators list are included when
@@ -585,9 +588,11 @@ class TestMakeNetlist(object):
         # Check that the netlist is as expected
         assert len(netlist.nets) == 0
 
-        assert set(netlist.vertices) == set([vertex_a, vertex_b])
+        assert netlist.operator_vertices == {
+            operator_a: (vertex_a, ),
+            operator_b: (vertex_b, ),
+        }
         assert netlist.keyspaces is model.keyspaces
-        assert netlist.groups == list()
         assert len(netlist.constraints) == 0
         assert set(netlist.load_functions) == set([load_fn_a, load_fn_b])
         assert netlist.before_simulation_functions == [pre_fn_a]
@@ -651,16 +656,16 @@ class TestMakeNetlist(object):
         assert vertex_c.accepts_signal.called
 
         # Check that the netlist is as expected
-        assert set(netlist.vertices) == set(
-            [vertex_a, vertex_b0, vertex_b1, vertex_c])
+        assert netlist.operator_vertices == {
+            operator_a: (vertex_a, ),
+            operator_b: (vertex_b0, vertex_b1),
+            operator_c: (vertex_c, ),
+        }
         assert len(netlist.nets) == 1
         for net in itervalues(netlist.nets):
             assert net.sources == [vertex_a]
             assert net.sinks == [vertex_b0, vertex_b1]
             assert net.weight == signal_ab_parameters.weight
-
-        # Check that the groups are correct
-        assert netlist.groups == [set([vertex_b0, vertex_b1])]
 
         assert len(netlist.constraints) == 0
 
@@ -717,14 +722,15 @@ class TestMakeNetlist(object):
         netlist = model.make_netlist()
 
         # Check that the netlist is as expected
-        assert set(netlist.vertices) == set([vertex_a0, vertex_a1,
-                                             vertex_a2, vertex_b])
+        assert netlist.operator_vertices == {
+            operator_a: (vertex_a0, vertex_a1, vertex_a2),
+            operator_b: (vertex_b, ),
+        }
         assert len(netlist.nets) == 1
         for net in itervalues(netlist.nets):
             assert net.sources == [vertex_a0, vertex_a1]
             assert net.sinks == [vertex_b]
 
-        assert netlist.groups == [set([vertex_a0, vertex_a1, vertex_a2])]
         assert len(netlist.constraints) == 0
 
         # Check that `transmit_signal` was called correctly

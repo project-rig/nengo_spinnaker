@@ -160,9 +160,7 @@ class Simulator(object):
 
             # Determine how many boards to ask for (assuming 16 usable cores
             # per chip and 48 chips per board).
-            n_cores = (sum(v.resources.get(Cores, 0) for v in
-                           self.netlist.vertices) *
-                       (1.0 + allocation_fudge_factor))
+            n_cores = self.netlist.n_cores * (1.0 + allocation_fudge_factor)
             n_boards = int(np.ceil((n_cores / 16.) / 48.))
 
             # Request the job
@@ -215,8 +213,7 @@ class Simulator(object):
         # Check if any cores are in bad states
         if self.controller.count_cores_in_state(["exit", "dead", "watchdog",
                                                  "runtime_exception"]):
-            for vertex in self.netlist.vertices:
-                x, y = self.netlist.placements[vertex]
+            for vertex, (x, y) in six.iteritems(self.netlist.placements):
                 p = self.netlist.allocations[vertex][Cores].start
                 status = self.controller.get_processor_status(p, x, y)
                 if status.cpu_state is not AppState.sync0:
@@ -282,7 +279,7 @@ class Simulator(object):
         # Wait for all cores to hit SYNC0 (either by remaining it or entering
         # it from init)
         self._wait_for_transition(AppState.init, AppState.sync0,
-                                  len(self.netlist.vertices))
+                                  self.netlist.n_cores)
         self.controller.send_signal("sync0")
 
         # Get a new thread for the IO
@@ -296,7 +293,7 @@ class Simulator(object):
 
             # Wait for all cores to hit SYNC1
             self._wait_for_transition(AppState.sync0, AppState.sync1,
-                                      len(self.netlist.vertices))
+                                      self.netlist.n_cores)
             logger.info("Running simulation...")
             self.controller.send_signal("sync1")
 
@@ -321,7 +318,7 @@ class Simulator(object):
 
         # Wait for cores to re-enter sync0
         self._wait_for_transition(AppState.run, AppState.sync0,
-                                  len(self.netlist.vertices))
+                                  self.netlist.n_cores)
 
         # Retrieve simulation data
         start = time.time()

@@ -23,9 +23,8 @@ def test_before_simulation():
     # Create a netlist
     model = netlist.Netlist(
         nets=[],
-        vertices=[vertex],
+        operator_vertices={object(): (vertex, )},
         keyspaces={},
-        groups={},
         load_functions=[],
         before_simulation_functions=[before_a, before_b]
     )
@@ -54,9 +53,8 @@ def test_after_simulation():
     # Create a netlist
     model = netlist.Netlist(
         nets=[],
-        vertices=[],
+        operator_vertices={},
         keyspaces={},
-        groups={},
         load_functions=[],
         after_simulation_functions=[after_a, after_b]
     )

@@ -319,7 +319,6 @@ class Model(object):
 
         # Call each operator to make vertices
         operator_vertices = dict()
-        vertices = collections_ext.flatinsertionlist()
         load_functions = collections_ext.noneignoringlist()
         before_simulation_functions = collections_ext.noneignoringlist()
         after_simulation_functions = collections_ext.noneignoringlist()
@@ -340,8 +339,10 @@ class Model(object):
                 self, *args, **kwargs
             )
 
-            operator_vertices[op] = vxs
-            vertices.append(vxs)
+            if isinstance(vxs, (list, tuple, set)):
+                operator_vertices[op] = tuple(vxs)
+            else:
+                operator_vertices[op] = (vxs, )
 
             load_functions.append(load_fn)
             before_simulation_functions.append(pre_fn)
@@ -365,14 +366,6 @@ class Model(object):
                     if u != v:
                         id_constraints[u].add(v)
                         id_constraints[v].add(u)
-
-        # Construct the groups set
-        groups = list()
-        for vxs in itervalues(operator_vertices):
-            # If multiple vertices were provided by an operator then we add
-            # them as a new group.
-            if isinstance(vxs, collections.Iterable):
-                groups.append(set(vxs))
 
         # Construct nets from the signals
         nets = dict()
@@ -429,9 +422,8 @@ class Model(object):
         # Return a netlist
         return Netlist(
             nets=nets,
-            vertices=vertices,
+            operator_vertices=operator_vertices,
             keyspaces=self.keyspaces,
-            groups=groups,
             constraints=constraints,
             load_functions=load_functions,
             before_simulation_functions=before_simulation_functions,
