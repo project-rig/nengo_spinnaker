@@ -408,8 +408,8 @@ class EnsembleLIF(object):
         # we can devote 16 cores to every problem.
         sdram_constraint = partition.Constraint(128 * 2**20,
                                                 0.9)  # 90% of 128MiB
-        dtcm_constraint = partition.Constraint(16 * 64 * 2**10,
-                                               0.9)  # 90% of 16 cores DTCM
+        dtcm_constraint = partition.Constraint(16 * 56 * 2**10,
+                                               0.75)  # 75% of 16 cores DTCM
 
         # The number of cycles available is 200MHz * the machine timestep; or
         # 200 * the machine timestep in microseconds.
@@ -629,7 +629,7 @@ class EnsembleCluster(object):
         # against SDRAM as we're already sure that there is sufficient SDRAM
         # (and if there isn't we can't possibly fit all the vertices on a
         # single chip).
-        dtcm_constraint = partition.Constraint(64 * 2**10, 0.9)  # 90% of DTCM
+        dtcm_constraint = partition.Constraint(56 * 2**10, 0.75)  # 75% of DTCM
         cpu_constraint = partition.Constraint(cycles, 0.8)  # 80% of compute
 
         # Get the number of neurons in this cluster
