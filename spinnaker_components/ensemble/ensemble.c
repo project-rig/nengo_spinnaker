@@ -19,10 +19,14 @@
 #include "pes.h"
 #include "recording.h"
 #include "voja.h"
+#include "packet_queue.h"
 
 /*****************************************************************************/
 // Global variables
 ensemble_state_t ensemble;  // Global state
+packet_queue_t packets;  // Queue of multicast packets
+bool queue_processing;   // Flag indicating that packets are being processed
+unsigned int queue_overflows;
 
 // Input filters and buffers for general and inhibitory inputs. Their outputs
 // are summed into accumulators which are used to drive the standard neural input
@@ -362,23 +366,75 @@ static inline void decode_output_and_transmit(const ensemble_state_t *ensemble)
 // Multicast packet with payload received
 void mcpl_received(uint key, uint payload)
 {
-  // Try to receive the packet in each filter
+  // Queue the packet for later processing, if no processing is scheduled then
+  // trigger the queue processor.
+  if (packet_queue_push(&packets, key, payload))
+  {
+    if (!queue_processing)
+    {
+      spin1_trigger_user_event(0, 0);
+      queue_processing = true;
+    }
+  }
+  else
+  {
+    // The packet couldn't be included in the queue, thus it was essentially
+    // dropped.
+    queue_overflows++;
+  }
+}
 
-  // General input
+void process_queue()
+{
   uint32_t offset = ensemble.parameters.input_subspace.offset;
   uint32_t max_dim_sub_one = ensemble.parameters.input_subspace.n_dims - 1;
-  input_filtering_input_with_dimension_offset(&input_filters, key, payload,
-                                              offset, max_dim_sub_one);
 
-  // Learnt encoder input
-  input_filtering_input_with_dimension_offset(&learnt_encoder_filters, key, payload,
-                                              offset, max_dim_sub_one);
+  // Continuously remove packets from the queue and include them in filters
+  while (packet_queue_not_empty(&packets))
+  {
+    // Pop a packet from the queue (critical section)
+    packet_t packet;
+    uint cpsr = spin1_fiq_disable();
+    bool packet_is_valid = packet_queue_pop(&packets, &packet);
+    spin1_mode_restore(cpsr);
 
-  // Inhibitory
-  input_filtering_input(&inhibition_filters, key, payload);
+    // Process the received packet
+    if (packet_is_valid)
+    {
+      uint32_t key = packet.key;
+      uint32_t payload = packet.payload;
 
-  // Modulatory
-  input_filtering_input(&modulatory_filters, key, payload);
+      // Standard input
+      input_filtering_input_with_dimension_offset(
+        &input_filters, key, payload, offset, max_dim_sub_one
+      );
+
+      // Learnt encoder input
+      input_filtering_input_with_dimension_offset(
+        &learnt_encoder_filters, key, payload, offset, max_dim_sub_one
+      );
+
+      // Inhibitory
+      input_filtering_input(&inhibition_filters, key, payload);
+
+      // Modulatory
+      input_filtering_input(&modulatory_filters, key, payload);
+    }
+    else
+    {
+      io_printf(IO_BUF, "Popped packet from empty queue.\n");
+      rt_error(RTE_ABORT);
+    }
+  }
+  queue_processing = false;
+}
+
+void user_event(uint arg0, uint arg1)
+{
+  use(arg0);
+  use(arg1);
+
+  process_queue();
 }
 /*****************************************************************************/
 
@@ -519,6 +575,8 @@ void timer_tick(uint ticks, uint arg1)
 
   // Apply filtering to the input vector
   profiler_write_entry(PROFILER_ENTER | PROFILER_INPUT_FILTER);
+
+  process_queue();
 
   input_filtering_step(&input_filters);
   input_filtering_step(&inhibition_filters);
@@ -776,11 +834,19 @@ void c_main(void)
   // --------------------------------------------------------------------------
 
   // --------------------------------------------------------------------------
+  // Multicast packet queue
+  queue_processing = false;
+  packet_queue_init(&packets, 1024);
+  queue_overflows = 0;
+  // --------------------------------------------------------------------------
+
+  // --------------------------------------------------------------------------
   // Prepare callbacks
   spin1_set_timer_tick(ensemble.parameters.machine_timestep);
-  spin1_callback_on(TIMER_TICK, timer_tick, 2);
+  spin1_callback_on(TIMER_TICK, timer_tick, 1);
   spin1_callback_on(DMA_TRANSFER_DONE, dma_complete, 0);
   spin1_callback_on(MCPL_PACKET_RECEIVED, mcpl_received, -1);
+  spin1_callback_on(USER_EVENT, user_event, 1);
   // --------------------------------------------------------------------------
 
   // --------------------------------------------------------------------------
@@ -796,6 +862,13 @@ void c_main(void)
     // Reset the recording regions
     record_buffer_reset(&record_spikes);
     record_buffer_reset(&record_voltages);
+
+    // Check on the status of the packet queue
+    if (queue_overflows)
+    {
+      io_printf(IO_BUF, "Queue overflows = %u\n", queue_overflows);
+      rt_error(RTE_ABORT);
+    }
 
     // Perform the simulation
     spin1_start(SYNC_WAIT);
