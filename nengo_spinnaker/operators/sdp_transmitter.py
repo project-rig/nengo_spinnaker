@@ -45,7 +45,7 @@ class SDPTransmitter(object):
         self._vertex = Vertex(get_application("tx"), resources)
 
         # Return the netlist specification
-        return netlistspec(self._vertex,
+        return netlistspec((self._vertex, ),  # Tuple is required
                            load_function=self.load_to_machine)
 
     def get_signal_constraints(self):

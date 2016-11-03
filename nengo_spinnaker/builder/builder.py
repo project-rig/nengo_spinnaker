@@ -334,15 +334,11 @@ class Model(object):
                 continue
 
             # Otherwise call upon the operator to build vertices for the
-            # netlist.
+            # netlist. The vertices should always be returned as an iterable.
             vxs, load_fn, pre_fn, post_fn, constraint = op.make_vertices(
                 self, *args, **kwargs
             )
-
-            if isinstance(vxs, (list, tuple, set)):
-                operator_vertices[op] = tuple(vxs)
-            else:
-                operator_vertices[op] = (vxs, )
+            operator_vertices[op] = tuple(vxs)
 
             load_functions.append(load_fn)
             before_simulation_functions.append(pre_fn)
