@@ -115,7 +115,7 @@ void c_main(void)
 
   // Multicast packet queue
   queue_processing = false;
-  packet_queue_init(&packets, 1024);
+  packet_queue_init(&packets);
   queue_overflows = 0;
 
   // Set up callbacks, start

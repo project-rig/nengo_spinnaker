@@ -8,6 +8,8 @@
 #include <stdint.h>
 #include "nengo-common.h"
 
+#define __PACKET_QUEUE_LENGTH 1024
+
 typedef struct
 {
   uint32_t key;
@@ -17,21 +19,15 @@ typedef struct
 // Packet queue structure (really a stack)
 typedef struct
 {
-  packet_t *packets;    // The queue
-  unsigned int length;  // Length of the queue
-  unsigned int current;  // Current position in the queue
+  unsigned int current;                     // Current position in the queue
+  packet_t packets[__PACKET_QUEUE_LENGTH];  // The queue
 } packet_queue_t;
 
 
 // Create an initialise a packet queue
-static inline void packet_queue_init(packet_queue_t *queue,
-                                     unsigned int length)
+static inline void packet_queue_init(packet_queue_t *queue)
 {
-  // Allocate space for the queue
-  MALLOC_OR_DIE(queue->packets, length * sizeof(packet_t));
-
-  // Store the length and current position
-  queue->length = length;
+  // Store the current position
   queue->current = 0;
 }
 
@@ -40,7 +36,7 @@ static inline void packet_queue_init(packet_queue_t *queue,
 static inline bool packet_queue_push(packet_queue_t *queue,
                                      uint32_t key, uint32_t payload)
 {
-  if (queue->current < queue->length)
+  if (queue->current < __PACKET_QUEUE_LENGTH)
   {
     // Add the packet to the queue if it isn't full
     queue->packets[queue->current].key = key;
