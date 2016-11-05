@@ -141,8 +141,10 @@ def test_remove_operator_from_connection_map():
 
     # Add the connection O1 to O3
     sps = model.SignalParameters(True, 6)
-    tps = PassthroughNodeTransmissionParameters(np.vstack([np.eye(3),
-                                                           np.zeros((3, 3))]))
+    tps = PassthroughNodeTransmissionParameters(
+        size_in=3, size_out=6, transform=np.vstack([np.eye(3),
+                                                    np.zeros((3, 3))])
+    )
     rps = model.ReceptionParameters(None, 6, None)
     
     cm.add_connection(source_object=operators[0],
@@ -155,8 +157,10 @@ def test_remove_operator_from_connection_map():
 
     # Add the connection O2 to O3
     sps = model.SignalParameters(False, 6)
-    tps = PassthroughNodeTransmissionParameters(np.vstack([np.zeros((3, 3)),
-                                                           np.eye(3)]))
+    tps = PassthroughNodeTransmissionParameters(
+        size_in=3, size_out=6, transform=np.vstack([np.zeros((3, 3)),
+                                                    np.eye(3)])
+    )
     rps = model.ReceptionParameters(None, 6, None)
     
     cm.add_connection(source_object=operators[1],
@@ -169,8 +173,10 @@ def test_remove_operator_from_connection_map():
 
     # Add the connection O2 to O4 (with a custom keyspace)
     sps = model.SignalParameters(False, 6, mock.Mock("Keyspace 1"))
-    tps = PassthroughNodeTransmissionParameters(np.vstack([np.eye(3),
-                                                           np.eye(3)]))
+    tps = PassthroughNodeTransmissionParameters(
+        size_in=3, size_out=6, transform=np.vstack([np.eye(3),
+                                                    np.eye(3)])
+    )
     rps = model.ReceptionParameters(None, 6, None)
     
     cm.add_connection(source_object=operators[1],
@@ -183,8 +189,10 @@ def test_remove_operator_from_connection_map():
 
     # Add the connection O3 to O5
     sps = model.SignalParameters(False, 3)
-    tps = PassthroughNodeTransmissionParameters(np.hstack((np.zeros((3, 3)),
-                                                           np.eye(3))))
+    tps = PassthroughNodeTransmissionParameters(
+        size_in=6, size_out=3, transform=np.hstack((np.zeros((3, 3)),
+                                                    np.eye(3)))
+    )
     rps = model.ReceptionParameters(None, 3, None)
     
     cm.add_connection(source_object=operators[2],
@@ -197,8 +205,10 @@ def test_remove_operator_from_connection_map():
 
     # Add the connection O3 to O6
     sps = model.SignalParameters(False, 3)
-    tps = PassthroughNodeTransmissionParameters(np.hstack([np.eye(3),
-                                                           np.eye(3)]) * 2)
+    tps = PassthroughNodeTransmissionParameters(
+        size_in=6, size_out=3, transform=np.hstack([np.eye(3),
+                                                    np.eye(3)]) * 2
+    )
     rps = model.ReceptionParameters(None, 3, None)
     
     cm.add_connection(source_object=operators[2],
@@ -258,7 +268,9 @@ def test_remove_operator_from_connection_map():
     # We now add a connection from O4 to O6 with a custom keyspace.  Removing
     # O4 will fail because keyspaces can't be merged.
     signal_params = model.SignalParameters(False, 1, mock.Mock("Keyspace 2"))
-    transmission_params = PassthroughNodeTransmissionParameters(1.0)
+    transmission_params = PassthroughNodeTransmissionParameters(
+        size_in=6, size_out=6, transform=1.0
+    )
     reception_params = model.ReceptionParameters(None, 1, None)
 
     cm.add_connection(
@@ -319,13 +331,13 @@ def test_remove_operator_from_connection_map_unforced():
         rps = model.ReceptionParameters(None, D, None)
 
         for i, source in enumerate(sources):
-            # Get the transform
-            transform = np.zeros((D, SD))
-            transform[i*SD:(i+1)*SD, :] = np.eye(SD)
-
             # Get the parameters
             tps = EnsembleTransmissionParameters(
-                np.dot(transform, np.ones((SD, 1))), None)
+                decoders=np.ones((SD, 1)),
+                size_out=D,
+                slice_out=slice(i*SD, (i+1)*SD),
+                transform=1
+            )
     
             cm.add_connection(source_object=source, source_port=None,
                               signal_parameters=sps,
@@ -339,12 +351,12 @@ def test_remove_operator_from_connection_map_unforced():
     rps = model.ReceptionParameters(None, SD, None)
 
     for i, sink in enumerate(op_D):
-        # Get the transform
-        transform = np.zeros((SD, D))
-        transform[:, i*SD:(i+1)*SD] = np.eye(SD)
-
         # Get the parameters
-        tps = PassthroughNodeTransmissionParameters(transform)
+        tps = PassthroughNodeTransmissionParameters(
+            size_in=D, size_out=SD,
+            slice_in=slice(i*SD, (i+1)*SD),
+            transform=1
+        )
 
         cm.add_connection(source_object=op_C, source_port=None,
                           signal_parameters=sps,
@@ -355,7 +367,8 @@ def test_remove_operator_from_connection_map_unforced():
     # Create the connection B to C
     sps = model.SignalParameters(True, D)
     rps = model.ReceptionParameters(None, D, None)
-    tps = PassthroughNodeTransmissionParameters(np.eye(D))
+    tps = PassthroughNodeTransmissionParameters(
+        size_in=D, size_out=D, transform=1)
 
     cm.add_connection(source_object=op_B, source_port=None,
                       signal_parameters=sps,
@@ -371,7 +384,9 @@ def test_remove_operator_from_connection_map_unforced():
 
     sps = model.SignalParameters(True, D)
     rps = model.ReceptionParameters(None, D, None)
-    tps = PassthroughNodeTransmissionParameters(transform)
+    tps = PassthroughNodeTransmissionParameters(
+        size_in=D, size_out=D, transform=transform
+    )
 
     cm.add_connection(source_object=op_E, source_port=None,
                       signal_parameters=sps,
@@ -389,7 +404,9 @@ def test_remove_operator_from_connection_map_unforced():
         transform[:, i] = 1.0
 
         # Get the parameters
-        tps = PassthroughNodeTransmissionParameters(transform)
+        tps = PassthroughNodeTransmissionParameters(
+            size_in=D, size_out=1, transform=transform
+        )
 
         cm.add_connection(source_object=op_F, source_port=None,
                           signal_parameters=sps,
@@ -418,7 +435,7 @@ def test_remove_operator_from_connection_map_unforced():
 
         ((signal_parameters, transmission_parameters), sinks) = next(iteritems(from_a[None]))
         assert signal_parameters == model.SignalParameters(True, SD, None)
-        assert transmission_parameters.transform.shape == (SD, 1)
+        assert transmission_parameters.full_decoders.shape == (SD, 1)
         assert sinks == [(d, None, model.ReceptionParameters(None, SD, None))]
 
         # Connection(s) from D[n]
@@ -428,7 +445,7 @@ def test_remove_operator_from_connection_map_unforced():
 
         ((signal_parameters, transmission_parameters), sinks) = next(iteritems(from_d[None]))
         assert signal_parameters == model.SignalParameters(True, D, None)
-        assert transmission_parameters.transform.shape == (D, 1)
+        assert transmission_parameters.full_decoders.shape == (D, 1)
 
     # Check that there are many connections from E
     from_e = cm._connections[op_E]
@@ -438,188 +455,6 @@ def test_remove_operator_from_connection_map_unforced():
 
 class TestCombineTransmissionAndReceptionParameters(object):
     """Test the correct combination of transmission parameters."""
-    # Ensemble and Passthrough Node to StandardInput or Neurons - NOT global
-    # inhibition
-    @pytest.mark.parametrize("final_port", (model.InputPort.standard,
-                                            EnsembleInputPort.neurons))
-    def test_ens_to_x(self, final_port):
-        # Create the ingoing connection parameters
-        in_transmission_params = EnsembleTransmissionParameters(
-            np.random.uniform(size=(10, 100)), None,
-        )
-
-        # Create the outgoing connection parameters
-        out_transmission_params = PassthroughNodeTransmissionParameters(
-            np.hstack([np.eye(5), np.zeros((5, 5))])
-        )
-
-        # Combine the parameter sets
-        new_tps, new_in_port = model_utils._combine_transmission_params(
-                in_transmission_params,
-                out_transmission_params,
-                final_port
-            )
-
-        # Check that all the parameters are correct
-        assert new_tps.transform.shape == (5, 100)
-        assert new_in_port is final_port
-
-    # Node and Passthrough Node to Standard Input or Neurons - NOT global
-    # inhibition
-    @pytest.mark.parametrize("passthrough", (False, True))
-    @pytest.mark.parametrize("final_port", (model.InputPort.standard,
-                                            EnsembleInputPort.neurons))
-    def test_node_to_x(self, passthrough, final_port):
-        # Create the ingoing connection parameters
-        if not passthrough:
-            in_transmission_params = NodeTransmissionParameters(
-                slice(10, 15),
-                mock.Mock(),
-                np.random.uniform(size=(10, 5)),
-            )
-        else:
-            in_transmission_params = PassthroughNodeTransmissionParameters(
-                np.random.uniform(size=(10, 5)),
-            )
-
-        # Create the outgoing connection parameters
-        out_transmission_params = PassthroughNodeTransmissionParameters(
-            np.hstack((np.zeros((5, 5)), np.eye(5)))
-        )
-
-        # Combine the parameter sets
-        new_tps, new_in_port = model_utils._combine_transmission_params(
-                in_transmission_params,
-                out_transmission_params,
-                final_port
-            )
-
-        # Check that all the parameters are correct
-        if not passthrough:
-            assert new_tps.pre_slice == in_transmission_params.pre_slice
-            assert new_tps.function is in_transmission_params.function
-
-        assert np.all(new_tps.transform == np.dot(
-            out_transmission_params.transform,
-            in_transmission_params.transform
-        ))
-        assert new_tps.transform.shape == (5, 5)
-        assert new_in_port is final_port
-
-    # Ensemble and Passthrough Node to Neurons (Global Inhibition)
-    def test_ens_to_gi(self):
-        # Create the ingoing connection parameters
-        in_transmission_params = EnsembleTransmissionParameters(
-            np.random.uniform(size=(7, 100)), None
-        )
-
-        # Create the outgoing connection parameters
-        out_transmission_params = PassthroughNodeTransmissionParameters(
-            np.ones((200, 7))
-        )
-
-        # Combine the parameter sets
-        new_tps, new_in_port = model_utils._combine_transmission_params(
-                in_transmission_params,
-                out_transmission_params,
-                EnsembleInputPort.neurons
-            )
-
-        # Check that all the parameters are correct
-        assert new_tps.transform.shape == (1, 100)
-        assert new_in_port is EnsembleInputPort.global_inhibition
-
-    # Node and Passthrough Node to Neurons (Global Inhibition)
-    @pytest.mark.parametrize("passthrough", (False, True))
-    def test_node_to_gi(self, passthrough):
-        # Create the ingoing connection parameters
-        if not passthrough:
-            in_transmission_params = NodeTransmissionParameters(
-                slice(10, 20),
-                mock.Mock(),
-                np.ones((100, 1))
-            )
-        else:
-            in_transmission_params = PassthroughNodeTransmissionParameters(
-                np.ones((100, 1))
-            )
-
-        # Create the outgoing connection parameters
-        out_transmission_params = PassthroughNodeTransmissionParameters(
-            np.eye(100)
-        )
-
-        # Combine the parameter sets
-        new_tps, new_in_port = model_utils._combine_transmission_params(
-                in_transmission_params, out_transmission_params,
-                EnsembleInputPort.neurons
-            )
-
-        # Check that all the parameters are correct
-        if not passthrough:
-            assert new_tps.pre_slice == in_transmission_params.pre_slice
-            assert new_tps.function is in_transmission_params.function
-
-        assert np.all(new_tps.transform == np.dot(
-            out_transmission_params.transform,
-            in_transmission_params.transform
-        )[0])
-        assert new_tps.transform.shape[0] == 1
-        assert new_in_port is EnsembleInputPort.global_inhibition
-
-    @pytest.mark.parametrize("from_type", ("ensemble", "node", "ptn"))
-    @pytest.mark.parametrize("final_port",
-                             (model.InputPort.standard,
-                              EnsembleInputPort.neurons,
-                              EnsembleInputPort.global_inhibition))
-    def test_x_to_x_optimize_out(self, from_type, final_port):
-        # Create the ingoing connection parameters
-        in_transmission_params = {
-            "ensemble": EnsembleTransmissionParameters(np.dot([[1.0], [0.0]], np.random.uniform(size=(100, 1)).T), None),
-            "node": NodeTransmissionParameters(
-                        slice(10, 20),
-                        mock.Mock(),
-                        np.array([[1.0], [0.0]])
-                    ),
-            "ptn": PassthroughNodeTransmissionParameters(
-                       np.array([[1.0], [0.0]])
-                   ),
-        }[from_type]
-
-        # Create the outgoing connection parameters
-        out_transmission_params = PassthroughNodeTransmissionParameters(
-            np.array([[0.0, 0.0], [0.0, 1.0]])
-        )
-
-        # Combine the parameter sets
-        new_tps, new_in_port = model_utils._combine_transmission_params(
-                in_transmission_params,
-                out_transmission_params,
-                final_port
-            )
-
-        # Check that the connection is optimised out
-        assert new_tps is None
-        assert new_in_port is None
-
-    def test_unknown_to_x(self):
-        # Create the ingoing connection parameters
-        in_transmission_params = mock.Mock()
-        in_transmission_params.transform = 1.0
-
-        # Create the outgoing connection parameters
-        out_transmission_params = PassthroughNodeTransmissionParameters(
-            np.array([[0.0, 0.0], [0.0, 1.0]])
-        )
-
-        # Combine the parameter sets
-        with pytest.raises(NotImplementedError):
-             model_utils._combine_transmission_params(
-                    in_transmission_params,
-                    out_transmission_params,
-                    None
-                )
-
     # Test combining reception parameters
     def test_combine_none_and_lowpass_filter(self):
         # Create the ingoing reception parameters

@@ -554,24 +554,6 @@ class TestBuildNodeTransmissionParameters(object):
         assert params.function is func
         assert np.all(params.transform == 1.0)
 
-    def test_build_standard_node_global_inhibition(self):
-        # Create a network
-        with nengo.Network():
-            a = nengo.Node(lambda t: [t] * 5, size_out=5)
-            b = nengo.Ensemble(100, 1)
-
-            a_b = nengo.Connection(a[0:2], b.neurons,
-                                   transform=np.ones((b.n_neurons, 2)))
-
-        # Create an empty model to build into
-        model = Model()
-
-        # Build the transmission parameters
-        params = build_node_transmission_parameters(model, a_b)
-        assert params.pre_slice == slice(0, 2)
-        assert params.transform.shape == (1, 2)
-        assert np.all(params.transform == 1.0)
-
     def test_build_passthrough_node(self):
         # Create a network
         with nengo.Network():
@@ -585,23 +567,11 @@ class TestBuildNodeTransmissionParameters(object):
 
         # Build the transmission parameters
         params = build_node_transmission_parameters(model, a_b)
-        assert params.transform.shape == (7, 5)
-
-    def test_build_passthrough_node_global_inhibition(self):
-        # Create a network
-        with nengo.Network():
-            a = nengo.Node(None, size_in=5)
-            b = nengo.Ensemble(100, 1)
-
-            a_b = nengo.Connection(a[0:2], b.neurons,
-                                   transform=np.ones((b.n_neurons, 2)))
-
-        # Create an empty model to build into
-        model = Model()
-
-        # Build the transmission parameters
-        params = build_node_transmission_parameters(model, a_b)
-        assert params.transform.shape == (1, 5)
+        assert params.size_in == 5
+        assert params.size_out == 7
+        assert np.array_equal(params.slice_in, np.arange(2))
+        assert np.array_equal(params.slice_out, np.arange(7))
+        assert np.array_equal(params.transform, np.ones((7, 2)))
 
 
 class TestInputNode(object):

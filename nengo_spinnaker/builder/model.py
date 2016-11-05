@@ -2,6 +2,7 @@
 """
 import collections
 import enum
+from .ports import EnsembleInputPort
 from six import iteritems, itervalues, iterkeys
 
 
@@ -67,6 +68,14 @@ class ConnectionMap(object):
             Sink-specific parameters of how the received packets are to be
             treated.
         """
+        # Swap out the connection for a global inhibition connection if
+        # possible.
+        if (sink_port is EnsembleInputPort.neurons and
+                transmission_parameters.supports_global_inhibition):
+            sink_port = EnsembleInputPort.global_inhibition
+            transmission_parameters = \
+                transmission_parameters.as_global_inhibition_connection
+
         # Combine the signal parameters with the transmission parameters
         # (These represent the signal and can be hashed)
         pars = (signal_parameters, transmission_parameters)

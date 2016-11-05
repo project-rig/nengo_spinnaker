@@ -12,9 +12,6 @@ from nengo_spinnaker.netlist import Vertex
 from nengo_spinnaker.partition import divide_slice
 from nengo_spinnaker.utils.application import get_application
 
-from ..builder.connection import (EnsembleTransmissionParameters,
-                                  PassthroughNodeTransmissionParameters)
-
 
 class Regions(enum.IntEnum):
     """Region names, corresponding to those used in `value_sink.c`"""
@@ -148,16 +145,7 @@ class ValueSinkVertex(Vertex):
 
     def accepts_signal(self, signal_params, transmission_params):
         """Choose whether to receive this signal or not."""
-        if isinstance(transmission_params,
-                      (PassthroughNodeTransmissionParameters,
-                       EnsembleTransmissionParameters)):
-            # If the connection is from a Node of some variety then only return
-            # true if the transform contains non-zero values in the rows which
-            # relate to the subspace we receive input in.
-            return np.any(transmission_params.transform[self.input_slice])
-
-        # We don't know how to interpret the transmission parameters
-        raise NotImplementedError
+        return transmission_params.projects_to(self.input_slice)
 
     def load_to_machine(self, netlist):
         # Get a block of memory for each of the regions

@@ -1,11 +1,11 @@
 import nengo
 from nengo.processes import Process
-from nengo.utils.builder import full_transform
 import numpy as np
 import threading
 
-from .connection import (PassthroughNodeTransmissionParameters,
-                         NodeTransmissionParameters)
+from .transmission_parameters import (
+    PassthroughNodeTransmissionParameters,
+    NodeTransmissionParameters)
 from nengo_spinnaker.builder.builder import ObjectPort, spec, Model
 from nengo_spinnaker.builder.model import InputPort, OutputPort
 from nengo_spinnaker.operators import Filter, ValueSink, ValueSource
@@ -283,27 +283,27 @@ class NodeIOController(object):
 def build_node_transmission_parameters(model, conn):
     """Build transmission parameters for a connection originating at a Node."""
     if conn.pre_obj.output is not None:
-        # Connection is not from a passthrough Node
-        # Get the full transform, not including the pre_slice
-        transform = full_transform(conn, slice_pre=False, allow_scalars=False)
-    else:
-        # Connection is from a passthrough Node
-        # Get the full transform
-        transform = full_transform(conn, allow_scalars=False)
+        if conn.function is None:
+            size_in = conn.pre_obj.size_out
+        else:
+            size_in = conn.size_mid
 
-    # If the connection is to neurons and the transform is equivalent in every
-    # row we treat it as a global inhibition connection and shrink it down to
-    # one row.
-    if (isinstance(conn.post_obj, nengo.ensemble.Neurons) and
-            np.all(transform[0, :] == transform[1:, :])):
-        # Reduce the size of the transform
-        transform = np.array([transform[0]])
-
-    if conn.pre_obj.output is not None:
-        return NodeTransmissionParameters(conn.pre_slice, conn.function,
-                                          transform)
+        return NodeTransmissionParameters(
+            size_in=size_in,
+            size_out=conn.post_obj.size_in,
+            transform=conn.transform,
+            slice_out=conn.post_slice,
+            pre_slice=conn.pre_slice,
+            function=conn.function
+        )
     else:
-        return PassthroughNodeTransmissionParameters(transform)
+        return PassthroughNodeTransmissionParameters(
+            size_in=conn.pre_obj.size_out,
+            size_out=conn.post_obj.size_in,
+            transform=conn.transform,
+            slice_in=conn.pre_slice,
+            slice_out=conn.post_slice
+        )
 
 
 class InputNode(nengo.Node):

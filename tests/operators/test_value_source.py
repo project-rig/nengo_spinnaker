@@ -18,8 +18,8 @@ def test_get_transform_keys():
 
     # Check that the expected transform and signals list are returned
     signal = mock.Mock()
-    t_pars = mock.Mock(spec_set=["transform"])
-    t_pars.transform = transform
+    t_pars = mock.Mock(spec_set=["full_transform"])
+    t_pars.full_transform.return_value = transform
 
     new_transform, signal_args = get_transform_keys(signal, t_pars)
     assert np.array_equal(

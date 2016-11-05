@@ -1068,6 +1068,7 @@ class LIFRegion(regions.Region):
             int(self.tau_ref // self.dt)
         ))
 
+
 PESLearningRule = collections.namedtuple(
     "PESLearningRule",
     "learning_rate, error_filter_index, decoder_start, decoder_stop, "
@@ -1128,6 +1129,7 @@ class PESRegion(regions.Region):
         return [l for l in self.learning_rules
                 if (l.decoder_start < learnt_output_slice.stop and
                     l.decoder_stop > learnt_output_slice.start)]
+
 
 VojaLearningRule = collections.namedtuple(
     "VojaLearningRule",
@@ -1220,7 +1222,7 @@ def get_decoders_and_keys(signals_connections, minimise=False):
     # For each signal with a single connection we save the decoder and generate
     # appropriate keys
     for signal, transmission_params in signals_connections:
-        decoder = transmission_params.transform
+        decoder = transmission_params.full_decoders
 
         if not minimise:
             keep = np.array([True for _ in range(decoder.shape[0])])
