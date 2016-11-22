@@ -70,6 +70,7 @@ def main(args=None):
         print("Successfully created config file in {}".format(filename))
         return 0
 
+
 if __name__ == "__main__":  # pragma: no cover
     import sys
     sys.exit(main())
