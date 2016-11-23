@@ -392,7 +392,7 @@ class NodeTransmissionParameters(TransmissionParameters):
 def _get_slice_as_ndarray(sl, size):
     """Return a slice as a read-only Numpy array."""
     if isinstance(sl, slice):
-        sl = np.arange(size)[sl]
+        sl = np.array(range(size)[sl])
     else:
         sl = np.array(sorted(set(sl)))
 

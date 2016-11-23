@@ -86,6 +86,15 @@ class TestPassthroughNodeTransmissionParameters(object):
         assert tp1 == tp3
         assert hash(tp1) == hash(tp3)
 
+    def test_hash_with_sliced_input(self):
+        tp = PassthroughNodeTransmissionParameters(
+            size_in=10, size_out=5, transform=1,
+            slice_in=slice(0, 10, 2)
+        )
+
+        # Fails if the slicing is performed poorly
+        hash(tp)
+
     def test_full_transform_slice_in(self):
         # Simple case with a pre-slice only
         tp = PassthroughNodeTransmissionParameters(
