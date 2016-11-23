@@ -40,11 +40,10 @@ def get_ensemble_source(model, conn):
 
 
 @Model.source_getters.register(nengo.ensemble.Neurons)
-def get_neurons_source(model, connection):
+def get_neurons_source(model, conn):
     """Get the source for connections out of neurons."""
-    raise NotImplementedError(
-        "SpiNNaker does not currently support neuron to neuron connections"
-    )
+    ens = model.object_operators[conn.pre_obj.ensemble]
+    return spec(ObjectPort(ens, EnsembleOutputPort.neurons))
 
 
 @Model.sink_getters.register(nengo.Ensemble)
@@ -254,9 +253,7 @@ def build_from_ensemble_connection(model, conn):
 @Model.transmission_parameter_builders.register(nengo.ensemble.Neurons)
 def build_from_neurons_connection(model, conn):
     """Build the parameters object for a connection from Neurons."""
-    raise NotImplementedError(
-        "SpiNNaker does not currently support connections from Neurons"""
-    )
+    return object()
 
 
 @Model.probe_builders.register(nengo.Ensemble)

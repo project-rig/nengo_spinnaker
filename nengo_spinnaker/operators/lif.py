@@ -93,6 +93,7 @@ class EnsembleLIF(object):
 
         # Extract all the filters from the incoming connections
         incoming = model.get_signals_to_object(self)
+        assert EnsembleInputPort.neurons not in incoming
 
         # Filter out incoming modulatory connections
         incoming_modulatory = {port: signal
@@ -115,6 +116,7 @@ class EnsembleLIF(object):
         # Extract all the decoders for the outgoing connections and build the
         # regions for the decoders and the regions for the output keys.
         outgoing = model.get_signals_from_object(self)
+        assert EnsembleOutputPort.neurons not in outgoing
         if OutputPort.standard in outgoing:
             decoders, output_keys = \
                 get_decoders_and_keys(outgoing[OutputPort.standard], True)
