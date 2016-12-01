@@ -149,7 +149,7 @@ class Simulator(object):
 
         # Create a controller for the machine and boot if necessary
         self.job = None
-        if not use_spalloc:
+        if not use_spalloc or hostname is not None:
             # Use the specified machine rather than trying to get one
             # allocated.
             if hostname is None:

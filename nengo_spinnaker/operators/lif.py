@@ -1068,6 +1068,7 @@ class LIFRegion(regions.Region):
             int(self.tau_ref // self.dt)
         ))
 
+
 PESLearningRule = collections.namedtuple(
     "PESLearningRule",
     "learning_rate, error_filter_index, decoder_start, decoder_stop, "
@@ -1128,6 +1129,7 @@ class PESRegion(regions.Region):
         return [l for l in self.learning_rules
                 if (l.decoder_start < learnt_output_slice.stop and
                     l.decoder_stop > learnt_output_slice.start)]
+
 
 VojaLearningRule = collections.namedtuple(
     "VojaLearningRule",
