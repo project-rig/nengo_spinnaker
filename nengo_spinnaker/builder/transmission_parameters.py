@@ -9,8 +9,8 @@ network as multicast packets]. Each type of transmission parameter must be
 
 Moreover, each transmission parameter type must have a method called `concats`
 which accepts a list of `PassthroughNodeTransmissionParameters` as an argument
-and yields new transmission parameters which representing the result of
-chaining the first parameter with each of the other parameters. Several sample
+and yields new transmission parameters which represent the result of chaining
+the first parameter with each of the other parameters. Several sample
 implementations of this method are presented within this document.
 
 Each parameter must have a method called `projects_to` which accepts a valid
@@ -24,7 +24,7 @@ indicates that every row of the transform they represent is equivalent. This
 can be used to reduce the number of packets that is required to suppress the
 firing of some neurons. An additional property called
 `as_global_inhibition_connection` is required to return a modified version of
-the parameters with a size out of `1` and only containing one row of the
+the parameters with a size out of `1` and containing only one row of the
 transform.
 
 Finally, each parameter type must have a method called `full_transform` which
