@@ -6,6 +6,7 @@ from rig.place_and_route import Cores
 from six import iteritems
 import socket
 import threading
+import timeit
 
 from ..builder.builder import spec, ObjectPort
 from ..builder.model import InputPort, OutputPort
@@ -110,10 +111,16 @@ class Ethernet(NodeIOController):
             # Store this mapping (x, y, p) -> Node
             self._node_incoming[(x, y, p)] = node
 
+    start_time = None
     def set_node_output(self, node, value):
         """Transmit the value output by a Node."""
         # Build an SDP packet to transmit for each outgoing connection for the
         # node
+
+        if not hasattr(node, '_to_spinn_times'):
+            node._to_spinn_times = []
+        if self.start_time is None:
+            self.start_time = timeit.default_timer()
         for transmission_params, (x, y, p) in self._node_outgoing[node]:
             # Apply the pre-slice, the connection function and the transform.
             c_value = value[transmission_params.pre_slice]
@@ -127,6 +134,7 @@ class Ethernet(NodeIOController):
                                cmd_rc=0, arg1=0, arg2=0, arg3=0, data=data)
             self.out_socket.sendto(packet.bytestring,
                                    (self._hostname, SCP_PORT))
+            node._to_spinn_times.append(timeit.default_timer()-self.start_time)
 
     def spawn(self):
         """Get a new thread which will manage transmitting and receiving Node
@@ -153,6 +161,7 @@ class EthernetThread(threading.Thread):
         self.in_sock.settimeout(0.0001)
 
     def run(self):
+        start = timeit.default_timer()
         while not self.halt:
             # Read as many packets from the socket as we can
             while True:
@@ -172,6 +181,11 @@ class EthernetThread(threading.Thread):
                 node = self.handler._node_incoming[(packet.src_x,
                                                     packet.src_y,
                                                     packet.src_cpu)]
+
+                if not hasattr(node, '_from_spinn_times'):
+                    node._from_spinn_times = []
+                now = timeit.default_timer()
+                node._from_spinn_times.append(now - start)
                 with self.handler.node_input_lock:
                     self.handler.node_input[node] = values[:]
 
