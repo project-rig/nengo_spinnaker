@@ -331,31 +331,6 @@ class TestEnsembleSink(object):
 
 
 class TestNeuronSinks(object):
-    def test_global_inhibition_sink(self):
-        """Test that sinks are correctly determined for connections which are
-        global inhibition connections.
-        """
-        # Create a model with a global inhibition connection
-        with nengo.Network():
-            a = nengo.Ensemble(100, 2)
-            b = nengo.Ensemble(200, 4)
-
-            a_b = nengo.Connection(a, b.neurons, transform=[[1.0, 0.5]]*200)
-
-        # Create a model with the Ensemble for b in it
-        model = builder.Model()
-        b_ens = operators.EnsembleLIF(b)
-        model.object_operators[b] = b_ens
-
-        decs = mock.Mock()
-        evals = mock.Mock()
-        si = mock.Mock()
-
-        # Get the sink, check that an appropriate target is return
-        sink = ensemble.get_neurons_sink(model, a_b)
-        assert sink.target.obj is b_ens
-        assert sink.target.port is ensemble.EnsembleInputPort.global_inhibition
-
     @pytest.mark.parametrize("source", ("neurons", "value"))
     def test_arbitrary_neuron_sink(self, source):
         """Test that standard connections to neurons return an appropriate
@@ -410,8 +385,8 @@ class TestBuildFromEnsembleConnection(object):
 
         # Now build the connection and check that the params seem sensible
         tparams = ensemble.build_from_ensemble_connection(model, a_b)
-        assert tparams.transform.shape == (2, 200)
-        assert np.all(tparams.transform[1, :] == 0.0)
+        assert tparams.full_decoders.shape == (2, 200)
+        assert np.all(tparams.full_decoders[1, :] == 0.0)
 
         # Check that the params stored in the model are correct
         params = model.params[a_b]
@@ -419,32 +394,6 @@ class TestBuildFromEnsembleConnection(object):
         assert np.all(params.transform == a_b.transform)
         assert np.all(params.eval_points == model.params[a].eval_points)
         assert params.solver_info is not None
-
-    def test_to_global_inhibition(self):
-        """Test that the transmission parameters are modified for a global
-        inhibition connection.
-        """
-        # Create the network
-        with nengo.Network():
-            a = nengo.Ensemble(200, 3)
-            b = nengo.Ensemble(300, 1)
-            a_b = nengo.Connection(a, b.neurons,
-                                   transform=[[1.0, 0.5, 0.2]]*b.n_neurons)
-
-        # Create the model and built the pre-synaptic Ensemble
-        model = builder.Model()
-        model.rng = np.random
-        model.seeds[a] = 1
-        model.seeds[a_b] = 2
-        ensemble.build_ensemble(model, a)
-
-        # Now build the connection and check that the params seem sensible
-        tparams = ensemble.build_from_ensemble_connection(model, a_b)
-        assert tparams.transform.shape == (1, 200)
-
-        # Check that the params stored in the model are correct
-        params = model.params[a_b]
-        assert np.all(params.transform == a_b.transform)
 
     @pytest.mark.xfail(reason="Unimplemented functionality")
     def test_weights_built(self):

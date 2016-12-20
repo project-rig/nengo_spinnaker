@@ -98,8 +98,11 @@ class Ethernet(NodeIOController):
                 p = netlist.allocations[vertex][Cores].start
 
                 # Store this transmission parameters to (x, y, p) map
-                self._node_outgoing[node].append((transmission_params,
-                                                  (x, y, p)))
+                self._node_outgoing[node].append((
+                    (transmission_params.pre_slice,
+                     transmission_params.function,
+                     transmission_params.full_transform(slice_out=False)),
+                    (x, y, p)))
 
         # Build a map of (x, y, p) to Node for incoming values
         for node, sdp_tx in iteritems(self._sdp_transmitters):
@@ -114,12 +117,13 @@ class Ethernet(NodeIOController):
         """Transmit the value output by a Node."""
         # Build an SDP packet to transmit for each outgoing connection for the
         # node
-        for transmission_params, (x, y, p) in self._node_outgoing[node]:
+        for (pre_slice, function, transform), (x, y, p) in \
+                self._node_outgoing[node]:
             # Apply the pre-slice, the connection function and the transform.
-            c_value = value[transmission_params.pre_slice]
-            if transmission_params.function is not None:
-                c_value = transmission_params.function(c_value)
-            c_value = np.dot(transmission_params.transform, c_value)
+            c_value = value[pre_slice]
+            if function is not None:
+                c_value = function(c_value)
+            c_value = np.dot(transform, c_value)
 
             # Transmit the packet
             data = bytes(tp.np_to_fix(c_value).data)

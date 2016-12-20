@@ -8,14 +8,9 @@ from six.moves import filter as sfilter
 from six import iteritems, itervalues
 from toposort import toposort
 
-from nengo_spinnaker.builder.ensemble import EnsembleTransmissionParameters
 from nengo_spinnaker.builder.model import (
     ReceptionParameters, SignalParameters
 )
-from nengo_spinnaker.builder.node import (
-    PassthroughNodeTransmissionParameters, NodeTransmissionParameters
-)
-from nengo_spinnaker.builder.ports import EnsembleInputPort
 from nengo_spinnaker.utils.config import getconfig
 
 
@@ -311,17 +306,14 @@ def _multiply_signals(in_kwargs, out_conn_kwargs):
     dict
         Keyword arguments for `ConnectionMap.add_connection`
     """
-    # For every outgoing connection
-    for out_conn in out_conn_kwargs:
-        # Combine the transmission parameters
-        transmission_parameters, sink_port = _combine_transmission_params(
-            in_kwargs["transmission_parameters"],
-            out_conn["transmission_parameters"],
-            out_conn["sink_port"]
-        )
+    # Combine the transmission parameters
+    tps = in_kwargs["transmission_parameters"].concats(
+        out["transmission_parameters"] for out in out_conn_kwargs)
 
+    # For every outgoing connection
+    for transmission_parameters, out_conn in zip(tps, out_conn_kwargs):
         # If the connection has been optimised out then move on
-        if transmission_parameters is None and sink_port is None:
+        if transmission_parameters is None:
             continue
 
         # Combine the reception parameters
@@ -357,69 +349,9 @@ def _multiply_signals(in_kwargs, out_conn_kwargs):
             "signal_parameters": signal_parameters,
             "transmission_parameters": transmission_parameters,
             "sink_object": out_conn["sink_object"],
-            "sink_port": sink_port,
+            "sink_port": out_conn["sink_port"],
             "reception_parameters": reception_parameters,
         }
-
-
-def _combine_transmission_params(in_transmission_parameters,
-                                 out_transmission_parameters,
-                                 final_port):
-    """Combine transmission parameters to join two signals into one, e.g., for
-    optimising out a passthrough Node.
-
-    Returns
-    -------
-    transmission_parameters
-        New transmission parameters
-    port
-        New receiving port for the connection
-    """
-    assert isinstance(out_transmission_parameters,
-                      PassthroughNodeTransmissionParameters)
-
-    # Compute the new transform
-    new_transform = np.dot(out_transmission_parameters.transform,
-                           in_transmission_parameters.transform)
-
-    # If the resultant transform is empty then we return None to indicate that
-    # the connection should be dropped.
-    if np.all(new_transform == 0.0):
-        return None, None
-
-    # If the connection is a global inhibition connection then truncate the
-    # transform and modify the final port to reroute the connection.
-    if (final_port is EnsembleInputPort.neurons and
-            np.all(new_transform[0] == new_transform[1:])):
-        # Truncate the transform
-        new_transform = new_transform[0]
-        new_transform.shape = (1, -1)  # Ensure the result is a matrix
-
-        # Change the final port
-        final_port = EnsembleInputPort.global_inhibition
-
-    # Construct the new transmission parameters
-    if isinstance(in_transmission_parameters,
-                  EnsembleTransmissionParameters):
-        transmission_params = EnsembleTransmissionParameters(
-            new_transform, in_transmission_parameters.learning_rule
-        )
-    elif isinstance(in_transmission_parameters,
-                    NodeTransmissionParameters):
-        transmission_params = NodeTransmissionParameters(
-            in_transmission_parameters.pre_slice,
-            in_transmission_parameters.function,
-            new_transform
-        )
-    elif isinstance(in_transmission_parameters,
-                    PassthroughNodeTransmissionParameters):
-        transmission_params = PassthroughNodeTransmissionParameters(
-            new_transform
-        )
-    else:
-        raise NotImplementedError
-
-    return transmission_params, final_port
 
 
 def _combine_reception_params(in_reception_parameters,

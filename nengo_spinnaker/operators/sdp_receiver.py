@@ -30,7 +30,7 @@ class SDPReceiver(object):
         for signal, transmission_params in \
                 model.get_signals_from_object(self)[OutputPort.standard]:
             # Get the transform, and from this the keys
-            transform = transmission_params.transform
+            transform = transmission_params.full_transform(slice_out=False)
             keys = [(signal, {"index": i}) for i in
                     range(transform.shape[0])]
 

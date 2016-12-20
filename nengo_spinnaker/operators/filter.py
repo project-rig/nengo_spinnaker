@@ -13,9 +13,6 @@ from nengo_spinnaker.utils.application import get_application
 from nengo_spinnaker.utils.collections import flatinsertionlist
 from nengo_spinnaker.utils.type_casts import np_to_fix
 
-from ..builder.connection import (EnsembleTransmissionParameters,
-                                  PassthroughNodeTransmissionParameters)
-
 from nengo_spinnaker.partition import divide_slice
 
 
@@ -310,16 +307,7 @@ class FilterCore(Vertex):
 
     def accepts_signal(self, signal_params, transmission_params):
         """Choose whether to receive this signal or not."""
-        if isinstance(transmission_params,
-                      (PassthroughNodeTransmissionParameters,
-                       EnsembleTransmissionParameters)):
-            # If the connection is from a Node of some variety then only return
-            # true if the transform contains non-zero values in the rows which
-            # relate to the subspace we receive input in.
-            return np.any(transmission_params.transform[self.column_slice])
-
-        # We don't know how to interpret the transmission parameters
-        raise NotImplementedError
+        return transmission_params.projects_to(self.column_slice)
 
     def transmits_signal(self, signal_params, transmission_params):
         """Choose whether we transmit this signal or not."""
@@ -388,7 +376,8 @@ def get_transforms_and_keys(signals_connections, columns):
     start = end = 0
     for signal, transmission_params in signals_connections:
         # Extract the transform
-        transform = transmission_params.transform[:, columns]
+        transform = transmission_params.full_transform(
+            slice_in=False, slice_out=False)[:, columns]
 
         if signal.latching:
             # If the signal is latching then we use the transform exactly as it

@@ -10,7 +10,7 @@ from nengo.utils import numpy as npext
 import numpy as np
 
 from .builder import BuiltConnection, Model, ObjectPort, spec
-from .connection import EnsembleTransmissionParameters
+from .transmission_parameters import EnsembleTransmissionParameters
 from .model import InputPort, OutputPort
 from .ports import EnsembleInputPort, EnsembleOutputPort
 from .. import operators
@@ -121,20 +121,7 @@ def get_learning_rule_sink(model, connection):
 def get_neurons_sink(model, connection):
     """Get the sink for connections into the neurons of an ensemble."""
     ens = model.object_operators[connection.post_obj.ensemble]
-
-    if (connection.transform.ndim == 2 and
-            np.all(connection.transform[1:] == connection.transform[0])):
-        # Connections from non-neurons to Neurons where the transform delivers
-        # the same value to all neurons are treated as global inhibition
-        # connection.
-        # Return a signal to the correct port.
-        return spec(ObjectPort(ens, EnsembleInputPort.global_inhibition))
-    else:
-        #  - Connections from Neurons can go straight to the Neurons.
-        #  - Otherwise we don't support arbitrary connections into neurons, but
-        #    we allow them because they may be optimised out later when we come
-        #    to remove passthrough nodes.
-        return spec(ObjectPort(ens, EnsembleInputPort.neurons))
+    return spec(ObjectPort(ens, EnsembleInputPort.neurons))
 
 
 ensemble_builders = collections_ext.registerabledict()
@@ -243,7 +230,7 @@ def build_from_ensemble_connection(model, conn):
     rng = np.random.RandomState(model.seeds[conn])
 
     # Get the transform
-    transform = full_transform(conn, slice_pre=False, allow_scalars=False)
+    transform = conn.transform
 
     # Solve for the decoders
     eval_points, decoders, solver_info = build_decoders(model, conn, rng)
@@ -254,14 +241,11 @@ def build_from_ensemble_connection(model, conn):
                                          transform=transform,
                                          solver_info=solver_info)
 
-    # Modify the transform if this is a global inhibition connection
-    if (isinstance(conn.post_obj, nengo.ensemble.Neurons) and
-            np.all(transform[0, :] == transform[1:, :])):
-        transform = np.array([transform[0]])
-
-    transform = np.dot(transform, decoders.T)
-
-    return EnsembleTransmissionParameters(transform, conn.learning_rule)
+    return EnsembleTransmissionParameters(decoders.T,
+                                          conn.post_obj.size_in,
+                                          conn.post_slice,
+                                          conn.learning_rule,
+                                          transform)
 
 
 @Model.transmission_parameter_builders.register(nengo.ensemble.Neurons)

@@ -51,8 +51,11 @@ class TestFilter(object):
         signal_parameters = SignalParameters(False, 3, m.keyspaces["nengo"])
         signal_parameters.keyspace.length = 32
 
-        transmission_parameters = \
-            PassthroughNodeTransmissionParameters(np.ones((32*3, 3)))
+        transmission_parameters = PassthroughNodeTransmissionParameters(
+            size_in=3,
+            size_out=96,
+            transform=np.ones((96, 3))
+        )
         m.connection_map.add_connection(
             filter_op, OutputPort.standard, signal_parameters,
             transmission_parameters, None, None, None
@@ -85,10 +88,14 @@ def test_get_transforms_and_keys():
     """
     # Create 2 mock signals and associated connections
     sig_a = SignalParameters()
-    conn_a = PassthroughNodeTransmissionParameters(np.eye(2))
+    conn_a = PassthroughNodeTransmissionParameters(
+        size_in=2, size_out=2, transform=np.eye(2)
+    )
 
     sig_b = SignalParameters()
-    conn_b = PassthroughNodeTransmissionParameters(np.array([[0.5, 0.5]]))
+    conn_b = PassthroughNodeTransmissionParameters(
+        size_in=2, size_out=1, transform=np.array([[0.5, 0.5]])
+    )
     transform_b = conn_b.transform
 
     # Create the dictionary type that will be used
@@ -126,10 +133,14 @@ def test_get_transforms_and_keys_for_columns():
     """
     # Create 2 mock signals and associated connections
     sig_a = SignalParameters()
-    conn_a = PassthroughNodeTransmissionParameters(np.ones((2, 2)))
+    conn_a = PassthroughNodeTransmissionParameters(
+        size_in=2, size_out=2, transform=np.ones((2, 2))
+    )
 
     sig_b = SignalParameters()
-    conn_b = PassthroughNodeTransmissionParameters(np.array([[0.5, 0.5]]))
+    conn_b = PassthroughNodeTransmissionParameters(
+        size_in=2, size_out=1, transform=np.array([[0.5, 0.5]])
+    )
     transform_b = conn_b.transform
 
     # Create the dictionary type that will be used
@@ -175,7 +186,9 @@ def test_get_transforms_and_keys_removes_zeroed_rows(latching):
     sig = SignalParameters(latching=latching)
 
     # Create a mock connection
-    conn = PassthroughNodeTransmissionParameters(transform)
+    conn = PassthroughNodeTransmissionParameters(
+        size_in=5, size_out=10, transform=transform
+    )
 
     signals_connections = [(sig, conn)]
 

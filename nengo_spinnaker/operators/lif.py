@@ -1222,7 +1222,7 @@ def get_decoders_and_keys(signals_connections, minimise=False):
     # For each signal with a single connection we save the decoder and generate
     # appropriate keys
     for signal, transmission_params in signals_connections:
-        decoder = transmission_params.transform
+        decoder = transmission_params.full_decoders
 
         if not minimise:
             keep = np.array([True for _ in range(decoder.shape[0])])

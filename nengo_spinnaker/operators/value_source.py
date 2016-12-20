@@ -214,7 +214,7 @@ class SystemRegion(regions.Region):
 def get_transform_keys(sig, transmission_params):
     # Get the transform for the connection from the list of built connections,
     # then remove zeroed rows (should any exist) and derive the list of keys.
-    transform = transmission_params.transform
+    transform = transmission_params.full_transform(slice_out=False)
     keep = np.any(transform != 0.0, axis=1)
     keys = list()
 
