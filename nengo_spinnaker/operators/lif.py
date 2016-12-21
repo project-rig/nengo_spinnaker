@@ -19,9 +19,10 @@ from rig.place_and_route.constraints import SameChipConstraint
 from six import iteritems, itervalues
 import struct
 
-from nengo_spinnaker.builder.model import InputPort, OutputPort
 from nengo_spinnaker.builder.netlist import netlistspec
-from nengo_spinnaker.builder.ports import EnsembleInputPort, EnsembleOutputPort
+from nengo_spinnaker.builder.ports import (
+    EnsembleInputPort, EnsembleOutputPort, InputPort, OutputPort
+)
 from nengo_spinnaker.regions.filters import (FilterRegion, FilterRoutingRegion,
                                              add_filters, make_filter_regions)
 from nengo_spinnaker.regions.utils import Args

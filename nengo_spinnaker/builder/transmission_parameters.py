@@ -7,11 +7,11 @@ network as multicast packets]. Each type of transmission parameter must be
 *equatable* (it must have both `__ne__` and `__eq__` defined) and *hashable*
 (it must have `__hash__` defined).
 
-Moreover, each transmission parameter type must have a method called `concats`
-which accepts a list of `PassthroughNodeTransmissionParameters` as an argument
-and yields new transmission parameters which represent the result of chaining
-the first parameter with each of the other parameters. Several sample
-implementations of this method are presented within this document.
+Moreover, each transmission parameter type must have a method called `concat`
+which accepts a `PassthroughNodeTransmissionParameters` as an argument and
+returns new transmission parameters representing the result of chaining the
+first parameter with the other. Several sample implementations of this method
+are presented within this document.
 
 Each parameter must have a method called `projects_to` which accepts a valid
 slice of dimensions and returns a boolean indicating whether any non-zero
@@ -42,7 +42,7 @@ except ImportError:  # pragma: no cover
                   "Install xxhash to improve build performance.", UserWarning)
 
 
-class TransmissionParameters(object):
+class Transform(object):
     __slots__ = ["size_in", "size_out", "transform", "slice_in", "slice_out"]
 
     def __init__(self, size_in, size_out, transform,
@@ -51,37 +51,43 @@ class TransmissionParameters(object):
         self.size_out = size_out
 
         # Transform the slices into an appropriate format
-        self.slice_in = _get_slice_as_ndarray(slice_in, size_in)
-        self.slice_out = _get_slice_as_ndarray(slice_out, size_out)
+        self.slice_in = Transform._get_slice_as_ndarray(slice_in, size_in)
+        self.slice_out = Transform._get_slice_as_ndarray(slice_out, size_out)
 
         # Copy the transform into a C-contiguous, read-only form
         self.transform = np.array(transform, order='C')
         self.transform.flags["WRITEABLE"] = False
 
+    @staticmethod
+    def _get_slice_as_ndarray(sl, size):
+        """Return a slice as a read-only Numpy array."""
+        if isinstance(sl, slice):
+            sl = np.array(range(size)[sl])
+        else:
+            sl = np.array(sorted(set(sl)))
+
+        sl.flags["WRITEABLE"] = False
+
+        return sl
+
     def __ne__(self, other):
         return not self == other
 
     def __eq__(self, other):
-        return (type(self) is type(other) and
-                self.size_in == other.size_in and
+        return (self.size_in == other.size_in and
                 self.size_out == other.size_out and
                 np.array_equal(self.slice_in, other.slice_in) and
                 np.array_equal(self.slice_out, other.slice_out) and
                 np.array_equal(self.transform, other.transform))
 
-    @property
-    def _hashables(self):
-        return ((type(self),
-                 self.size_in,
-                 self.size_out,
-                 fasthash(self.slice_in).hexdigest(),
-                 fasthash(self.slice_out).hexdigest(),
-                 fasthash(self.transform).hexdigest()))
-
     def __hash__(self):
         # The hash is combination of all the elements of the tuple, but we use
         # a faster hashing mechanism to hash the array types.
-        return hash(self._hashables)
+        return hash((self.size_in,
+                     self.size_out,
+                     fasthash(self.slice_in).hexdigest(),
+                     fasthash(self.slice_out).hexdigest(),
+                     fasthash(self.transform).hexdigest()))
 
     def full_transform(self, slice_in=True, slice_out=True):
         """Get an expanded form of the transform."""
@@ -109,6 +115,119 @@ class TransmissionParameters(object):
 
         return transform
 
+    def projects_to(self, space):
+        """Indicate whether the output of the connection described by the
+        connection will intersect with the specified range of dimensions.
+        """
+        space = set(Transform._get_slice_as_ndarray(space, self.size_out))
+
+        if self.transform.ndim == 0:
+            outputs = set(self.slice_out)
+        elif self.transform.ndim == 1:
+            outputs = set(self.slice_out[self.transform != 0])
+        elif self.transform.ndim == 2:
+            outputs = set(self.slice_out[np.any(self.transform != 0, axis=1)])
+        else:  # pragma: no cover
+            raise NotImplementedError
+
+        return len(outputs.intersection(space)) != 0
+
+    def concat(a, b):
+        """Return a transform which is the result of concatenating this
+        transform with another.
+        """
+        assert a.size_out == b.size_in
+
+        # Determine where the output dimensions of this transform and the input
+        # dimensions of the other intersect.
+        out_sel = np.zeros(a.size_out, dtype=bool)
+        out_sel[a.slice_out] = True
+
+        in_sel = np.zeros(b.size_in, dtype=bool)
+        in_sel[b.slice_in] = True
+
+        mid_sel = np.logical_and(out_sel, in_sel)
+
+        # If the slices do not intersect at all then return None to indicate
+        # that the connection will be empty.
+        if not np.any(mid_sel):
+            return None
+
+        # If the first transform is specified with either a scalar or a vector
+        # (as a diagonal) then the slice in is modified by `mid_sel'.
+        slice_in_sel = mid_sel[a.slice_out]
+        if a.transform.ndim < 2:
+            # Get the new slice in
+            slice_in = a.slice_in[slice_in_sel]
+
+            # Get the new transform
+            if a.transform.ndim == 0:
+                a_transform = a.transform
+            else:
+                a_transform = a.transform[slice_in_sel]
+        else:
+            # The slice in remains the same but the rows of the transform are
+            # sliced.
+            slice_in = a.slice_in
+            a_transform = a.transform[slice_in_sel]
+
+        # If the second transform is specified with either a scalar or a vector
+        # (as a diagonal) then the output slice is modified by `mid_sel'
+        slice_out_sel = mid_sel[b.slice_in]
+        if b.transform.ndim < 2:
+            # Get the new slice out
+            slice_out = b.slice_out[slice_out_sel]
+
+            # Get the new transform
+            if b.transform.ndim == 0:
+                b_transform = b.transform
+            else:
+                b_transform = b.transform[slice_out_sel]
+        else:
+            # The slice out remains the same but the columns of the transform
+            # are sliced.
+            slice_out = b.slice_out
+            b_transform = b.transform[:, slice_out_sel]
+
+        # Multiply the transforms together
+        if a_transform.ndim < 2 or b_transform.ndim == 0:
+            new_transform = b_transform * a_transform
+        elif b_transform.ndim == 1:
+            new_transform = (b_transform * a_transform.T).T
+        else:
+            new_transform = np.dot(b_transform, a_transform)
+
+        # If the transform is filled with zeros then return None
+        if not np.any(new_transform != 0.0):
+            return None
+
+        # Create the new Transform
+        return Transform(size_in=a.size_in, slice_in=slice_in,
+                         transform=new_transform,
+                         size_out=b.size_out, slice_out=slice_out)
+
+
+class TransmissionParameters(object):
+    __slots__ = ["_transform"]
+
+    def __init__(self, transform):
+        # Store the transform
+        self._transform = transform
+
+    def __getattr__(self, attr):
+        # Forward the request to the transform
+        return getattr(self._transform, attr)
+
+    def __ne__(self, other):
+        return not self == other
+
+    def __eq__(self, other):
+        return (type(self) is type(other) and
+                self._transform == other._transform)
+
+    def __hash__(self):
+        return hash((type(self), self._transform))
+
     @property
     def supports_global_inhibition(self):
         """Indicates whether this transform supports being optimised out as a
@@ -122,63 +241,35 @@ class TransmissionParameters(object):
     def as_global_inhibition_connection(self):  # pragma: no cover
         raise NotImplementedError
 
-    def projects_to(self, space):
-        """Indicate whether the output of the connection described by the
-        connection will intersect with the specified range of dimensions.
-        """
-        space = set(_get_slice_as_ndarray(space, self.size_out))
-
-        if self.transform.ndim == 0:
-            outputs = set(self.slice_out)
-        elif self.transform.ndim == 1:
-            outputs = set(self.slice_out[self.transform != 0])
-        elif self.transform.ndim == 2:
-            outputs = set(self.slice_out[np.any(self.transform != 0, axis=1)])
-        else:  # pragma: no cover
-            raise NotImplementedError
-
-        return len(outputs.intersection(space)) != 0
-
 
 class PassthroughNodeTransmissionParameters(TransmissionParameters):
     """Parameters describing information transmitted by a passthrough node.
     """
-    def concats(self, others):
+    def concat(self, other):
         """Create new connection parameters which are the result of
         concatenating this connection several others.
 
         Parameters
         ----------
-        others : [PassthroughNodeTransmissionParameters, ...]
-            Another set of connection parameters to add to the end of this
-            connection.
+        other : PassthroughNodeTransmissionParameters
+            Connection parameters to add to the end of this connection.
 
-        Yields
-        ------
+        Returns
+        -------
         PassthroughNodeTransmissionParameters or None
             Either a new set of transmission parameters, or None if the
             resulting transform contained no non-zero values.
         """
-        # Get the transform from this connection
-        A = self.full_transform(slice_out=False)
+        # Combine the transforms
+        new_transform = self._transform.concat(other._transform)
 
-        for other in others:
-            # Combine the transforms
-            new_transform = np.dot(other.full_transform(slice_in=False), A)
-
-            # Create a new connection (unless the resulting transform is empty,
-            # in which case don't)
-            if np.any(new_transform != 0):
-                yield PassthroughNodeTransmissionParameters(
-                    size_in=self.size_in,
-                    size_out=other.size_out,
-                    slice_in=self.slice_in,
-                    slice_out=other.slice_out,
-                    transform=new_transform
-                )
-            else:
-                # The transform consisted entirely of zeros so return None.
-                yield None
+        # Create a new connection (unless the resulting transform is empty,
+        # in which case don't)
+        if new_transform is not None:
+            return PassthroughNodeTransmissionParameters(new_transform)
+        else:
+            # The transform consisted entirely of zeros so return None.
+            return None
 
     @property
     def as_global_inhibition_connection(self):
@@ -187,10 +278,11 @@ class PassthroughNodeTransmissionParameters(TransmissionParameters):
         """
         assert self.supports_global_inhibition
         transform = self.full_transform(slice_out=False)[0, :]
-        return PassthroughNodeTransmissionParameters(size_in=self.size_in,
-                                                     size_out=1,
-                                                     transform=transform,
-                                                     slice_in=self.slice_in)
+
+        return PassthroughNodeTransmissionParameters(
+            Transform(size_in=self.size_in, size_out=1, transform=transform,
+                      slice_in=self.slice_in)
+        )
 
 
 class EnsembleTransmissionParameters(TransmissionParameters):
@@ -200,11 +292,6 @@ class EnsembleTransmissionParameters(TransmissionParameters):
     ----------
     decoders : ndarray
         A matrix describing a decoding of the ensemble (sized N x D).
-    size_out : int
-        Size of the space that the ensemble is being decoded into (may be
-        greater than D if a slice is provided).
-    slice_out :
-        Slice of the output space which the decoder targets.
     learning_rule :
         Learning rule associated with the decoding.
     """
@@ -212,22 +299,15 @@ class EnsembleTransmissionParameters(TransmissionParameters):
         "decoders", "learning_rule"
     ]
 
-    def __init__(self, decoders, size_out, slice_out=slice(None),
-                 learning_rule=None, transform=1):
+    def __init__(self, decoders, transform, learning_rule=None):
+        super(EnsembleTransmissionParameters, self).__init__(transform)
+
         # Copy the decoders into a C-contiguous, read-only array
         self.decoders = np.array(decoders, order='C')
         self.decoders.flags["WRITEABLE"] = False
 
         # Store the learning rule
         self.learning_rule = learning_rule
-
-        super(EnsembleTransmissionParameters, self).__init__(
-            size_in=self.decoders.shape[0],
-            size_out=size_out,
-            transform=transform,
-            slice_in=slice(None),
-            slice_out=slice_out
-        )
 
     def __eq__(self, other):
         # Two parameters are equal only if they are of the same type, both have
@@ -237,51 +317,37 @@ class EnsembleTransmissionParameters(TransmissionParameters):
                 self.learning_rule is None and
                 other.learning_rule is None)
 
-    @property
-    def _hashables(self):
-        return super(EnsembleTransmissionParameters, self)._hashables + (
-            fasthash(self.decoders).hexdigest(), self.learning_rule
-        )
-
     def __hash__(self):
-        return hash(self._hashables)
+        return hash((type(self), self.learning_rule, self._transform,
+                     fasthash(self.decoders).hexdigest()))
 
-    def concats(self, others):
+    def concat(self, other):
         """Create new connection parameters which are the result of
         concatenating this connection with others.
 
         Parameters
         ----------
-        others : [PassthroughNodeTransmissionParameters, ...]
-            Another set of connection parameters to add to the end of this
-            connection.
+        other : PassthroughNodeTransmissionParameters
+            Connection parameters to add to the end of this connection.
 
-        Yields
-        ------
+        Returns
+        -------
         EnsembleTransmissionParameters or None
             Either a new set of transmission parameters, or None if the
             resulting transform contained no non-zero values.
         """
         # Get the outgoing transformation
-        A = self.full_transform(slice_out=False)
+        new_transform = self._transform.concat(other._transform)
 
-        for other in others:
-            # Combine the transforms
-            new_transform = np.dot(other.full_transform(slice_in=False), A)
-
-            # Create a new connection (unless the resulting transform is empty,
-            # in which case don't)
-            if np.any(new_transform != 0):
-                yield EnsembleTransmissionParameters(
-                    decoders=self.decoders,
-                    size_out=other.size_out,
-                    slice_out=other.slice_out,
-                    learning_rule=self.learning_rule,
-                    transform=new_transform
-                )
-            else:
-                # The transform consisted entirely of zeros so return None.
-                yield None
+        # Create a new connection (unless the resulting transform is empty,
+        # in which case don't)
+        if new_transform is not None:
+            return EnsembleTransmissionParameters(
+                self.decoders, new_transform, self.learning_rule
+            )
+        else:
+            # The transform consisted entirely of zeros so return None.
+            return None
 
     @property
     def as_global_inhibition_connection(self):
@@ -290,10 +356,12 @@ class EnsembleTransmissionParameters(TransmissionParameters):
         """
         assert self.supports_global_inhibition
         transform = self.full_transform(slice_out=False)[0, :]
-        return EnsembleTransmissionParameters(self.decoders,
-                                              size_out=1,
-                                              learning_rule=self.learning_rule,
-                                              transform=transform)
+
+        return EnsembleTransmissionParameters(
+            self.decoders,
+            Transform(size_in=self.decoders.shape[0], size_out=1,
+                      transform=transform, slice_in=self._transform.slice_in)
+        )
 
     @property
     def full_decoders(self):
@@ -307,8 +375,7 @@ class EnsembleTransmissionParameters(TransmissionParameters):
 class NodeTransmissionParameters(TransmissionParameters):
     __slots__ = TransmissionParameters.__slots__ + ["pre_slice", "function"]
 
-    def __init__(self, size_in, size_out, transform, slice_out=slice(None),
-                 pre_slice=slice(None), function=None):
+    def __init__(self, transform, pre_slice=slice(None), function=None):
         """
         Parameters
         ----------
@@ -316,64 +383,45 @@ class NodeTransmissionParameters(TransmissionParameters):
             Either the size out of the transmitting object (if the function is
             `None`) or the size out of the function.
         """
-        super(NodeTransmissionParameters, self).__init__(
-            size_in=size_in,
-            size_out=size_out,
-            transform=transform,
-            slice_out=slice_out
-        )
+        super(NodeTransmissionParameters, self).__init__(transform)
         self.pre_slice = pre_slice
         self.function = function
 
     def __eq__(self, other):
         return (super(NodeTransmissionParameters, self).__eq__(other) and
+                self.pre_slice == other.pre_slice and
                 self.function is other.function)
 
-    @property
-    def _hashables(self):
-        return super(NodeTransmissionParameters, self)._hashables + (
-            self.function,
-        )
-
     def __hash__(self):
-        return hash(self._hashables)
+        return hash((type(self), self.function, self._transform))
 
-    def concats(self, others):
+    def concat(self, other):
         """Create new connection parameters which are the result of
-        concatenating this connection with others.
+        concatenating this connection another.
 
         Parameters
         ----------
-        others : [NodeTransmissionParameters, ...]
-            Another set of connection parameters to add to the end of this
-            connection.
+        other : NodeTransmissionParameters
+            Connection parameters to add to the end of this connection.
 
-        Yields
-        ------
+        Returns
+        -------
         NodeTransmissionParameters or None
             Either a new set of transmission parameters, or None if the
             resulting transform contained no non-zero values.
         """
         # Get the outgoing transformation
-        A = self.full_transform(slice_out=False)
+        new_transform = self._transform.concat(other._transform)
 
-        for other in others:
-            # Combine the transforms
-            new_transform = np.dot(other.full_transform(slice_in=False), A)
-
-            # Create a new connection (unless the resulting transform is empty,
-            # in which case don't)
-            if np.any(new_transform != 0):
-                yield NodeTransmissionParameters(
-                    size_in=self.size_in,
-                    size_out=other.size_out,
-                    transform=new_transform,
-                    pre_slice=self.pre_slice,
-                    function=self.function
-                )
-            else:
-                # The transform consisted entirely of zeros so return None.
-                yield None
+        # Create a new connection (unless the resulting transform is empty,
+        # in which case don't)
+        if new_transform is not None:
+            return NodeTransmissionParameters(
+                    new_transform, self.pre_slice, self.function
+            )
+        else:
+            # The transform consisted entirely of zeros so return None.
+            return None
 
     @property
     def as_global_inhibition_connection(self):
@@ -382,20 +430,10 @@ class NodeTransmissionParameters(TransmissionParameters):
         """
         assert self.supports_global_inhibition
         transform = self.full_transform(slice_out=False)[0, :]
-        return NodeTransmissionParameters(size_in=self.size_in,
-                                          size_out=1,
-                                          transform=transform,
-                                          pre_slice=self.pre_slice,
-                                          function=self.function)
 
-
-def _get_slice_as_ndarray(sl, size):
-    """Return a slice as a read-only Numpy array."""
-    if isinstance(sl, slice):
-        sl = np.array(range(size)[sl])
-    else:
-        sl = np.array(sorted(set(sl)))
-
-    sl.flags["WRITEABLE"] = False
-
-    return sl
+        return NodeTransmissionParameters(
+            Transform(size_in=self.size_in, size_out=1, transform=transform,
+                      slice_in=self.slice_in),
+            pre_slice=self.pre_slice,
+            function=self.function
+        )

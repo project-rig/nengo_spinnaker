@@ -2,7 +2,7 @@ from rig.place_and_route import Cores, SDRAM
 import six
 import struct
 
-from nengo_spinnaker.builder.model import OutputPort
+from nengo_spinnaker.builder.ports import OutputPort
 from nengo_spinnaker.builder.netlist import netlistspec
 from nengo_spinnaker.netlist import Vertex
 from nengo_spinnaker.regions import KeyspacesRegion, KeyField, Region

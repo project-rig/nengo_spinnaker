@@ -6,7 +6,8 @@ import threading
 
 from nengo_spinnaker import add_spinnaker_params
 from nengo_spinnaker.builder import Model
-from nengo_spinnaker.builder.model import OutputPort, InputPort
+from nengo_spinnaker.builder.model import PassthroughNode
+from nengo_spinnaker.builder.ports import OutputPort, InputPort
 from nengo_spinnaker.builder.node import (
     NodeIOController, InputNode, OutputNode,
     build_node_transmission_parameters
@@ -314,13 +315,12 @@ class TestNodeIOController(object):
         assert nioc.host_network.all_nodes == list()
         assert nioc.host_network.all_connections == list()
 
-    @pytest.mark.parametrize("width", [1, 3])
-    def test_passthrough_nodes(self, width):
+    def test_passthrough_nodes(self):
         """Test the handling of passthrough Nodes."""
         with nengo.Network() as net:
-            a = nengo.Ensemble(100, width)
-            b = nengo.Node(None, size_in=width, label="Passthrough Node")
-            c = nengo.Ensemble(100, width)
+            a = nengo.Ensemble(100, 1)
+            b = nengo.Node(size_in=1, label="Passthrough Node")
+            c = nengo.Ensemble(100, 1)
 
             a_b = nengo.Connection(a, b)
             b_c = nengo.Connection(b, c)
@@ -332,7 +332,7 @@ class TestNodeIOController(object):
         nioc.build_node(model, b)
 
         # Check the passthrough Node resulted in a new operator
-        assert model.object_operators[b].size_in == b.size_in
+        assert isinstance(model.object_operators[b], PassthroughNode)
 
         # Get the source and ensure that the appropriate object is returned
         with mock.patch.object(nioc, "get_spinnaker_source_for_node") as gssfn:

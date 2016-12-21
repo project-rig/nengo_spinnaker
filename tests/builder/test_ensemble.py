@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from nengo_spinnaker.builder import builder, ensemble
-from nengo_spinnaker.builder.model import InputPort, OutputPort
+from nengo_spinnaker.builder.ports import InputPort, OutputPort
 from nengo_spinnaker import operators
 
 

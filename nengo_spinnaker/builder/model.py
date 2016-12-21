@@ -1,9 +1,12 @@
 """Objects used to represent Nengo networks as instantiated on SpiNNaker.
 """
-from collections import namedtuple, defaultdict
-import enum
-from .ports import EnsembleInputPort
+from collections import namedtuple, defaultdict, deque
+from nengo import LinearFilter
+import numpy as np
+from .ports import EnsembleInputPort, InputPort, OutputPort
 from six import iteritems, itervalues, iterkeys
+
+from nengo_spinnaker.operators.filter import Filter
 
 
 class ConnectionMap(object):
@@ -150,17 +153,373 @@ class ConnectionMap(object):
                                   sig_pars),
                            transmission_pars)
 
+    def insert_interposers(self):
+        """Get a new connection map with the passthrough nodes removed and with
+        interposers inserted into the network at appropriate places.
 
-class OutputPort(enum.Enum):
-    """Indicate the intended transmitting part of an executable."""
-    standard = 0
-    """Standard, value-based, output port."""
+        Returns
+        -------
+        ([Interposer, ...], ConnectionMap)
+            A collection of new interposer operators and a new connection map
+            with passthrough nodes removed and interposers introduced.
+        """
+        # Create a new connection map and a store of interposers
+        interposers = list()
+        cm = ConnectionMap()
 
+        # For every clique in this connection map we identify which connections
+        # to replace with interposers and then insert the modified connectivity
+        # into the new connection map.
+        for sources, nodes in self.get_cliques():
+            # Extract all possible interposers from the clique
+            possible_interposers = (
+                (node, port, conn, {s.sink_object for s in sinks})
+                for node in nodes
+                for port, conns in iteritems(
+                    self._connections[node])
+                for conn, sinks in iteritems(conns)
+            )
 
-class InputPort(enum.Enum):
-    """Indicate the intended receiving part of an executable."""
-    standard = 0
-    """Standard, value-based, output port."""
+            # Of these possible connections determine which would benefit from
+            # replacement with interposers. For these interposers build a set
+            # of other potential interposers whose input depends on the output
+            # of the interposer.
+            potential_interposers = dict()
+            for node, port, conn, sink_objects in possible_interposers:
+                _, tps = conn  # Extract the transmission parameters
+
+                # Determine if the interposer connects to anything
+                if not self._connects_to_non_passthrough_node(sink_objects):
+                    continue
+
+                # For each connection look at the fan-out and fan-in vs the
+                # cost of the interposer.
+                trans = tps.full_transform(False, False)
+                mean_fan_in = np.mean(np.sum(trans != 0.0, axis=0))
+                mean_fan_out = np.mean(np.sum(trans != 0.0, axis=1))
+                interposer_fan_in = np.ceil(float(trans.shape[1]) / float(128))
+                interposer_fan_out = np.ceil(float(trans.shape[0]) / float(64))
+
+                # If the interposer would improve connectivity then add it to
+                # the list of potential interposers.
+                if (mean_fan_in > interposer_fan_in or
+                        mean_fan_out > interposer_fan_out):
+                    # Store the potential interposer along with a list of nodes
+                    # who receive its output.
+                    potential_interposers[(node, port, conn)] = [
+                        s for s in sink_objects
+                        if isinstance(s, PassthroughNode)
+                    ]
+
+            # Get the set of potential interposers whose input is independent
+            # of the output of any other interposer.
+            top_level_interposers = set(potential_interposers)
+            for dependent_interposers in itervalues(potential_interposers):
+                # Subtract from the set of independent interposers any whose
+                # input node is listed in the output nodes for another
+                # interposer.
+                remove_interposers = {
+                    (node, port, conn) for (node, port, conn) in
+                    top_level_interposers if node in dependent_interposers
+                }
+                top_level_interposers.difference_update(remove_interposers)
+
+            # Create an operator for all of the selected interposers
+            clique_interposers = dict()
+            for node, port, conn in top_level_interposers:
+                # Extract the input size
+                _, transmission_pars = conn
+                size_in = transmission_pars.size_in
+
+                # Create the interposer
+                clique_interposers[node, port, conn] = Filter(size_in)
+
+            # Add the newly created interposers to the list of new operators
+            interposers.extend(itervalues(clique_interposers))
+
+            # Insert connections into the new connection map inserting
+            # connections to interposers as we go.
+            for source in sources:
+                self._copy_connections_from_source(
+                    source=source, target_map=cm,
+                    interposers=clique_interposers
+                )
+
+            # Insert connections from the new interposers.
+            for (node, port, conn), interposer in iteritems(
+                    clique_interposers):
+                self._copy_connections_from_interposer(
+                    node=node, port=port, conn=conn, interposer=interposer,
+                    target_map=cm
+                )
+
+        return interposers, cm
+
+    def _copy_connections_from_source(self, source, target_map,
+                                      interposers=dict()):
+        """Copy the pattern of connectivity from a source object, inserting the
+        determined connectivity into a new connection map instance and
+        inserting connections to interposers as appropriate.
+
+        Parameters
+        ----------
+        source : object
+            Object in the connection map whose outgoing connections should be
+            copied into the new connection map.
+        target_map: :py:class:`~.ConnectionMap`
+            Connection map into which the new connections should be copied.
+        interposers : {(PassthroughNode, port, conn): Filter, ...}
+            Dictionary mapping selected nodes, ports and connections to the
+            operators which will be used to simulate them.
+        """
+        # For every port and set of connections originating at the source
+        for source_port, conns_sinks in iteritems(self._connections[source]):
+            for conn, sinks in iteritems(conns_sinks):
+                # Extract the signal and transmission parameters
+                signal_parameters, transmission_parameters = conn
+
+                # Copy the connections
+                for sink in sinks:
+                    # NOTE: The None indicates that no additional reception
+                    # parameters beyond those in the sink are to be considered.
+                    self._copy_connection(
+                        target_map, interposers, source, source_port,
+                        signal_parameters, transmission_parameters,
+                        sink.sink_object, sink.port, sink.reception_parameters
+                    )
+
+    def _copy_connections_from_interposer(self, node, port, conn, interposer,
+                                          target_map):
+        """Copy the pattern of connectivity from a node, replacing a specific
+        connection with an interposer.
+        """
+        # Get the sinks of this connection
+        sinks = self._connections[node][port][conn]
+
+        # Extract parameters
+        signal_pars, transmission_pars = conn
+
+        # Copy the connections to the sinks, note that we specify an empty
+        # interposers dictionary so that no connections to further interposers
+        # are inserted, likewise we specify no additional reception parameters.
+        # The connectivity from the sink will be recursed if it is a
+        # passthrough node.
+        for sink in sinks:
+            self._copy_connection(
+                target_map, dict(), interposer, OutputPort.standard,
+                signal_pars, transmission_pars,
+                sink.sink_object, sink.port, sink.reception_parameters
+            )
+
+    def _copy_connection(self, target_map, interposers, source, source_port,
+                         signal_pars, transmission_pars,
+                         sink_object, sink_port, reception_pars):
+        """Copy a single connection from this connection map to another,
+        recursing if an appropriate node is identified.
+
+        Parameters
+        ----------
+        target_map: :py:class:`~.ConnectionMap`
+            Connection map into which the new connections should be copied.
+        interposers : {(PassthroughNode, port, conn): Filter, ...}
+            Dictionary mapping selected nodes, ports and connections to the
+            operators which will be used to simulate them.
+
+        All other parameters as in :py:method:`~.ConnectionMap.add_connection`.
+        """
+        if not isinstance(sink_object, PassthroughNode):
+            # If the sink is not a passthrough node then just add the
+            # connection to the new connection map.
+            target_map.add_connection(
+                source, source_port, signal_pars, transmission_pars,
+                sink_object, sink_port, reception_pars)
+        else:
+            # If the sink is a passthrough node then we consider each outgoing
+            # connection in turn. If the connection is to be replaced by an
+            # interposer then we add a connection to the relevant interposer,
+            # otherwise we recurse to add further new connections.
+            for port, conns_sinks in iteritems(self._connections[sink_object]):
+                for conn, sinks in iteritems(conns_sinks):
+                    # Determine if this combination of (node, port, conn) is to
+                    # be replaced by an interposer.
+                    interposer = interposers.get((sink_object, port, conn))
+
+                    if interposer is not None:
+                        # Insert a connection to the interposer
+                        target_map.add_connection(
+                            source, source_port, signal_pars,
+                            transmission_pars, interposer,
+                            InputPort.standard, reception_pars
+                        )
+                    else:
+                        # Build the new signal and transmission parameters.
+                        (this_signal_pars, this_transmission_pars) = conn
+                        sink_signal_pars = signal_pars.concat(this_signal_pars)
+                        sink_transmission_pars = transmission_pars.concat(
+                            this_transmission_pars)
+
+                        if sink_transmission_pars is not None:
+                            # Add onward connections if the transmission
+                            # parameters aren't empty.
+                            for new_sink in sinks:
+                                # Build the reception parameters and recurse
+                                sink_reception_pars = reception_pars.concat(
+                                    new_sink.reception_parameters
+                                )
+
+                                self._copy_connection(
+                                    target_map, interposers,
+                                    source, source_port,
+                                    sink_signal_pars, sink_transmission_pars,
+                                    new_sink.sink_object, new_sink.port,
+                                    sink_reception_pars
+                                )
+
+    def _connects_to_non_passthrough_node(self, sink_objects):
+        """Determine whether any of the sink objects are not passthrough nodes,
+        or if none are whether those passthrough nodes eventually connect to a
+        non-passthrough node.
+        """
+        # Extract passthrough nodes from the sinks
+        ptns = [s for s in sink_objects if isinstance(s, PassthroughNode)]
+
+        # If any of the sink objects are not passthrough nodes then return
+        if len(ptns) < len(sink_objects):
+            return True
+        else:
+            # Otherwise loop over the connections from each connected
+            # passthrough node and see if any of those connect to a sink.
+            for obj in ptns:
+                for conn_sinks in itervalues(self._connections[obj]):
+                    for sinks in itervalues(conn_sinks):
+                        sink_objs = [s.sink_object for s in sinks]
+                        if self._connects_to_non_passthrough_node(sink_objs):
+                            return True
+
+        # Otherwise return false to indicate that a non-passthrough node object
+        # is never reached.
+        return False
+
+    def get_coarsened_graph(self):
+        """Get a coarser representation of the connectivity represented in this
+        connection map.
+
+        Returns
+        -------
+        {obj: Edges(input, output), ...}
+            Mapping from objects in the network to tuples containing sets
+            representing objects which provide input and receive output.
+        """
+        graph = defaultdict(Edges)
+
+        for signal, _ in self.get_signals():
+            source = signal.source
+
+            for sink in signal.sinks:
+                graph[sink].inputs.add(source)
+                graph[source].outputs.add(sink)
+
+        return graph
+
+    def get_cliques(self):
+        """Extract cliques of connected nodes from the connection map.
+
+        For example, the following network consists of two cliques:
+
+            1 ->-\    /->- 5 ->-\
+            2 ->--> 4 -->- 6 ->--> 8 ->- 9
+            3 ->-/    \->- 7 ->-/
+
+            \=======v=====/\=======v======/
+                Clique 1       Clique 2
+
+        Where 4, 8 and 9 are passthrough nodes.
+
+        Clique 1 has the following sources: {1, 2, 3}
+        Clique 2 has the sources: {5, 6, 7}
+
+        Adding a recurrent connection results in there being a single clique:
+
+                    /-<------------------<--\
+                    |                       |
+            1 ->-\  v /->- 5 ->-\           |
+            2 ->--> 4 -->- 6 ->--> 8 ->- 9 -/
+            3 ->-/    \->- 7 ->-/
+
+        Where the sources are: {1, 2, 3, 5, 6, 7}
+
+        Yields
+        ------
+        ({source, ...}, {Node, ...})
+            A set of objects which form the inputs to the clique and the set of
+            passthrough nodes contained within the clique (possibly empty).
+        """
+        # Coarsen the connection map
+        graph = self.get_coarsened_graph()
+
+        # Construct a set of source objects which haven't been visited
+        unvisited_sources = {
+            obj for obj, edges in iteritems(graph) if
+            len(edges.outputs) > 0 and
+            not isinstance(obj, PassthroughNode)
+        }
+
+        # While unvisited sources remain inspect the graph.
+        while unvisited_sources:
+            visited = set()  # Maintain a set of visited nodes
+            sources = set()  # Set of objects which feed the clique
+            ptns = set()  # Passthrough nodes contained in the clique
+
+            # Each node that is visited in the following breadth-first search
+            # is treated as EITHER a source or a sink node. If the node is a
+            # sink then we're interested in connected nodes which provide its
+            # input, if it's a source then we care about nodes to which it
+            # provides input and if it's a passthrough node then we care about
+            # both.
+            queue = deque()  # Queue of nodes to visit
+            queue.append((True, unvisited_sources.pop()))  # Add a source
+
+            while len(queue) > 0:  # While there remain items in the queue
+                is_source, node = queue.pop()  # Get an item from the queue
+
+                if node not in visited:
+                    visited.add(node)
+
+                    # If the node is not a passthrough node and is marked as a
+                    # source then add it to the set of inputs for the clique,
+                    # otherwise if it's a passthrough node add it to the set of
+                    # passthrough nodes contained within the clique.
+                    if isinstance(node, PassthroughNode):
+                        ptns.add(node)
+                    elif is_source:
+                        sources.add(node)
+
+                    # If the node is either a passthrough node or is a source
+                    # then add all of the unvisited nodes it feeds to queue.
+                    if is_source or isinstance(node, PassthroughNode):
+                        # NOTE: We treat all connected nodes as SINKS
+                        queue.extend((False, n) for n in
+                                     graph[node].outputs.difference(visited))
+
+                    # If the node is either a passthrough node or is NOT a
+                    # source then add all of the unvisited nodes which feed it
+                    # to the queue.
+                    if not is_source or isinstance(node, PassthroughNode):
+                        # NOTE: We treat all connected nodes as SOURCES and
+                        # explicitly care about connected passthrough nodes as
+                        # well.
+                        queue.extend(
+                            (True, n) for n in graph[node].inputs if
+                            n in unvisited_sources or
+                            isinstance(n, PassthroughNode)
+                        )
+
+                        # Remove these new sources from the list of unvisited
+                        # sources.
+                        unvisited_sources.difference_update(graph[node].inputs)
+
+            # Once the queue is empty we yield the contents of the clique
+            yield sources, ptns
 
 
 class SignalParameters(object):
@@ -199,32 +558,77 @@ class SignalParameters(object):
     def __ne__(self, b):
         return not self == b
 
+    def concat(a, b):
+        """Get new signal parameters as the result of combining this set of
+        signal parameters with another.
+        """
+        # We cannot combine two different keyspaces
+        if a.keyspace is not None and b.keyspace is not None:
+            raise Exception("Cannot merge keyspaces {!s} and {!s}".format(
+                a.keyspace, b.keyspace))
 
-ReceptionParameters = namedtuple("ReceptionParameters",
-                                 "filter, width, learning_rule")
-"""Basic reception parameters that relate to the reception of a series of
-multicast packets.
-
-Attributes
-----------
-filter : :py:class:`~nengo.synapses.Synapse`
-    Synaptic filter which should be applied to received values.
-width : int
-    Width of the post object
-"""
+        # Merge the parameters
+        return SignalParameters(
+            latching=a.latching or b.latching,
+            weight=b.weight,
+            keyspace=a.keyspace if a.keyspace is not None else b.keyspace
+        )
 
 
-class _ParsSinksPair(namedtuple("_PSP", "parameters, sinks")):
-    """Pair of transmission parameters and sink tuples."""
-    def __new__(cls, signal_parameters, sinks=list()):
-        # Copy the sinks list before calling __new__
-        sinks = list(sinks)
-        return super(_ParsSinksPair, cls).__new__(cls, signal_parameters,
-                                                  sinks)
+class Edges(namedtuple("Edges", "inputs, outputs")):
+    """Edges in a simplified representation of a connection map."""
+    def __new__(cls):
+        return super(Edges, cls).__new__(cls, set(), set())
+
+
+class ReceptionParameters(namedtuple("ReceptionParameters",
+                          "filter, width, learning_rule")):
+    """Basic reception parameters that relate to the reception of a series of
+    multicast packets.
+
+    Attributes
+    ----------
+    filter : :py:class:`~nengo.synapses.Synapse`
+        Synaptic filter which should be applied to received values.
+    width : int
+        Width of the post object
+    """
+    def concat(self, other):
+        """Create new reception parameters by combining this set of reception
+        parameters with another.
+        """
+        # Combine the filters
+        if self.filter is None:
+            new_filter = other.filter
+        elif other.filter is None:
+            new_filter = self.filter
+        elif (isinstance(self.filter, LinearFilter) and
+                isinstance(other.filter, LinearFilter)):
+            # Combine linear filters by multiplying their numerators and
+            # denominators.
+            new_filter = LinearFilter(
+                np.polymul(self.filter.num, other.filter.num),
+                np.polymul(self.filter.den, other.filter.den)
+            )
+        else:
+            raise NotImplementedError(
+                "Cannot combine filters of type {} and {}".format(
+                    type(self.filter), type(other.filter)))
+
+        # Combine the learning rules
+        if self.learning_rule is not None and other.learning_rule is not None:
+            raise NotImplementedError(
+                "Cannot combine learning rules {} and {}".format(
+                    self.learning_rule, other.learning_rule))
+
+        new_learning_rule = self.learning_rule or other.learning_rule
+
+        # Create the new reception parameters
+        return ReceptionParameters(new_filter, other.width, new_learning_rule)
 
 
 _SinkPars = namedtuple("_SinkPars", ["sink_object", "port",
-                                     "reception_parameters"])
+                       "reception_parameters"])
 """Collection of parameters for a sink."""
 
 
@@ -281,96 +685,15 @@ class Signal(object):
         return self.weight
 
 
-def remove_sinkless_signals(conn_map):
-    """Remove any signals which do not have any sinks from a connection map.
-
-    Parameters
-    ----------
-    conn_map : :py:class:`~.ConnectionMap`
-        A connection map to modify.
+class PassthroughNode(object):
+    """A non-computational node which will be optimised out of the model but
+    acts as a useful point to which signals can be connected.
     """
-    for port_and_signals in itervalues(conn_map._connections):
-        # Prepare to remove any ports which don't connect to anything
-        remove_ports = list()
+    def __init__(self, label=None):
+        self._label = label
 
-        # Remove any parameter: sinks mappings where there are no sinks
-        for port, params_and_signals in iteritems(port_and_signals):
-            to_remove = [p for p, s in iteritems(params_and_signals) if
-                         len(s) == 0]
+    def __repr__(self):
+        return "PassthroughNode({})".format(self._label)
 
-            for r in to_remove:
-                params_and_signals.pop(r)
-
-            # If there is now nothing coming from this port then mark the port
-            # for removal.
-            if len(params_and_signals) == 0:
-                remove_ports.append(port)
-
-        # Remove any port: {parameters: sinks} where {parameters: sinks} is
-        # empty.
-        for port in remove_ports:
-            port_and_signals.pop(port)
-
-
-def remove_sinkless_objects(conn_map, cls):
-    """Remove all objects of a given type which have no outgoing connections
-    from a connection map.
-
-    Parameters
-    ----------
-    conn_map : :py:class:`~.ConnectionMap`
-        A connection map to modify.
-    cls :
-        Type of objects to remove.
-
-    Returns
-    -------
-    set
-        Set of all objects removed from the connection map.
-    """
-    # Begin by removing all sinkless signals
-    remove_sinkless_signals(conn_map)
-
-    # Find all of the objects of the given type that do not have any outgoing
-    # connections.
-    transmitting_objects = set()
-    receiving_objects = set()
-
-    for source_object, source_port_and_signals in \
-            iteritems(conn_map._connections):
-        # Store all the sinks for connections out of this object
-        has_sinks = False  # Count of objects receiving from this source
-        for signals in itervalues(source_port_and_signals):
-            for sinks in itervalues(signals):
-                for sink_object, _, _ in sinks:
-                    has_sinks = True
-
-                    # Store each object in the sinks
-                    if isinstance(sink_object, cls):
-                        receiving_objects.add(sink_object)
-
-        # Store this object as transmitting a value
-        if has_sinks and isinstance(source_object, cls):
-            transmitting_objects.add(source_object)
-
-    # Identify all objects which receive but do not transmit
-    remove_objects = receiving_objects - transmitting_objects
-
-    # If there are no objects to remove then return the empty set
-    if len(remove_objects) == 0:
-        return set()
-
-    # Remove target objects from the source of connections
-    for o in remove_objects:
-        conn_map._connections.pop(o, None)
-
-    # Remove target objects from the sinks of connections
-    for sp_and_signals in itervalues(conn_map._connections):
-        for signals in itervalues(sp_and_signals):
-            for pars, sinks in iteritems(signals):
-                # Construct a new sinks list
-                signals[pars] = [sp for sp in sinks if
-                                 sp.sink_object not in remove_objects]
-
-    # Recurse to remove any objects which we've just made sinkless
-    return remove_objects | remove_sinkless_objects(conn_map, cls)
+    def __str__(self):
+        return "PassthroughNode({})".format(self._label)

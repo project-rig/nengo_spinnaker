@@ -1,8 +1,17 @@
 import collections
 import mock
+import numpy as np
 from rig.bitfield import BitField
+from six import iteritems, itervalues
+import pytest
 
+import nengo
 from nengo_spinnaker.builder import model
+from nengo_spinnaker.builder.ports import InputPort, OutputPort
+from nengo_spinnaker.builder.transmission_parameters import (
+    PassthroughNodeTransmissionParameters, NodeTransmissionParameters,
+    Transform
+)
 
 
 class TestSignalParameters(object):
@@ -35,6 +44,125 @@ class TestSignalParameters(object):
                                    for args in params)):
             assert a is not b
             assert a == b
+
+    def test_combine_sig_pars_last_weight(self):
+        """Check that the signal parameters are combined correctly."""
+        # The last weight should be used
+        sps1 = model.SignalParameters(weight=1)
+        sps2 = model.SignalParameters(weight=5)
+
+        combined_sps = sps1.concat(sps2)
+        assert combined_sps.weight == sps2.weight
+
+    @pytest.mark.parametrize(
+        "latching_a, latching_b", [(True, True), (False, True), (True, False),
+                                   (False, False)])
+    def test_combine_sig_pars_latching(self, latching_a, latching_b):
+        """Check that the signal parameters are combined correctly."""
+        # The signal should be latching if any of its antecedents was latching.
+        sps1 = model.SignalParameters(latching=latching_a)
+        sps2 = model.SignalParameters(latching=latching_b)
+
+        combined_sps = sps1.concat(sps2)
+        assert combined_sps.latching is (latching_a or latching_b)
+
+    def test_combine_sig_pars_keyspaces_all_none(self):
+        """Check that the signal parameters are combined correctly."""
+        # The keyspace should be None if all antecedents are None
+        sps1 = model.SignalParameters()
+        sps2 = model.SignalParameters()
+
+        combined_sps = sps1.concat(sps2)
+        assert combined_sps.keyspace is None
+
+    @pytest.mark.parametrize("first", (False, True))
+    def test_combine_sig_pars_keyspaces_one_specified(self, first):
+        """Check that the signal parameters are combined correctly."""
+        # If ONE keyspace is specified it should be used for the entire trace
+        ks = object()
+        sps1 = model.SignalParameters(keyspace=ks if first else None)
+        sps2 = model.SignalParameters(keyspace=None if first else ks)
+
+        combined_sps = sps1.concat(sps2)
+        assert combined_sps.keyspace is ks
+
+    def test_combine_sig_pars_keyspaces_two_specified(self):
+        """Check that the signal parameters are combined correctly."""
+        # An error should be raised if multiple keyspaces are found
+        ks = object()
+        sps1 = model.SignalParameters(keyspace=ks)
+        sps2 = model.SignalParameters(keyspace=ks)
+
+        with pytest.raises(Exception) as exc:
+            sps1.concat(sps2)
+
+        assert "keyspace" in str(exc.value)
+
+
+class TestReceptionParameters(object):
+    def test_combine_filters_none_none(self):
+        # Create two reception parameters with None filters
+        rp1 = model.ReceptionParameters(None, 1, None)
+        rp2 = model.ReceptionParameters(None, 5, None)
+
+        # Check that combined they have a None filter and that the last width
+        # is used.
+        rp_expected = model.ReceptionParameters(None, rp2.width, None)
+        assert rp1.concat(rp2) == rp_expected
+
+    @pytest.mark.parametrize("first", (True, False))
+    def test_combine_filters_one_is_none(self, first):
+        # Create two reception parameters, of which one has a None filter
+        f = object()
+        rp1 = model.ReceptionParameters(f if first else None, 1, None)
+        rp2 = model.ReceptionParameters(None if first else f, 5, None)
+
+        # Check that combined they have a None filter and that the last width
+        # is used.
+        rp_expected = model.ReceptionParameters(f, rp2.width, None)
+        assert rp1.concat(rp2) == rp_expected
+
+    def test_combine_lti_filters(self):
+        f1 = nengo.synapses.LinearFilter([1, 2], [1, 2, 3])
+        f2 = nengo.synapses.LinearFilter([2], [1, 2])
+
+        rp1 = model.ReceptionParameters(f1, 1, None)
+        rp2 = model.ReceptionParameters(f2, 1, None)
+
+        # Combine and extract the filter
+        f3 = rp1.concat(rp2).filter
+        assert isinstance(f3, nengo.synapses.LinearFilter)
+        assert np.array_equal(f3.num, [2, 4])
+        assert np.array_equal(f3.den, [1, 4, 7, 6])
+
+    def test_combine_unknown_filters(self):
+        f1 = nengo.synapses.LinearFilter([1, 2], [1, 2, 3])
+        rp1 = model.ReceptionParameters(f1, 1, None)
+        rp2 = model.ReceptionParameters(object(), 1, None)
+
+        # Combining filters should fail
+        with pytest.raises(NotImplementedError):
+            rp1.concat(rp2)
+
+    @pytest.mark.parametrize("first", (True, False))
+    def test_combine_learning_rules(self, first):
+        # Create two reception parameters, of which one has a None filter
+        lr = object()
+        rp1 = model.ReceptionParameters(None, 1, lr if first else None)
+        rp2 = model.ReceptionParameters(None, 1, None if first else lr)
+
+        # Check that combined they have a None filter and that the last width
+        # is used.
+        rp_expected = model.ReceptionParameters(None, rp2.width, lr)
+        assert rp1.concat(rp2) == rp_expected
+
+    def test_combine_learning_rules_fails(self):
+        # Cannot combine two learning rules
+        rp1 = model.ReceptionParameters(None, 1, object())
+        rp2 = model.ReceptionParameters(None, 1, object())
+
+        with pytest.raises(NotImplementedError):
+            rp1.concat(rp2)
 
 
 class TestConnectionMap(object):
@@ -263,89 +391,297 @@ class TestConnectionMap(object):
                 # Assert the correct paired transmission parameters are used.
                 assert transmission_params is tp_b
 
+    def test_get_coarsened_graph_and_extract_cliques(self):
+        """Check that a coarsened representation of the graph can be extracted.
+        """
+        # Construct a graph of the form:
+        #
+        #         /--<-------------<--\
+        #         |                   |
+        # E ->-\  v /->- E ->-\       |
+        # E ->--> o -->- E ->--> o ->-/
+        # E ->-/    \->- E ->-/
+        #
+        # Where E are ensembles and `o' is a passthrough node.
+        cm = model.ConnectionMap()
 
-def test_remove_sinkless_signals():
-    """Removing sinkless signals will modify the connection map to remove any
-    signals which no-longer have any sinks.
-    """
-    # Construct a connection map containing two signals.
-    # Objects to act as sources and sinks
-    obj_a = mock.Mock(name="A")
-    obj_b = mock.Mock(name="B")
+        # Network objects
+        ens_a = [object() for _ in range(3)]
+        ens_b = [object() for _ in range(3)]
+        ptns = [model.PassthroughNode(), model.PassthroughNode()]
 
-    # Add the connections
-    cm = model.ConnectionMap()
-    cm.add_connection(
-        obj_a, None, model.SignalParameters(weight=1), None,
-        obj_b, None, None
-    )
-    cm.add_connection(
-        obj_b, None, model.SignalParameters(weight=2), None,
-        obj_a, None, None
-    )
+        # Add connections to the network, excluding the feedback loop.
+        for ens in ens_a:
+            cm.add_connection(
+                ens, OutputPort.standard, model.SignalParameters(),
+                object(), ptns[0], InputPort.standard, None
+            )
 
-    # Remove the sinks from one of the connections
-    for k in cm._connections[obj_b][None].keys():
-        cm._connections[obj_b][None] = dict()
+        for ens in ens_b:
+            cm.add_connection(
+                ptns[0], OutputPort.standard, model.SignalParameters(),
+                object(), ens, InputPort.standard, None
+            )
+            cm.add_connection(
+                ens, OutputPort.standard, model.SignalParameters(),
+                object(), ptns[1], InputPort.standard, None
+            )
 
-    # Remove all the sinkless signals
-    model.remove_sinkless_signals(cm)
+        # Get a coarsened representation of the connectivity
+        graph = cm.get_coarsened_graph()
 
-    # Assert that only one signal remains
-    assert len(cm.get_signals_from_object(obj_a)[None]) == 1
-    assert len(cm.get_signals_from_object(obj_b)) == 0
-    assert len(list(cm.get_signals())) == 1
+        for ens in ens_a:
+            assert graph[ens].inputs == set()
+            assert graph[ens].outputs == {ptns[0]}
 
-def test_remove_sinkless_objects():
-    """Filter objects with no outgoing connections (hence sinks) can safely be
-    removed from the network.  This process should be called repeatedly as long
-    as there are filters which can be removed.
+        for ens in ens_b:
+            assert graph[ens].inputs == {ptns[0]}
+            assert graph[ens].outputs == {ptns[1]}
 
-    We construct the following network and then expect that all items apart
-    from A and G are removed from the connection map.
+        assert graph[ptns[0]].inputs == set(ens_a)
+        assert graph[ptns[0]].outputs == set(ens_b)
 
-                /--> C --\
-               /          \
-        A --> B            E --> F
-        |      \          /
-        |       \--> D --/
-        \-> G
+        assert graph[ptns[1]].inputs == set(ens_b)
+        assert graph[ptns[1]].outputs == set()
 
-    The result should be a reduced connection map and a list of all objects
-    apart from A and G.
-    """
-    class G(object):
-        """Separate class to indicate the type filtering works as expected."""
+        # Extract cliques from this graph, without the feedback in place there
+        # should be two cliques.
+        for sources, nodes in cm.get_cliques():
+            if nodes == {ptns[0]}:
+                assert sources == set(ens_a)
+            elif nodes == {ptns[1]}:
+                assert sources == set(ens_b)
+            else:
+                assert False, "Unexpected clique."
 
-    # Construct the network objects
-    a = mock.Mock(name="A")
-    b = mock.Mock(name="B")
-    c = mock.Mock(name="C")
-    d = mock.Mock(name="D")
-    e = mock.Mock(name="E")
-    f = mock.Mock(name="F")
-    g = G()
+        # Add a feedback connection to the graph, this should mean that only a
+        # single clique exists.
+        cm.add_connection(
+            ptns[1], OutputPort.standard, model.SignalParameters(),
+            object(), ptns[0], InputPort.standard, None
+        )
 
-    # Make the connection map
-    cm = model.ConnectionMap()
-    cm.add_connection(a, None, model.SignalParameters(), None, b, None, None)
-    cm.add_connection(a, None, model.SignalParameters(), None, g, None, None)
-    cm.add_connection(b, None, model.SignalParameters(), None, c, None, None)
-    cm.add_connection(b, None, model.SignalParameters(), None, d, None, None)
-    cm.add_connection(c, None, model.SignalParameters(), None, e, None, None)
-    cm.add_connection(d, None, model.SignalParameters(), None, e, None, None)
-    cm.add_connection(e, None, model.SignalParameters(), None, f, None, None)
-    cm._connections[f]
+        # Get a coarsened representation of the connectivity
+        graph = cm.get_coarsened_graph()
 
-    # Remove the sinkless filters
-    removed = model.remove_sinkless_objects(cm, mock.Mock)
+        for ens in ens_a:
+            assert graph[ens].inputs == set()
+            assert graph[ens].outputs == {ptns[0]}
 
-    # Check that the expected connection A->G still exists.
-    assert len(cm.get_signals_from_object(a)[None]) == 1
-    assert len(list(cm.get_signals())) == 1
+        for ens in ens_b:
+            assert graph[ens].inputs == {ptns[0]}
+            assert graph[ens].outputs == {ptns[1]}
 
-    # Assert that the removed objects list is correct
-    expected_removed = set((b, c, d, e, f))
-    for x in expected_removed:
-        assert len(cm.get_signals_from_object(x)) == 0
-    assert removed == expected_removed
+        assert graph[ptns[0]].inputs == set(ens_a) | {ptns[1]}
+        assert graph[ptns[0]].outputs == set(ens_b)
+
+        assert graph[ptns[1]].inputs == set(ens_b)
+        assert graph[ptns[1]].outputs == {ptns[0]}
+
+        # Extract cliques from this graph, without the feedback in place there
+        # should be two cliques.
+        for sources, nodes in cm.get_cliques():
+            assert nodes == set(ptns)
+            assert sources == set(ens_a) | set(ens_b)
+
+    def test_insert_interposers_removes_passthrough_node(self):
+        """Test that passthrough nodes are removed while inserting interposers.
+        """
+        cm = model.ConnectionMap()
+
+        # Add a connection from a node to a passthrough node to the model
+        node = object()
+        ptn = model.PassthroughNode()
+        cm.add_connection(
+            node, OutputPort.standard, model.SignalParameters(weight=1),
+            NodeTransmissionParameters(Transform(1, 1, 1)),
+            ptn, InputPort.standard, model.ReceptionParameters(None, 1, None)
+        )
+
+        # Add a connection from the passthrough node to another node
+        sink = object()
+        cm.add_connection(
+            ptn, OutputPort.standard, model.SignalParameters(weight=1),
+            PassthroughNodeTransmissionParameters(Transform(1, 1, 1)),
+            sink, InputPort.standard, model.ReceptionParameters(None, 1, None)
+        )
+
+        # Insert interposers, getting a list of interposers (empty) and a new
+        # connection map.
+        interposers, new_cm = cm.insert_interposers()
+        assert len(interposers) == 0  # No interposers expected
+
+        # Check that there is now just one connection from the node to the sink
+        from_node = new_cm._connections[node]
+        assert list(from_node) == [OutputPort.standard]
+        
+        for (signal_pars, transmission_pars), sinks in \
+                iteritems(from_node[OutputPort.standard]):
+            # Check the transmission parameters
+            assert transmission_pars == NodeTransmissionParameters(
+                Transform(1, 1, 1)
+            )
+
+            # Check that the sink is correct
+            assert len(sinks) == 1
+            for s in sinks:
+                assert s.sink_object is sink
+
+    def test_insert_interposers_simple(self):
+        """Test that interposers are inserted correctly."""
+        cm = model.ConnectionMap()
+
+        # Add a connection from a node to a passthrough node to the model
+        nodes = [object(), object()]
+        ptn = model.PassthroughNode()
+
+        for node in nodes:
+            cm.add_connection(
+                node, OutputPort.standard, model.SignalParameters(weight=1),
+                NodeTransmissionParameters(Transform(1, 1, 1)),
+                ptn, InputPort.standard,
+                model.ReceptionParameters(None, 1, None)
+            )
+
+        # Add a connection from the passthrough node to another node
+        sink = object()
+        sink_port = object()
+        cm.add_connection(
+            ptn, OutputPort.standard, model.SignalParameters(weight=70),
+            PassthroughNodeTransmissionParameters(
+                Transform(1, 70, np.ones((70, 1)))
+            ),
+            sink, sink_port, model.ReceptionParameters(None, 70, None)
+        )
+
+        # Insert interposers, getting a list of interposers and a new
+        # connection map.
+        interposers, new_cm = cm.insert_interposers()
+        assert len(interposers) == 1  # Should insert 1 interposer
+        interposer = interposers[0]
+
+        # Check that each of the nodes connects to the interposer
+        for node in nodes:
+            from_node = new_cm._connections[node][OutputPort.standard]
+            assert len(from_node) == 1
+
+            for sinks in itervalues(from_node):
+                assert len(sinks) == 1
+                for s in sinks:
+                    assert s.sink_object is interposer
+                    assert s.port is InputPort.standard
+
+        # Check that the interposer connects to the sink
+        from_interposer = new_cm._connections[interposer][OutputPort.standard]
+        assert len(from_interposer) == 1
+
+        for sinks in itervalues(from_interposer):
+            assert len(sinks) == 1
+            for s in sinks:
+                assert s.sink_object is sink
+                assert s.port is sink_port
+
+    def test_insert_interposers_ignore_sinkless(self):
+        """Test that interposers are inserted correctly, ignoring those that
+        don't connect to anything.
+        """
+        cm = model.ConnectionMap()
+
+        # Add a connection from a node to a passthrough node to the model
+        nodes = [object(), object()]
+        ptn = model.PassthroughNode()
+
+        for node in nodes:
+            cm.add_connection(
+                node, OutputPort.standard, model.SignalParameters(weight=1),
+                NodeTransmissionParameters(Transform(1, 1, 1)),
+                ptn, InputPort.standard,
+                model.ReceptionParameters(None, 1, None)
+            )
+
+        # Connect the passthrough node to another passthrough node
+        ptn2 = model.PassthroughNode()
+        cm.add_connection(ptn, OutputPort.standard, model.SignalParameters(),
+                          PassthroughNodeTransmissionParameters(
+                            Transform(1, 70, transform=np.ones((70, 1)))),
+                          ptn2, InputPort.standard,
+                          model.ReceptionParameters(None, 70, None))
+
+        # Connect the passthrough node to another passthrough node
+        ptn3 = model.PassthroughNode()
+        cm.add_connection(ptn2, OutputPort.standard, model.SignalParameters(),
+                          PassthroughNodeTransmissionParameters(
+                            Transform(70, 70, 1)),
+                          ptn3, InputPort.standard,
+                          model.ReceptionParameters(None, 70, None))
+
+        # Insert interposers, getting a list of interposers and a new
+        # connection map.
+        interposers, new_cm = cm.insert_interposers()
+        assert len(interposers) == 0  # No interposers
+
+        # No signals at all
+        assert len(list(new_cm.get_signals())) == 0
+
+    def test_insert_interposers_earliest_interposer_only(self):
+        """Test that only the first interposer in a network of possible
+        interposers is inserted.
+        """
+        cm = model.ConnectionMap()
+
+        node = object()
+        ptn1 = model.PassthroughNode()
+        ptn2 = model.PassthroughNode()
+        sink = object()
+
+        # Add connections
+        cm.add_connection(
+            node, OutputPort.standard, model.SignalParameters(),
+            NodeTransmissionParameters(Transform(16, 512, 1,
+                                                 slice_out=slice(16, 32))),
+            ptn1, InputPort.standard,
+            model.ReceptionParameters(None, 512, None)
+        )
+        cm.add_connection(
+            ptn1, OutputPort.standard, model.SignalParameters(),
+            PassthroughNodeTransmissionParameters(
+                Transform(512, 512, np.ones((512, 512)))
+            ),
+            ptn2, InputPort.standard,
+            model.ReceptionParameters(None, 512, None)
+        )
+        cm.add_connection(
+            ptn2, OutputPort.standard, model.SignalParameters(),
+            PassthroughNodeTransmissionParameters(
+                Transform(512, 1024, np.ones((1024, 512)))
+            ),
+            sink, InputPort.standard,
+            model.ReceptionParameters(None, 1024, None)
+        )
+
+        # Insert interposers, only one should be included
+        interposers, new_cm = cm.insert_interposers()
+        assert len(interposers) == 1
+        interposer = interposers[0]
+
+        # Check that the node connects to the interposer and that the
+        # interposer was the first passthrough node.
+        from_node = new_cm._connections[node][OutputPort.standard]
+        for (_, transmission_pars), sinks in iteritems(from_node):
+            assert transmission_pars == NodeTransmissionParameters(
+                Transform(16, 512, 1, slice_out=slice(16, 32))
+            )
+
+            assert len(sinks) == 1
+            for s in sinks:
+                assert s.sink_object is interposer
+
+        # Check that the interposer connects to the sink
+        from_interposer = new_cm._connections[interposer][OutputPort.standard]
+        for (_, transmission_pars), sinks in iteritems(from_interposer):
+            assert transmission_pars.size_in == 512
+            assert transmission_pars.size_out == 1024
+
+            assert len(sinks) == 1
+            for s in sinks:
+                assert s.sink_object is sink

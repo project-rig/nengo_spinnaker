@@ -10,9 +10,10 @@ from nengo.utils import numpy as npext
 import numpy as np
 
 from .builder import BuiltConnection, Model, ObjectPort, spec
-from .transmission_parameters import EnsembleTransmissionParameters
-from .model import InputPort, OutputPort
-from .ports import EnsembleInputPort, EnsembleOutputPort
+from .transmission_parameters import Transform, EnsembleTransmissionParameters
+from .ports import (
+    EnsembleInputPort, EnsembleOutputPort, InputPort, OutputPort
+)
 from .. import operators
 from ..utils import collections as collections_ext
 
@@ -241,11 +242,13 @@ def build_from_ensemble_connection(model, conn):
                                          transform=transform,
                                          solver_info=solver_info)
 
-    return EnsembleTransmissionParameters(decoders.T,
-                                          conn.post_obj.size_in,
-                                          conn.post_slice,
-                                          conn.learning_rule,
-                                          transform)
+    t = Transform(size_in=decoders.shape[1],
+                  size_out=conn.post_obj.size_in,
+                  transform=transform,
+                  slice_out=conn.post_slice)
+    return EnsembleTransmissionParameters(
+            decoders.T, t, conn.learning_rule
+    )
 
 
 @Model.transmission_parameter_builders.register(nengo.ensemble.Neurons)
