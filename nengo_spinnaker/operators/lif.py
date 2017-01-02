@@ -135,6 +135,7 @@ class EnsembleLIF(object):
 
         # Extract pre-scaled encoders from parameters
         encoders_with_gain = params.scaled_encoders
+        size_in = encoders_with_gain.shape[1]
 
         # Create filtered activity region
         ens_regions[Regions.filtered_activity] =\
@@ -404,42 +405,18 @@ class EnsembleLIF(object):
             regions.EncoderRecordingRegion(n_steps if self.record_encoders
                                            else 0, self.learnt_enc_dims)
 
-        # Create constraints against which to partition, initially assume that
-        # we can devote 16 cores to every problem.
-        sdram_constraint = partition.Constraint(128 * 2**20,
-                                                0.9)  # 90% of 128MiB
-        dtcm_constraint = partition.Constraint(16 * 56 * 2**10,
-                                               0.75)  # 75% of 16 cores DTCM
-
+        # Create constraints against which to partition.
         # The number of cycles available is 200MHz * the machine timestep; or
         # 200 * the machine timestep in microseconds.
         cycles = 200 * model.machine_timestep
-        cpu_constraint = partition.Constraint(cycles * 16,
-                                              0.8)  # 80% of 16 cores compute
+        cpu_constraint = partition.Constraint(cycles, 0.75)  # 75% of cycles
+        dtcm_constraint = partition.Constraint(56*2**10, 0.75)  # 75% DTCM
 
-        # Form the constraints dictionary
-        def _make_constraint(f, size_in, size_out, size_learnt_out, **kwargs):
-            """Wrap a usage computation method to work with the partitioner."""
-            def f_(vertex_slice):
-                # Calculate the number of neurons
-                n_neurons = vertex_slice.stop - vertex_slice.start
-
-                # Call the original method
-                return f(size_in, size_out, size_learnt_out,
-                         n_neurons, **kwargs)
-            return f_
-
-        partition_constraints = {
-            sdram_constraint: _make_constraint(_lif_sdram_usage,
-                                               encoders_with_gain.shape[1],
-                                               size_out, size_learnt_out),
-            dtcm_constraint: _make_constraint(_lif_dtcm_usage,
-                                              encoders_with_gain.shape[1],
-                                              size_out, size_learnt_out),
-            cpu_constraint: _make_constraint(_lif_cpu_usage,
-                                             encoders_with_gain.shape[1],
-                                             size_out, size_learnt_out),
-        }
+        cluster_usage = ClusterResourceUsage(
+            size_in, size_out, size_learnt_out
+        )
+        partition_constraints = {dtcm_constraint: cluster_usage.dtcm_usage,
+                                 cpu_constraint: cluster_usage.cpu_usage}
 
         # Partition the ensemble to create clusters of co-operating cores
         self.clusters = list()
@@ -646,63 +623,30 @@ class EnsembleCluster(object):
 
     def make_vertices(self, cycles):
         """Partition the neurons onto multiple cores."""
-        # Make reduced constraints to partition against, we don't partition
-        # against SDRAM as we're already sure that there is sufficient SDRAM
-        # (and if there isn't we can't possibly fit all the vertices on a
-        # single chip).
         dtcm_constraint = partition.Constraint(56 * 2**10, 0.75)  # 75% of DTCM
-        cpu_constraint = partition.Constraint(cycles, 0.8)  # 80% of compute
+        cpu_constraint = partition.Constraint(cycles, 0.75)  # 75% of compute
 
         # Get the number of neurons in this cluster
         n_neurons = self.neuron_slice.stop - self.neuron_slice.start
-
-        # Form the constraints dictionary
-        def _make_constraint(f, size_in, **kwargs):
-            """Wrap a usage computation method to work with the partitioner."""
-            def f_(neuron_slice, output_slice, learnt_output_slice):
-                # Calculate the number of neurons
-                n_neurons = neuron_slice.stop - neuron_slice.start
-
-                # Calculate the number of outgoing dimensions
-                size_out = output_slice.stop - output_slice.start
-                size_learnt_out = learnt_output_slice.stop -\
-                    learnt_output_slice.start
-
-                # Call the original method
-                return f(size_in, size_out, size_learnt_out,
-                         n_neurons, **kwargs)
-            return f_
-
-        constraints = {
-            dtcm_constraint: _make_constraint(_lif_dtcm_usage,
-                                              self.encoder_width,
-                                              n_neurons_in_cluster=n_neurons),
-            cpu_constraint: _make_constraint(_lif_cpu_usage,
-                                             self.encoder_width,
-                                             n_neurons_in_cluster=n_neurons),
-        }
+        core_usage = CoreResouceUsage(self.encoder_width, n_neurons)
+        constraints = {dtcm_constraint: core_usage.dtcm_usage,
+                       cpu_constraint: core_usage.cpu_usage}
 
         # Partition the slice of neurons that we have
-        self.neuron_slices = list()
-        output_slices = list()
-        learnt_output_slices = list()
-        for neurons, outputs, learnt_outputs in partition.partition_multiple(
-                (self.neuron_slice, slice(self.size_out),
-                 slice(self.size_learnt_out)), constraints):
-            self.neuron_slices.append(neurons)
-            output_slices.append(outputs)
-            learnt_output_slices.append(learnt_outputs)
-
-        n_slices = len(self.neuron_slices)
-        assert n_slices <= 16  # Too many cores in the cluster
-
-        # Also partition the input space
-        input_slices = partition.divide_slice(slice(0, self.size_in),
-                                              n_slices)
+        sliced_objects = (
+            slice(self.size_in),  # Input subspace
+            self.neuron_slice,  # Neurons
+            slice(self.size_out),  # Outputs
+            slice(self.size_learnt_out),  # Learnt output
+        )
+        all_slices = list(
+            partition.partition_multiple(sliced_objects, constraints)
+        )
+        assert len(all_slices) <= 16, "Too many cores in cluster"
+        self.neuron_slices.extend(sl[1] for sl in all_slices)
 
         # Zip these together to create the vertices
-        all_slices = zip(input_slices, output_slices, learnt_output_slices)
-        for i, (inp, output, learnt) in enumerate(all_slices):
+        for i, (inp, _, output, learnt) in enumerate(all_slices):
             # Create the vertex
             vertex = EnsembleSlice(i, self.neuron_slices, inp, output, learnt,
                                    self.regions)
@@ -1288,44 +1232,116 @@ def _get_basic_region_arguments(neuron_slice, output_slice,
     return region_arguments
 
 
-def _lif_sdram_usage(size_in, size_out, size_learnt_out, n_neurons):
-    """Approximation of SDRAM usage."""
-    # Per neuron cost = encoders + decoders + gain + bias
-    total_size_out = size_out + size_learnt_out
-    size = (n_neurons * (size_in + total_size_out + 2)) + total_size_out
-    return size * 4
+def iceil(val):
+    return int(math.ceil(val))
 
 
-def _lif_dtcm_usage(size_in, size_out, size_learnt_out,
-                    n_neurons, n_neurons_in_cluster=None):
-    """Approximation of DTCM usage."""
-    # Assume no clustering if n_neurons_in_cluster is None
-    if n_neurons_in_cluster is None:
-        n_neurons_in_cluster = n_neurons
-
-    # Per neuron cost = encoders + gain + bias + voltage + refractory counter
-    # Per neuron in cluster cost = decoders
-    # **TODO** filters (especially learnt ones need taking into account)
-    total_size_out = size_out + size_learnt_out
-    size = (n_neurons * (size_in + 3) + total_size_out + (5 * size_in) +
-            n_neurons // 2) + (n_neurons_in_cluster * total_size_out)
-
-    return size * 4
+def get_input_filtering_cycles(size_in):
+    """Cycles required to perform filtering of received values."""
+    # Based on thesis profiling
+    return 39*size_in + 135
 
 
-def _lif_cpu_usage(size_in, size_out, size_learnt_out, n_neurons,
-                   n_neurons_in_cluster=None):
-    """Approximation of compute cost."""
-    # Assume no clustering if n_neurons_in_cluster is None
-    if n_neurons_in_cluster is None:
-        n_neurons_in_cluster = n_neurons
+def get_neuron_update_cycles(size_in, n_neurons_on_core):
+    """Cycles required to simulate neurons."""
+    # Based on thesis profiling
+    return 9*n_neurons_on_core*size_in + 61*n_neurons_on_core + 174
 
-    input_filter_cost = 40 * size_in + 131
-    encoder_and_neuron_cost = (10 * size_in + 59) * n_neurons
-    decoder_cost = (3 * n_neurons_in_cluster + 234) * size_out
 
-    # **TODO** base on profiled data!
-    learnt_decoder_cost = (3 * n_neurons_in_cluster + 234) * size_learnt_out
+def get_decode_and_transmit_cycles(n_neurons_in_cluster, size_out):
+    """Cycles required to decode spikes and transmit packets."""
+    # Based on thesis profiling
+    return 2*n_neurons_in_cluster*size_out + 143*size_out + 173
 
-    return input_filter_cost + encoder_and_neuron_cost +\
-        decoder_cost + learnt_decoder_cost
+
+class ClusterResourceUsage(object):
+    def __init__(self, size_in, size_out, size_learnt_out, n_cores=16):
+        self.n_cores = n_cores
+        self.size_in = size_in
+        self.size_out = size_out
+        self.size_learnt_out = size_learnt_out
+
+        # Compute the loading for the most heavily loaded core
+        self.fn_cores = float(n_cores)
+        self.size_in_per_core = iceil(float(size_in) / self.fn_cores)
+        self.size_out_per_core = iceil(float(size_out) / self.fn_cores)
+        self.size_learnt_out_per_core = iceil(
+            float(size_learnt_out) / self.fn_cores
+        )
+
+    def cpu_usage(self, neuron_slice):
+        """Get the number of cycles taken by the most heavily loaded core in a
+        cluster of cores assigned the given slice of neurons.
+        """
+        # Compute the number of neurons in the slice and the number allocated
+        # to the most heavily loaded core.
+        n_neurons = neuron_slice.stop - neuron_slice.start
+        neurons_per_core = iceil(float(n_neurons) / self.fn_cores)
+
+        # Compute the loading
+        # TODO Profile PES and Voja
+        return (
+            get_input_filtering_cycles(
+                self.size_in_per_core) +
+            get_neuron_update_cycles(
+                self.size_in, neurons_per_core) +
+            get_decode_and_transmit_cycles(
+                n_neurons, self.size_out_per_core) +
+            get_decode_and_transmit_cycles(
+                n_neurons, self.size_learnt_out_per_core)
+        )
+
+    def dtcm_usage(self, neuron_slice):
+        """Get the amount of memory required by the most heavily loaded core in
+        a cluster of cores assigned the given slice of neurons.
+        """
+        # Compute the number of neurons in the slice and the number allocated
+        # to the most heavily loaded core.
+        n_neurons = neuron_slice.stop - neuron_slice.start
+        neurons_per_core = iceil(float(n_neurons) / self.fn_cores)
+
+        encoder_cost = neurons_per_core * self.size_in
+        decoder_cost = n_neurons * (self.size_out_per_core +
+                                    self.size_learnt_out_per_core)
+        neurons_cost = neurons_per_core * 3
+
+        return (encoder_cost + decoder_cost + neurons_cost) * 4
+
+
+class CoreResouceUsage(object):
+    def __init__(self, size_in, n_neurons_in_cluster):
+        self.size_in = size_in
+        self.n_neurons_in_cluster = n_neurons_in_cluster
+
+    def cpu_usage(self, input_slice, neuron_slice,
+                  output_slice, learnt_output_slice):
+        """Get the number of cycles taken by a core to simulate a time step."""
+        filtered_dims = input_slice.stop - input_slice.start
+        n_neurons = neuron_slice.stop - neuron_slice.start
+        size_out = output_slice.stop - output_slice.start
+        size_learnt_out = learnt_output_slice.stop - learnt_output_slice.start
+
+        # Compute the loading
+        # TODO Profile PES and Voja
+        return (
+            get_input_filtering_cycles(filtered_dims) +
+            get_neuron_update_cycles(self.size_in, n_neurons) +
+            get_decode_and_transmit_cycles(
+                self.n_neurons_in_cluster, size_out) +
+            get_decode_and_transmit_cycles(
+                self.n_neurons_in_cluster, size_learnt_out)
+        )
+
+    def dtcm_usage(self, input_slice, neuron_slice,
+                   output_slice, learnt_output_slice):
+        """Get the amount of memory required."""
+        # filtered_dims = input_slice.stop - input_slice.start
+        n_neurons = neuron_slice.stop - neuron_slice.start
+        size_out = output_slice.stop - output_slice.start
+        size_learnt_out = learnt_output_slice.stop - learnt_output_slice.start
+
+        encoder_cost = n_neurons * self.size_in
+        decoder_cost = self.n_neurons_in_cluster * (size_out + size_learnt_out)
+        neurons_cost = n_neurons * 3
+
+        return (encoder_cost + decoder_cost + neurons_cost) * 4
