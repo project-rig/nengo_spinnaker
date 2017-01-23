@@ -89,7 +89,10 @@ def build_mn_net_graph(nets_routes, prior_constraints=None):
             for _, chip, routes in tree.traverse():
                 # Add this net to the set of nets who take this route at this
                 # point.
-                route = frozenset(routes)  # Get the key for the routes taken
+                route = 0x0
+                for r in routes:
+                    route |= (1 << r)
+
                 chip_route_nets[chip][route].append(net)
 
                 # Add constraints to the net graph dependent on which nets take
@@ -213,8 +216,11 @@ def build_cluster_graph(signal_routes):
 
             # Traverse the multicast tree to build up the dictionary mapping
             # chips to routes and clusters.
-            for _, chip, route in tree.traverse():
-                route = frozenset(route)  # Get the key for the routes taken
+            for _, chip, routes in tree.traverse():
+                # Get the key for the routes taken
+                route = 0x0
+                for r in routes:
+                    route |= (1 << r)
 
                 # Add this cluster to the set of clusters whose net takes this
                 # route at this point.
