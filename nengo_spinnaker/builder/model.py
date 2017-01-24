@@ -1,6 +1,6 @@
 """Objects used to represent Nengo networks as instantiated on SpiNNaker.
 """
-import collections
+from collections import namedtuple, defaultdict
 import enum
 from .ports import EnsembleInputPort
 from six import iteritems, itervalues, iterkeys
@@ -45,9 +45,9 @@ class ConnectionMap(object):
     def __init__(self):
         """Create a new empty connection map."""
         # Construct the connection map internal structure
-        self._connections = collections.defaultdict(
-            lambda: collections.defaultdict(
-                lambda: collections.defaultdict(list)
+        self._connections = defaultdict(
+            lambda: defaultdict(
+                lambda: defaultdict(list)
             )
         )
 
@@ -94,7 +94,7 @@ class ConnectionMap(object):
             Dictionary mapping ports to lists of parameters for the signals
             that originate from them.
         """
-        signals = collections.defaultdict(list)
+        signals = defaultdict(list)
 
         # For every port and list of (transmission pars, sinks) associated with
         # it add the transmission parameters to the correct list of signals.
@@ -103,36 +103,32 @@ class ConnectionMap(object):
 
         return signals
 
-    def get_signals_to_object(self, sink_object):
-        """Get the signals received by a sink object.
+    def get_signals_to_all_objects(self):
+        """Get the signals received by all sink objects.
 
         Returns
         -------
-        {port : [ReceptionSpec, ...], ...}
-            Dictionary mapping ports to the lists of objects specifying
-            incoming signals.
+        {object: {port : [ReceptionSpec, ...], ...}, ...}
+            Dictionary mapping objects to mappings from ports to lists of
+            objects specifying incoming signals.
         """
-        signals = collections.defaultdict(list)
+        incoming_signals = defaultdict(lambda: defaultdict(list))
 
-        # For all connections we have reference to identify those which
-        # terminate at the given object. For those that do add a new entry to
-        # the signal dictionary.
         for port_conns in itervalues(self._connections):
             for conns in itervalues(port_conns):
                 for (sig_params, _), sinks in iteritems(conns):
                     # For each sink, if the sink object is the specified object
                     # then add signal to the list.
                     for sink in sinks:
-                        if sink.sink_object is sink_object:
-                            # This is the desired sink object, so remember the
-                            # signal. First construction the reception
-                            # specification.
-                            signals[sink.port].append(
-                                ReceptionSpec(sig_params,
-                                              sink.reception_parameters)
-                            )
+                        # This is the desired sink object, so remember the
+                        # signal. First construction the reception
+                        # specification.
+                        incoming_signals[sink.sink_object][sink.port].append(
+                            ReceptionSpec(sig_params,
+                                          sink.reception_parameters)
+                        )
 
-        return signals
+        return incoming_signals
 
     def get_signals(self):
         """Extract all the signals from the connection map.
@@ -204,8 +200,8 @@ class SignalParameters(object):
         return not self == b
 
 
-ReceptionParameters = collections.namedtuple("ReceptionParameters",
-                                             "filter, width, learning_rule")
+ReceptionParameters = namedtuple("ReceptionParameters",
+                                 "filter, width, learning_rule")
 """Basic reception parameters that relate to the reception of a series of
 multicast packets.
 
@@ -218,7 +214,7 @@ width : int
 """
 
 
-class _ParsSinksPair(collections.namedtuple("_PSP", "parameters, sinks")):
+class _ParsSinksPair(namedtuple("_PSP", "parameters, sinks")):
     """Pair of transmission parameters and sink tuples."""
     def __new__(cls, signal_parameters, sinks=list()):
         # Copy the sinks list before calling __new__
@@ -227,15 +223,13 @@ class _ParsSinksPair(collections.namedtuple("_PSP", "parameters, sinks")):
                                                   sinks)
 
 
-_SinkPars = collections.namedtuple("_SinkPars", ["sink_object", "port",
-                                                 "reception_parameters"])
+_SinkPars = namedtuple("_SinkPars", ["sink_object", "port",
+                                     "reception_parameters"])
 """Collection of parameters for a sink."""
 
 
-ReceptionSpec = collections.namedtuple(
-    "ReceptionSpec", ["signal_parameters",
-                      "reception_parameters"]
-)
+ReceptionSpec = namedtuple("ReceptionSpec", ["signal_parameters",
+                                             "reception_parameters"])
 """Specification of an incoming connection.
 
 Attributes
