@@ -390,7 +390,7 @@ class Model(object):
                     # Add the source to the final list of sources
                     sources.append(source)
 
-            sinks = collections_ext.flatinsertionlist()
+            sinks = collections.deque()
             for sink in signal.sinks:
                 # Get all the sink vertices
                 sink_vertices = operator_vertices[sink]
@@ -400,7 +400,7 @@ class Model(object):
                 # Include any sinks which either don't have an `accepts_signal`
                 # method or return true when this is called with the signal and
                 # transmission parameters.
-                sinks.append(s for s in sink_vertices if
+                sinks.extend(s for s in sink_vertices if
                              not hasattr(s, "accepts_signal") or
                              s.accepts_signal(signal, transmission_parameters))
 
