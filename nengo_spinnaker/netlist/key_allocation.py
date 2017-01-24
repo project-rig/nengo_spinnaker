@@ -1,6 +1,5 @@
 import logging
 from collections import defaultdict, deque
-from itertools import combinations, product
 from six import iteritems, iterkeys, itervalues
 
 logger = logging.getLogger(__name__)
@@ -75,25 +74,39 @@ def build_mn_net_graph(nets_routes, prior_constraints=None):
         An adjacency list representation of a graph where the presence of an
         edge indicates that two multicast nets may not share a routing key.
     """
-    # Construct a map from chips to unique sets of routes from that chip to
-    # nets which take that route.
-    chip_route_nets = defaultdict(lambda: defaultdict(deque))
-    for net, trees in iteritems(nets_routes):
-        for tree in trees:
-            for _, chip, routes in tree.traverse():
-                chip_route_nets[chip][frozenset(routes)].append(net)
-
     # The different sets of routes from a chip indicate nets which cannot share
     # a routing key, this is indicated by creating an edge between those `nets'
     # in the net graph.
     net_graph = {net: set() for net in iterkeys(nets_routes)}
-    for route_nets in itervalues(chip_route_nets):
-        for xs, ys in combinations(itervalues(route_nets), 2):
-            for x, y in product(xs, ys):
-                # Add an edge iff. it would connect two *different* vertices
-                if x != y:
-                    net_graph[x].add(y)
-                    net_graph[y].add(x)
+
+    # Construct a map from chips to unique sets of routes from that chip to
+    # nets which take that route whilst simultaneously using this data
+    # structure to fill in the above graph of which nets may not share a
+    # routing key.
+    chip_route_nets = defaultdict(lambda: defaultdict(deque))
+    for net, trees in iteritems(nets_routes):
+        for tree in trees:
+            for _, chip, routes in tree.traverse():
+                # Add this net to the set of nets who take this route at this
+                # point.
+                route = 0x0
+                for r in routes:
+                    route |= (1 << r)
+
+                chip_route_nets[chip][route].append(net)
+
+                # Add constraints to the net graph dependent on which nets take
+                # different routes at this point.
+                routes_from_chip = chip_route_nets[chip]
+                for other_route, nets in iteritems(routes_from_chip):
+                    if other_route != route:
+                        for other_net in nets:
+                            # This net cannot share an identifier with any of
+                            # the nets who take a different route at this
+                            # point.
+                            if net != other_net:
+                                net_graph[net].add(other_net)
+                                net_graph[other_net].add(net)
 
     # Add any prior constraints into the net graph (doing so in such a way that
     # ensures that the prior constraints are undirected).
@@ -203,8 +216,11 @@ def build_cluster_graph(signal_routes):
 
             # Traverse the multicast tree to build up the dictionary mapping
             # chips to routes and clusters.
-            for _, chip, route in tree.traverse():
-                route = frozenset(route)  # Get the key for the routes taken
+            for _, chip, routes in tree.traverse():
+                # Get the key for the routes taken
+                route = 0x0
+                for r in routes:
+                    route |= (1 << r)
 
                 # Add this cluster to the set of clusters whose net takes this
                 # route at this point.
