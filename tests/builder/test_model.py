@@ -154,7 +154,7 @@ class TestConnectionMap(object):
         assert (sp1, tp2) in sigs_b[sp_2]
         assert (sp2, tp2) in sigs_b[sp_2]
 
-    def test_get_signals_to_object(self):
+    def test_get_signals_to_all_objects(self):
         # Create two ports
         sp_1 = mock.Mock(name="Sink Port 1")
         sp_2 = mock.Mock(name="Sink Port 2")
@@ -186,7 +186,7 @@ class TestConnectionMap(object):
         cm.add_connection(None, None, tp1, None, sink_b, sp_1, rp)
 
         # Get the signals to sink_a, check that they are as expected
-        sigs_a = cm.get_signals_to_object(sink_a)
+        sigs_a = cm.get_signals_to_all_objects()[sink_a]
         assert len(sigs_a[sp_1]) == 2
         seen_rps = []
 

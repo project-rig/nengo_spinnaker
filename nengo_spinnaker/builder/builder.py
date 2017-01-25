@@ -142,10 +142,12 @@ class Model(object):
         self.rngs = dict()
         self.rng = None
 
+        # Model data
         self.config = None
         self.object_operators = dict()
         self.extra_operators = list()
         self.connection_map = model.ConnectionMap()
+        self._incoming_signals = None
 
         if keyspaces is None:
             keyspaces = KeyspaceContainer()
@@ -281,7 +283,7 @@ class Model(object):
         # Build
         self._probe_builders[type(target_obj)](self, probe)
 
-    def get_signals_from_object(self, *args):  # pragma : no cover
+    def get_signals_from_object(self, source_object):
         """Get the signals transmitted by a source object.
 
         Returns
@@ -290,9 +292,9 @@ class Model(object):
             Dictionary mapping ports to lists of parameters for the signals
             that originate from them.
         """
-        return self.connection_map.get_signals_from_object(*args)
+        return self.connection_map.get_signals_from_object(source_object)
 
-    def get_signals_to_object(self, *args):  # pragma : no cover
+    def get_signals_to_object(self, sink_object):
         """Get the signals received by a sink object.
 
         Returns
@@ -301,7 +303,12 @@ class Model(object):
             Dictionary mapping ports to the lists of objects specifying
             incoming signals.
         """
-        return self.connection_map.get_signals_to_object(*args)
+        if self._incoming_signals is None:
+            # Get faster access to incoming signals from the connection map.
+            self._incoming_signals =\
+                self.connection_map.get_signals_to_all_objects()
+
+        return self._incoming_signals[sink_object]
 
     def make_netlist(self, *args, **kwargs):
         """Convert the model into a netlist for simulating on SpiNNaker.
@@ -356,8 +363,8 @@ class Model(object):
             else:
                 # Otherwise assume that all signals arriving at the operator
                 # must be uniquely identified.
-                incoming_all = itertools.chain(
-                    *itervalues(self.connection_map.get_signals_to_object(op)))
+                incoming_all = itertools.chain(*itervalues(
+                    self.get_signals_to_object(op)))
                 for (u, _), (v, _) in itertools.combinations(incoming_all, 2):
                     if u != v:
                         id_constraints[u].add(v)
