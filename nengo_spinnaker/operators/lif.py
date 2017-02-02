@@ -409,7 +409,7 @@ class EnsembleLIF(object):
         # The number of cycles available is 200MHz * the machine timestep; or
         # 200 * the machine timestep in microseconds.
         cycles = 200 * model.machine_timestep
-        cpu_constraint = partition.Constraint(cycles, 0.75)  # 75% of cycles
+        cpu_constraint = partition.Constraint(cycles, 0.4)  # 40% of cycles
         dtcm_constraint = partition.Constraint(56*2**10, 0.75)  # 75% DTCM
 
         cluster_usage = ClusterResourceUsage(
@@ -624,7 +624,7 @@ class EnsembleCluster(object):
     def make_vertices(self, cycles):
         """Partition the neurons onto multiple cores."""
         dtcm_constraint = partition.Constraint(56 * 2**10, 0.75)  # 75% of DTCM
-        cpu_constraint = partition.Constraint(cycles, 0.75)  # 75% of compute
+        cpu_constraint = partition.Constraint(cycles, 0.4)  # 40% of compute
 
         # Get the number of neurons in this cluster
         n_neurons = self.neuron_slice.stop - self.neuron_slice.start
