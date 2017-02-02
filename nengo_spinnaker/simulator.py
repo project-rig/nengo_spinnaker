@@ -14,8 +14,6 @@ from .builder import Model
 from .node_io import Ethernet
 from .rc import rc
 from .utils.config import getconfig
-from .utils.model import (get_force_removal_passnodes,
-                          optimise_out_passthrough_nodes)
 
 logger = logging.getLogger(__name__)
 
@@ -112,11 +110,6 @@ class Simulator(object):
         self.model = Model(dt=dt, machine_timestep=machine_timestep,
                            decoder_cache=get_default_decoder_cache())
         self.model.build(network, **builder_kwargs)
-
-        forced_removals = get_force_removal_passnodes(network)
-        optimise_out_passthrough_nodes(self.model,
-                                       self.io_controller.passthrough_nodes,
-                                       network.config, forced_removals)
 
         logger.info("Build took {:.3f} seconds".format(time.time() -
                                                        start_build))

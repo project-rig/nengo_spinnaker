@@ -10,9 +10,10 @@ from nengo.utils import numpy as npext
 import numpy as np
 
 from .builder import BuiltConnection, Model, ObjectPort, spec
-from .transmission_parameters import EnsembleTransmissionParameters
-from .model import InputPort, OutputPort
-from .ports import EnsembleInputPort, EnsembleOutputPort
+from .transmission_parameters import Transform, EnsembleTransmissionParameters
+from .ports import (
+    EnsembleInputPort, EnsembleOutputPort, InputPort, OutputPort
+)
 from .. import operators
 from ..utils import collections as collections_ext
 
@@ -39,11 +40,10 @@ def get_ensemble_source(model, conn):
 
 
 @Model.source_getters.register(nengo.ensemble.Neurons)
-def get_neurons_source(model, connection):
+def get_neurons_source(model, conn):
     """Get the source for connections out of neurons."""
-    raise NotImplementedError(
-        "SpiNNaker does not currently support neuron to neuron connections"
-    )
+    ens = model.object_operators[conn.pre_obj.ensemble]
+    return spec(ObjectPort(ens, EnsembleOutputPort.neurons))
 
 
 @Model.sink_getters.register(nengo.Ensemble)
@@ -241,19 +241,19 @@ def build_from_ensemble_connection(model, conn):
                                          transform=transform,
                                          solver_info=solver_info)
 
-    return EnsembleTransmissionParameters(decoders.T,
-                                          conn.post_obj.size_in,
-                                          conn.post_slice,
-                                          conn.learning_rule,
-                                          transform)
+    t = Transform(size_in=decoders.shape[1],
+                  size_out=conn.post_obj.size_in,
+                  transform=transform,
+                  slice_out=conn.post_slice)
+    return EnsembleTransmissionParameters(
+            decoders.T, t, conn.learning_rule
+    )
 
 
 @Model.transmission_parameter_builders.register(nengo.ensemble.Neurons)
 def build_from_neurons_connection(model, conn):
     """Build the parameters object for a connection from Neurons."""
-    raise NotImplementedError(
-        "SpiNNaker does not currently support connections from Neurons"""
-    )
+    return object()
 
 
 @Model.probe_builders.register(nengo.Ensemble)

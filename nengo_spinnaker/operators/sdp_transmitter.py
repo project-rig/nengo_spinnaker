@@ -1,7 +1,7 @@
 from rig.place_and_route import Cores, SDRAM
 import struct
 
-from nengo_spinnaker.builder.model import InputPort
+from nengo_spinnaker.builder.ports import InputPort
 from nengo_spinnaker.builder.netlist import netlistspec
 from nengo_spinnaker.netlist import Vertex
 from nengo_spinnaker.regions import Region

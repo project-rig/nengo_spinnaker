@@ -1,6 +1,7 @@
 import nengo
 from .builder import Model, ObjectPort, spec
-from .model import ReceptionParameters, InputPort, OutputPort
+from .model import ReceptionParameters
+from .ports import InputPort, OutputPort
 
 
 @Model.source_getters.register(nengo.base.NengoObject)

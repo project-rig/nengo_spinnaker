@@ -1,6 +1,18 @@
 import enum
 
 
+class OutputPort(enum.Enum):
+    """Indicate the intended transmitting part of an executable."""
+    standard = 0
+    """Standard, value-based, output port."""
+
+
+class InputPort(enum.Enum):
+    """Indicate the intended receiving part of an executable."""
+    standard = 0
+    """Standard, value-based, output port."""
+
+
 class EnsembleOutputPort(enum.Enum):
     """Ensemble only output ports."""
     neurons = 0

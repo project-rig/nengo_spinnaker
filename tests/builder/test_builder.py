@@ -190,6 +190,9 @@ class TestMakeConnection(object):
 
         # Modify the Model so that we can interpret calls to the connection map
         m.connection_map = mock.Mock(name="ConnectionMap")
+        m.connection_map.insert_interposers = mock.Mock(
+            return_value=([], m.connection_map)  # NOP
+        )
 
         source = mock.Mock(name="Source Object")
         source_port = mock.Mock(name="Source Port")
@@ -519,40 +522,6 @@ class TestMakeNetlist(object):
         assert set(netlist.load_functions) == set([load_fn_a, load_fn_b])
         assert netlist.before_simulation_functions == [pre_fn_a]
         assert netlist.after_simulation_functions == [post_fn_a]
-
-    def test_removes_sinkless_filters(self):
-        """Test that making a netlist correctly filters out passthrough Nodes
-        with no outgoing connections.
-        """
-        # Create the first operator
-        object_a = mock.Mock(name="object A")
-        vertex_a = mock.Mock(name="vertex A")
-        load_fn_a = mock.Mock(name="load function A")
-        pre_fn_a = mock.Mock(name="pre function A")
-        post_fn_a = mock.Mock(name="post function A")
-
-        operator_a = mock.Mock(name="operator A", spec_set=["make_vertices"])
-        operator_a.make_vertices.return_value = \
-            netlistspec((vertex_a, ), load_fn_a, pre_fn_a, post_fn_a)
-
-        # Create the second operator
-        object_b = mock.Mock(name="object B", spec_set=["make_vertices"])
-        operator_b = operators.Filter(16)  # Shouldn't need building
-
-        # Create the model, add the items and add an entry to the connection
-        # map.
-        model = Model()
-        model.object_operators[object_a] = operator_a
-        model.object_operators[object_b] = operator_b
-        model.connection_map.add_connection(
-            operator_a, None, SignalParameters(), None,
-            operator_b, None, None
-        )
-        netlist = model.make_netlist(1)
-
-        # The netlist should contain vertex a and no nets
-        assert len(netlist.nets) == 0
-        assert netlist.operator_vertices == {operator_a: (vertex_a, )}
 
     def test_extra_operators_and_signals(self):
         """Test the operators in the extra_operators list are included when

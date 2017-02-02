@@ -206,6 +206,11 @@ class Model(object):
         with self.decoder_cache:
             self._build_network(network)
 
+        # Insert interposers
+        interposers, connection_map = self.connection_map.insert_interposers()
+        self.extra_operators.extend(interposers)
+        self.connection_map = connection_map
+
     def _build_network(self, network):
         # Get the seed for the network
         self.seeds[network] = get_seed(network, np.random)
@@ -319,11 +324,6 @@ class Model(object):
             A netlist which can be placed and routed to simulate this model on
             a SpiNNaker machine.
         """
-        # Remove any passthrough Nodes which don't connect to anything
-        from nengo_spinnaker import operators
-        removed_operators = model.remove_sinkless_objects(self.connection_map,
-                                                          operators.Filter)
-
         # Call each operator to make vertices
         operator_vertices = dict()
         load_functions = collections_ext.noneignoringlist()
@@ -336,8 +336,8 @@ class Model(object):
 
         for op in itertools.chain(itervalues(self.object_operators),
                                   self.extra_operators):
-            # Skip any operators that were previously removed
-            if op in removed_operators:
+            # If the operator is a passthrough Node then skip it
+            if isinstance(op, model.PassthroughNode):
                 continue
 
             # Otherwise call upon the operator to build vertices for the

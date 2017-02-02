@@ -7,7 +7,7 @@ import struct
 from nengo.processes import Process
 from nengo.utils import numpy as npext
 
-from nengo_spinnaker.builder.model import OutputPort
+from nengo_spinnaker.builder.ports import OutputPort
 from nengo_spinnaker.builder.netlist import netlistspec
 from nengo_spinnaker.netlist import VertexSlice
 from nengo_spinnaker import partition
@@ -214,7 +214,8 @@ class SystemRegion(regions.Region):
 def get_transform_keys(sig, transmission_params):
     # Get the transform for the connection from the list of built connections,
     # then remove zeroed rows (should any exist) and derive the list of keys.
-    transform = transmission_params.full_transform(slice_out=False)
+    transform = transmission_params.full_transform(slice_in=False,
+                                                   slice_out=False)
     keep = np.any(transform != 0.0, axis=1)
     keys = list()
 

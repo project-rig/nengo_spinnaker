@@ -2,7 +2,7 @@ import mock
 import nengo
 
 from nengo_spinnaker.builder.builder import Model
-from nengo_spinnaker.builder.model import InputPort, OutputPort
+from nengo_spinnaker.builder.ports import InputPort, OutputPort
 from nengo_spinnaker.builder.connection import (
     generic_source_getter,
     generic_sink_getter,

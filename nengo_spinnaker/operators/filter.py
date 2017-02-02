@@ -4,7 +4,7 @@ from rig.place_and_route import Cores, SDRAM
 import struct
 
 from nengo_spinnaker.builder.netlist import netlistspec
-from nengo_spinnaker.builder.model import InputPort, OutputPort
+from nengo_spinnaker.builder.ports import InputPort, OutputPort
 from nengo_spinnaker import regions
 from nengo_spinnaker.regions.utils import Args
 from nengo_spinnaker.regions.filters import make_filter_regions

@@ -4,11 +4,13 @@ import numpy as np
 import threading
 
 from .transmission_parameters import (
+    Transform,
     PassthroughNodeTransmissionParameters,
     NodeTransmissionParameters)
 from nengo_spinnaker.builder.builder import ObjectPort, spec, Model
-from nengo_spinnaker.builder.model import InputPort, OutputPort
-from nengo_spinnaker.operators import Filter, ValueSink, ValueSource
+from nengo_spinnaker.builder.model import PassthroughNode
+from nengo_spinnaker.builder.ports import InputPort, OutputPort
+from nengo_spinnaker.operators import ValueSink, ValueSource
 from nengo_spinnaker.utils.config import getconfig
 
 
@@ -115,9 +117,9 @@ class NodeIOController(object):
         )
 
         if node.output is None:
-            # If the Node is a passthrough Node then create a new filter object
-            # for it.
-            op = Filter(node.size_in)
+            # If the Node is a passthrough Node then create a new placeholder
+            # for the passthrough node.
+            op = PassthroughNode(node.label)
             self.passthrough_nodes[node] = op
             model.object_operators[node] = op
         elif f_of_t:
@@ -289,21 +291,19 @@ def build_node_transmission_parameters(model, conn):
             size_in = conn.size_mid
 
         return NodeTransmissionParameters(
-            size_in=size_in,
-            size_out=conn.post_obj.size_in,
-            transform=conn.transform,
-            slice_out=conn.post_slice,
-            pre_slice=conn.pre_slice,
-            function=conn.function
-        )
+                Transform(size_in=size_in,
+                          size_out=conn.post_obj.size_in,
+                          transform=conn.transform,
+                          slice_out=conn.post_slice),
+                pre_slice=conn.pre_slice,
+                function=conn.function)
     else:
         return PassthroughNodeTransmissionParameters(
-            size_in=conn.pre_obj.size_out,
-            size_out=conn.post_obj.size_in,
-            transform=conn.transform,
-            slice_in=conn.pre_slice,
-            slice_out=conn.post_slice
-        )
+                Transform(size_in=conn.pre_obj.size_out,
+                          size_out=conn.post_obj.size_in,
+                          transform=conn.transform,
+                          slice_in=conn.pre_slice,
+                          slice_out=conn.post_slice))
 
 
 class InputNode(nengo.Node):
