@@ -327,6 +327,11 @@ static value_t decode_spike_train(
 // learning rules.
 static inline void decode_output_and_transmit(const ensemble_state_t *ensemble)
 {
+  uint delay = (spin1_get_core_id() - 1) +
+               (spin1_get_chip_id() & 0x1) +
+               ((spin1_get_chip_id() >> 7) & 0x2);
+  spin1_delay_us(5 * delay);
+
   profiler_write_entry(PROFILER_ENTER | PROFILER_DECODE);
 
   // Extract parameters

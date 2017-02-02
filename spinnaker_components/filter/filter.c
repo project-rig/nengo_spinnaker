@@ -132,6 +132,8 @@ void timer_tick(uint ticks, uint arg1)
   // Update the filters
   input_filtering_step(&filters);
 
+  spin1_delay_us(3 * (spin1_get_core_id() - 1));
+
   // Perform the matrix multiply, transmitting each output value as it is
   // computed.
   for (unsigned int i = 0; i < params.output_size; i++)
