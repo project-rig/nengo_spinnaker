@@ -16,6 +16,7 @@ def allocate_signal_keyspaces(signal_routes, signal_id_constraints, keyspaces):
 
     # Assign keyspaces to the signals
     for signal, i in iteritems(signal_ids):
+        assert signal.keyspace is None
         signal.keyspace = keyspaces["nengo"](connection_id=i)
 
         # Expand the keyspace to fit the required indices
