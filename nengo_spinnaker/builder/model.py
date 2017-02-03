@@ -1,5 +1,6 @@
 """Objects used to represent Nengo networks as instantiated on SpiNNaker.
 """
+from copy import copy
 from collections import namedtuple, defaultdict, deque
 from nengo import LinearFilter
 import numpy as np
@@ -331,7 +332,7 @@ class ConnectionMap(object):
             # If the sink is not a passthrough node then just add the
             # connection to the new connection map.
             target_map.add_connection(
-                source, source_port, signal_pars, transmission_pars,
+                source, source_port, copy(signal_pars), transmission_pars,
                 sink_object, sink_port, reception_pars)
         else:
             # If the sink is a passthrough node then we consider each outgoing
@@ -347,7 +348,7 @@ class ConnectionMap(object):
                     if interposer is not None:
                         # Insert a connection to the interposer
                         target_map.add_connection(
-                            source, source_port, signal_pars,
+                            source, source_port, copy(signal_pars),
                             transmission_pars, interposer,
                             InputPort.standard, reception_pars
                         )
