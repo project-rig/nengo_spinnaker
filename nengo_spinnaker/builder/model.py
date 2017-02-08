@@ -235,20 +235,26 @@ class ConnectionMap(object):
                 # Create the interposer
                 clique_interposers[node, port, conn] = Filter(size_in)
 
-            # Add the newly created interposers to the list of new operators
-            interposers.extend(itervalues(clique_interposers))
-
             # Insert connections into the new connection map inserting
-            # connections to interposers as we go.
+            # connections to interposers as we go and remembering those which a
+            # connection is added.
+            used_interposers = set()  # Interposers who receive non-zero input
             for source in sources:
-                self._copy_connections_from_source(
-                    source=source, target_map=cm,
-                    interposers=clique_interposers
+                used_interposers.update(
+                    self._copy_connections_from_source(
+                        source=source, target_map=cm,
+                        interposers=clique_interposers
+                    )
                 )
 
             # Insert connections from the new interposers.
-            for (node, port, conn), interposer in iteritems(
-                    clique_interposers):
+            for (node, port, conn) in used_interposers:
+                # Get the interposer, add it to the new operators to include in
+                # the model and add its output to the new connection map.
+                interposer = clique_interposers[(node, port, conn)]
+                interposers.append(interposer)
+
+                # Add outgoing connections
                 self._copy_connections_from_interposer(
                     node=node, port=port, conn=conn, interposer=interposer,
                     target_map=cm
@@ -272,22 +278,32 @@ class ConnectionMap(object):
         interposers : {(PassthroughNode, port, conn): Filter, ...}
             Dictionary mapping selected nodes, ports and connections to the
             operators which will be used to simulate them.
+
+        Returns
+        -------
+        {(PassthroughNode, port, conn), ...}
+            Set of interposers who were reached by connections from this
+            object.
         """
+        used_interposers = set()  # Interposers fed by this object
+
         # For every port and set of connections originating at the source
         for source_port, conns_sinks in iteritems(self._connections[source]):
             for conn, sinks in iteritems(conns_sinks):
                 # Extract the signal and transmission parameters
                 signal_parameters, transmission_parameters = conn
 
-                # Copy the connections
+                # Copy the connections and mark which interposers are reached.
                 for sink in sinks:
                     # NOTE: The None indicates that no additional reception
                     # parameters beyond those in the sink are to be considered.
-                    self._copy_connection(
+                    used_interposers.update(self._copy_connection(
                         target_map, interposers, source, source_port,
                         signal_parameters, transmission_parameters,
                         sink.sink_object, sink.port, sink.reception_parameters
-                    )
+                    ))
+
+        return used_interposers
 
     def _copy_connections_from_interposer(self, node, port, conn, interposer,
                                           target_map):
@@ -327,7 +343,14 @@ class ConnectionMap(object):
             operators which will be used to simulate them.
 
         All other parameters as in :py:method:`~.ConnectionMap.add_connection`.
+
+        Returns
+        -------
+        {(PassthroughNode, port, conn), ...}
+            Interposers which are reached.
         """
+        used_interposers = set()  # Reached interposers
+
         if not isinstance(sink_object, PassthroughNode):
             # If the sink is not a passthrough node then just add the
             # connection to the new connection map.
@@ -352,6 +375,9 @@ class ConnectionMap(object):
                             transmission_pars, interposer,
                             InputPort.standard, reception_pars
                         )
+
+                        # Mark the interposer as reached
+                        used_interposers.add((sink_object, port, conn))
                     else:
                         # Build the new signal and transmission parameters.
                         (this_signal_pars, this_transmission_pars) = conn
@@ -368,13 +394,15 @@ class ConnectionMap(object):
                                     new_sink.reception_parameters
                                 )
 
-                                self._copy_connection(
+                                used_interposers.update(self._copy_connection(
                                     target_map, interposers,
                                     source, source_port,
                                     sink_signal_pars, sink_transmission_pars,
                                     new_sink.sink_object, new_sink.port,
                                     sink_reception_pars
-                                )
+                                ))
+
+        return used_interposers
 
     def _connects_to_non_passthrough_node(self, sink_objects):
         """Determine whether any of the sink objects are not passthrough nodes,
