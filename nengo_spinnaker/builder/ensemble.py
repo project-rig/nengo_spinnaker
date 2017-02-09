@@ -17,6 +17,11 @@ from .ports import (
 from .. import operators
 from ..utils import collections as collections_ext
 
+if hasattr(ensemble, 'sample'):  # needed for nengo <= 2.3.0
+    get_samples = ensemble.sample
+else:
+    get_samples = nengo.dists.get_samples
+
 BuiltEnsemble = collections.namedtuple(
     "BuiltEnsemble", "eval_points, encoders, intercepts, max_rates, "
                      "scaled_encoders, gain, bias"
@@ -150,15 +155,15 @@ def build_lif(model, ens):
     encoders /= npext.norm(encoders, axis=1, keepdims=True)
 
     # Get maximum rates and intercepts
-    max_rates = ensemble.sample(ens.max_rates, ens.n_neurons, rng=rng)
-    intercepts = ensemble.sample(ens.intercepts, ens.n_neurons, rng=rng)
+    max_rates = get_samples(ens.max_rates, ens.n_neurons, rng=rng)
+    intercepts = get_samples(ens.intercepts, ens.n_neurons, rng=rng)
 
     # Build the neurons
     if ens.gain is None and ens.bias is None:
         gain, bias = ens.neuron_type.gain_bias(max_rates, intercepts)
     elif ens.gain is not None and ens.bias is not None:
-        gain = ensemble.sample(ens.gain, ens.n_neurons, rng=rng)
-        bias = ensemble.sample(ens.bias, ens.n_neurons, rng=rng)
+        gain = get_samples(ens.gain, ens.n_neurons, rng=rng)
+        bias = get_samples(ens.bias, ens.n_neurons, rng=rng)
     else:
         raise NotImplementedError(
             "gain or bias set for {!s}, but not both. Solving for one given "
