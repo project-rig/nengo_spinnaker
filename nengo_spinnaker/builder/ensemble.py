@@ -198,7 +198,12 @@ def build_decoders(model, conn, rng):
     bias = model.params[conn.pre_obj].bias
 
     eval_points = connection_b.get_eval_points(model, conn, rng)
-    targets = connection_b.get_targets(model, conn, eval_points)
+
+    try:
+        targets = connection_b.get_targets(conn, eval_points)
+    except:
+        # nengo <= 2.3.0
+        targets = connection_b.get_targets(model, conn, eval_points)
 
     x = np.dot(eval_points, encoders.T / conn.pre_obj.radius)
     E = None
