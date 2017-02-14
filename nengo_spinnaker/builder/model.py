@@ -2,12 +2,18 @@
 """
 from copy import copy
 from collections import namedtuple, defaultdict, deque
+from itertools import chain
 from nengo import LinearFilter
 import numpy as np
 from .ports import EnsembleInputPort, InputPort, OutputPort
 from six import iteritems, itervalues, iterkeys
 
+from nengo_spinnaker.builder.transmission_parameters import (
+    PassthroughNodeTransmissionParameters, EnsembleTransmissionParameters,
+    Transform
+)
 from nengo_spinnaker.operators.filter import Filter
+from nengo_spinnaker.operators.lif import EnsembleLIF
 
 
 class ConnectionMap(object):
@@ -172,10 +178,14 @@ class ConnectionMap(object):
         # to replace with interposers and then insert the modified connectivity
         # into the new connection map.
         for sources, nodes in self.get_cliques():
-            # Extract all possible interposers from the clique
+            # Extract all possible interposers from the clique. Interposers can
+            # either replace connections from passthrough nodes or the
+            # "transform" portion of the connection from an ensemble.
             possible_interposers = (
                 (node, port, conn, {s.sink_object for s in sinks})
-                for node in nodes
+                for node in chain(
+                    nodes, (e for e in sources if isinstance(e, EnsembleLIF))
+                )
                 for port, conns in iteritems(
                     self._connections[node])
                 for conn, sinks in iteritems(conns)
@@ -236,8 +246,8 @@ class ConnectionMap(object):
                 clique_interposers[node, port, conn] = Filter(size_in)
 
             # Insert connections into the new connection map inserting
-            # connections to interposers as we go and remembering those which a
-            # connection is added.
+            # connections to interposers as we go and remembering those to
+            # which a connection is added.
             used_interposers = set()  # Interposers who receive non-zero input
             for source in sources:
                 used_interposers.update(
@@ -293,15 +303,46 @@ class ConnectionMap(object):
                 # Extract the signal and transmission parameters
                 signal_parameters, transmission_parameters = conn
 
-                # Copy the connections and mark which interposers are reached.
-                for sink in sinks:
-                    # NOTE: The None indicates that no additional reception
-                    # parameters beyond those in the sink are to be considered.
-                    used_interposers.update(self._copy_connection(
-                        target_map, interposers, source, source_port,
-                        signal_parameters, transmission_parameters,
-                        sink.sink_object, sink.port, sink.reception_parameters
-                    ))
+                if (source, source_port, conn) in interposers:
+                    # If this connection is to be replaced by an interposer
+                    # then we instead add a connection to the interposer, the
+                    # nature of this connection depends on the nature of the
+                    # source.
+                    assert isinstance(source, EnsembleLIF)
+                    interposer = interposers[(source, source_port, conn)]
+
+                    # Create a new connection to the interposer and mark the
+                    # interposer as reached.
+                    new_sps = SignalParameters(
+                        weight=transmission_parameters.size_in
+                    )
+                    new_tps = EnsembleTransmissionParameters(
+                        transmission_parameters.decoders,
+                        Transform(transmission_parameters.size_in,
+                                  transmission_parameters.size_in,
+                                  1)
+                    )
+
+                    target_map.add_connection(
+                        source, source_port, new_sps, new_tps,
+                        interposer, InputPort.standard,
+                        ReceptionParameters(None, new_sps.weight, None)
+                    )
+                    used_interposers.add((source, source_port, conn))
+                else:
+                    # Otherwise we add the connection.
+                    # Copy the connections and mark which interposers are
+                    # reached.
+                    for sink in sinks:
+                        # NOTE: The None indicates that no additional reception
+                        # parameters beyond those in the sink are to be
+                        # considered.
+                        used_interposers.update(self._copy_connection(
+                            target_map, interposers, source, source_port,
+                            signal_parameters, transmission_parameters,
+                            sink.sink_object, sink.port,
+                            sink.reception_parameters
+                        ))
 
         return used_interposers
 
@@ -315,6 +356,13 @@ class ConnectionMap(object):
 
         # Extract parameters
         signal_pars, transmission_pars = conn
+
+        # If the original object was an ensemble then modify the transmission
+        # parameters to remove the decoders.
+        if isinstance(node, EnsembleLIF):
+            transmission_pars = PassthroughNodeTransmissionParameters(
+                transmission_pars._transform
+            )
 
         # Copy the connections to the sinks, note that we specify an empty
         # interposers dictionary so that no connections to further interposers

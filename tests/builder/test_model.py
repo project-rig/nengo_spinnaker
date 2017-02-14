@@ -10,8 +10,9 @@ from nengo_spinnaker.builder import model
 from nengo_spinnaker.builder.ports import InputPort, OutputPort
 from nengo_spinnaker.builder.transmission_parameters import (
     PassthroughNodeTransmissionParameters, NodeTransmissionParameters,
-    Transform
+    Transform, EnsembleTransmissionParameters
 )
+from nengo_spinnaker.operators import EnsembleLIF
 
 
 class TestSignalParameters(object):
@@ -685,3 +686,79 @@ class TestConnectionMap(object):
             assert len(sinks) == 1
             for s in sinks:
                 assert s.sink_object is sink
+
+    def test_insert_interposer_after_ensemble(self):
+        """Test that an interposer can be inserted after a connection from an
+        ensemble.
+        """
+        # Create an ensemble and connect it to another ensemble with a
+        # significantly larger size in.
+        mock_ensemble_1 = mock.Mock(spec_set=["size_in"])
+        mock_ensemble_1.size_in = 1
+        e1 = EnsembleLIF(mock_ensemble_1)
+
+        mock_ensemble_2 = mock.Mock(spec_set=["size_in"])
+        mock_ensemble_2.size_in = 512
+        e2 = EnsembleLIF(mock_ensemble_2)
+
+        # Create a new connection map and add a connection between the
+        # ensembles.
+        transform = Transform(2, 512, np.ones((512, 2)))
+        tps = EnsembleTransmissionParameters(np.ones((2, 100)), transform)
+        sps = model.SignalParameters(weight=512)
+        filt = object()
+
+        cm = model.ConnectionMap()
+        cm.add_connection(
+            e1, OutputPort.standard, sps, tps,
+            e2, InputPort.standard, model.ReceptionParameters(filt, 512, None)
+        )
+
+        # Insert interposers
+        interposers, new_cm = cm.insert_interposers()
+
+        # Check that an interposer was inserted
+        assert len(interposers) == 1
+        interposer = interposers[0]  # Grab the interposer
+        assert interposer.size_in == 2
+
+        # Check that the connection from e1 to the interposer is as expected
+        assert len(new_cm._connections[e1][OutputPort.standard]) == 1
+        for conn, sinks in iteritems(
+                new_cm._connections[e1][OutputPort.standard]):
+            new_sps, new_tps = conn  # Get signal and transmission pars
+
+            assert isinstance(tps, EnsembleTransmissionParameters)
+            assert np.array_equal(tps.decoders, new_tps.decoders)
+            assert new_tps.size_out == 2
+            assert new_sps.weight == 2
+            assert np.array_equal(
+                new_tps.full_transform(False, False), np.eye(2)
+            )
+
+            assert len(sinks) == 1
+            for sink in sinks:
+                assert sink.sink_object is interposer
+                assert sink.reception_parameters == model.ReceptionParameters(
+                    None, 2, None
+                )
+
+        # Check that the connection from the interposer to e2 is as expected
+        assert len(new_cm._connections[interposer][OutputPort.standard]) == 1
+        for conn, sinks in iteritems(
+                new_cm._connections[interposer][OutputPort.standard]):
+            new_sps, new_tps = conn
+
+            # Check that the transform is as expected
+            assert isinstance(new_tps, PassthroughNodeTransmissionParameters)
+            assert np.array_equal(tps.full_transform(False, False),
+                                  new_tps.full_transform(False, False))
+            assert np.array_equal(tps.slice_out, new_tps.slice_out)
+
+            # Check the sinks are correct
+            assert len(sinks) == 1
+            for sink in sinks:
+                assert sink.sink_object is e2
+                assert sink.reception_parameters == model.ReceptionParameters(
+                    filt, 512, None
+                )
