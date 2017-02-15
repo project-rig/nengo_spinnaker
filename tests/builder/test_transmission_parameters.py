@@ -242,6 +242,72 @@ class TestTransform(object):
         # transform is empty.
         assert A.concat(B) is None
 
+    def test_hstack_two_scalars(self):
+        """Test horizontally stacking two matrices with some misaligned rows.
+        """
+        A = Transform(size_in=5, size_out=5, transform=1.0,
+                      slice_in=(0, 1), slice_out=(2, 3))
+        B = Transform(size_in=3, size_out=5, transform=0.5,
+                      slice_out=(1, 2, 3))
+
+        # Stack the transforms
+        C = A.hstack(B)
+
+        # Check the full transform is correct
+        assert np.array_equal(
+            C.full_transform(False, False),
+            np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                      [0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0],
+                      [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0],
+                      [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5],
+                      [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
+        )
+
+    def test_hstack_scalar_and_vector(self):
+        """Test horizontally stacking two matrices with some misaligned rows.
+        """
+        A = Transform(size_in=5, size_out=5, transform=1.0,
+                      slice_in=(0, 1), slice_out=(2, 3))
+        B = Transform(size_in=3, size_out=5, transform=[2.0, 3.0, 4.0],
+                      slice_out=(0, 2, 3))
+
+        # Stack the transforms
+        C = A.hstack(B)
+
+        # Check the full transform is correct
+        assert np.array_equal(
+            C.full_transform(False, False),
+            np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0],
+                      [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                      [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.0, 0.0],
+                      [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 4.0],
+                      [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
+        )
+
+    def test_hstack_two_matrices(self):
+        """Test horizontally stacking two matrices with some misaligned rows.
+        """
+        transform_a = np.ones((3, 3))
+        transform_b = np.ones((2, 1)) * -1
+
+        A = Transform(size_in=4, size_out=5, transform=transform_a,
+                      slice_in=(0, 1, 2), slice_out=(2, 3, 4))
+        B = Transform(size_in=2, size_out=5, transform=transform_b,
+                      slice_in=(1, ), slice_out=(1, 2))
+
+        # Stack the transforms
+        C = A.hstack(B)
+
+        # Check the full transform is correct
+        assert np.array_equal(
+            C.full_transform(False, False),
+            np.array([[0.0, 0.0, 0.0, 0.0, 0.0,  0.0],
+                      [0.0, 0.0, 0.0, 0.0, 0.0, -1.0],
+                      [1.0, 1.0, 1.0, 0.0, 0.0, -1.0],
+                      [1.0, 1.0, 1.0, 0.0, 0.0,  0.0],
+                      [1.0, 1.0, 1.0, 0.0, 0.0,  0.0]])
+        )
+
 
 class TestPassthroughNodeTransmissionParameters(object):
     def test_concat(self):
