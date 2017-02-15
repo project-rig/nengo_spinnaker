@@ -207,7 +207,8 @@ class Model(object):
             self._build_network(network)
 
         # Insert interposers
-        interposers, connection_map = self.connection_map.insert_interposers()
+        interposers, connection_map = \
+            self.connection_map.insert_and_stack_interposers()
         self.extra_operators.extend(interposers)
         self.connection_map = connection_map
 

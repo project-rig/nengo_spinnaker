@@ -515,7 +515,7 @@ class TestConnectionMap(object):
         # Check that there is now just one connection from the node to the sink
         from_node = new_cm._connections[node]
         assert list(from_node) == [OutputPort.standard]
-        
+
         for (signal_pars, transmission_pars), sinks in \
                 iteritems(from_node[OutputPort.standard]):
             # Check the transmission parameters
@@ -762,3 +762,199 @@ class TestConnectionMap(object):
                 assert sink.reception_parameters == model.ReceptionParameters(
                     filt, 512, None
                 )
+
+    def test_stack_interposers(self):
+        """Test that interposers with equivalent output sets are stacked
+        correctly and that this modifies both their incoming and output
+        connections.
+        """
+        # Create a network consisting of two ensembles targeting a sink, insert
+        # interposers into this network and then stack the interposers to
+        # reduce later connectivity.
+        MockEnsemble = collections.namedtuple("MockEnsemble", "size_in")
+        source_1 = EnsembleLIF(MockEnsemble(1))
+        source_2 = EnsembleLIF(MockEnsemble(1))
+        sink = object()
+
+        # Create a connection map and add the connections
+        cm = model.ConnectionMap()
+        cm.add_connection(
+            source_1, OutputPort.standard, model.SignalParameters(weight=512),
+            EnsembleTransmissionParameters(
+                decoders=np.ones((1, 100)),
+                transform=Transform(
+                    size_in=1, size_out=512, transform=np.ones((512, 1))
+                )
+            ), sink, InputPort.standard,
+            model.ReceptionParameters(None, 512, None)
+        )
+
+        cm.add_connection(  # Make sure the transform is distinct!
+            source_2, OutputPort.standard, model.SignalParameters(weight=512),
+            EnsembleTransmissionParameters(
+                decoders=np.ones((1, 100)),
+                transform=Transform(
+                    size_in=1, size_out=512, transform=0.5*np.ones((512, 1))
+                )
+            ), sink, InputPort.standard,
+            model.ReceptionParameters(None, 512, None)
+        )
+
+        # Insert and stack the interposers
+        interposers, new_cm = cm.insert_and_stack_interposers()
+        new_cm = new_cm._connections
+        assert len(interposers) == 1  # Should only be one interposer
+        interposer = interposers[0]
+        assert interposer.size_in == 2
+
+        # The connections from the sources and from the interposer can be one
+        # of two forms, attempt to determine which and then check that the rest
+        # of the connections are correct.
+        assert set(new_cm.keys()) == {source_1, source_2, interposer}
+        assert len(new_cm[source_1][OutputPort.standard]) == 1
+        assert len(new_cm[source_2][OutputPort.standard]) == 1
+        assert len(new_cm[interposer][OutputPort.standard]) == 1
+
+        for params, sinks in iteritems(new_cm[source_1][OutputPort.standard]):
+            sps, tps = params  # Extract signal and transmission parameters
+
+            assert isinstance(sps, model.SignalParameters)
+            assert sps.weight == 1  # Weight should not be modified
+
+            assert isinstance(tps, EnsembleTransmissionParameters)
+            assert tps.size_in == 1
+            assert tps.size_out == 2
+
+            if np.array_equal(tps.slice_out, np.array([0])):
+                # Source 1 points to the first dimension of the interposer.
+                # Assert that Source 2 points to the other dimension of the
+                # interposer.
+                expected_source_2_slice = np.array([1])
+                expected_transform = np.hstack(
+                    (np.ones((512, 1)), 0.5*np.ones((512, 1)))
+                )
+            elif np.array_equal(tps.slice_out, np.array([1])):
+                # Source 2 points to the second dimension of the interposer.
+                # Assert that Source 2 points to the other dimension of the
+                # interposer.
+                expected_source_2_slice = np.array([0])
+                expected_transform = np.hstack(
+                    (0.5*np.ones((512, 1)), np.ones((512, 1)))
+                )
+            else:
+                assert False, "Unexpected dimension in slice"
+
+            # Check that the sinks are as expected
+            assert len(sinks) == 1
+            for new_sink in sinks:
+                assert new_sink.sink_object is interposer
+
+        for params, sinks in iteritems(new_cm[source_2][OutputPort.standard]):
+            sps, tps = params  # Extract signal and transmission parameters
+
+            assert isinstance(sps, model.SignalParameters)
+            assert sps.weight == 1
+
+            assert isinstance(tps, EnsembleTransmissionParameters)
+            assert tps.size_in == 1
+            assert tps.size_out == 2
+            assert np.array_equal(tps.slice_out, expected_source_2_slice)
+
+            assert len(sinks) == 1
+            for new_sink in sinks:
+                assert new_sink.sink_object is interposer
+
+        # Check the connection from the interposer
+        for params, sinks in iteritems(
+                new_cm[interposer][OutputPort.standard]):
+            sps, tps = params  # Extract signal and transmission parameters
+
+            assert isinstance(sps, model.SignalParameters)
+            assert sps.weight == 512  # Not changed
+
+            assert isinstance(tps, PassthroughNodeTransmissionParameters)
+            assert tps.size_in == 2
+            assert tps.size_out == 512
+            assert np.array_equal(
+                tps.full_transform(False, False), expected_transform
+            )
+
+            assert len(sinks) == 1
+            for new_sink in sinks:
+                assert new_sink.sink_object is sink
+
+    def test_stack_interposers_no_stack(self):
+        # Create a network consisting of two ensembles targeting a sink, insert
+        # interposers into this network and then stack the interposers to
+        # reduce later connectivity.
+        MockEnsemble = collections.namedtuple("MockEnsemble", "size_in")
+        source_1 = EnsembleLIF(MockEnsemble(1))
+        source_2 = EnsembleLIF(MockEnsemble(1))
+        sink = object()
+
+        # Create a connection map and add the connections
+        cm = model.ConnectionMap()
+        cm.add_connection(
+            source_1, OutputPort.standard, model.SignalParameters(weight=512),
+            EnsembleTransmissionParameters(
+                decoders=np.ones((1, 100)),
+                transform=Transform(
+                    size_in=1, size_out=512, transform=np.ones((512, 1))
+                )
+            ), sink, InputPort.standard,
+            model.ReceptionParameters(None, 512, None)
+        )
+
+        cm.add_connection(  # Transform and the filter are distinct!
+            source_2, OutputPort.standard, model.SignalParameters(weight=512),
+            EnsembleTransmissionParameters(
+                decoders=np.ones((1, 100)),
+                transform=Transform(
+                    size_in=1, size_out=512, transform=0.5*np.ones((512, 1))
+                )
+            ), sink, InputPort.standard,
+            model.ReceptionParameters(object(), 512, None)
+        )
+
+        # Insert and stack the interposers
+        interposers, new_cm = cm.insert_and_stack_interposers()
+        new_cm = new_cm._connections
+        assert len(interposers) == 2
+
+    def test_stack_interposers_no_interposer(self):
+        # Create a network consisting of two ensembles targeting a sink
+        MockEnsemble = collections.namedtuple("MockEnsemble", "size_in")
+        source_1 = EnsembleLIF(MockEnsemble(1))
+        source_2 = EnsembleLIF(MockEnsemble(1))
+        sink = object()
+
+        # Create a connection map and add the connections
+        cm = model.ConnectionMap()
+        cm.add_connection(
+            source_1, OutputPort.standard, model.SignalParameters(weight=512),
+            EnsembleTransmissionParameters(
+                decoders=np.ones((1, 100)),
+                transform=Transform(
+                    size_in=1, size_out=1, transform=1.0
+                )
+            ), sink, InputPort.standard,
+            model.ReceptionParameters(None, 1, None)
+        )
+
+        cm.add_connection(  # Make sure the transform is distinct!
+            source_2, OutputPort.standard, model.SignalParameters(weight=512),
+            EnsembleTransmissionParameters(
+                decoders=np.ones((1, 100)),
+                transform=Transform(
+                    size_in=1, size_out=1, transform=0.5
+                )
+            ), sink, InputPort.standard,
+            model.ReceptionParameters(None, 512, None)
+        )
+
+        # Insert and stack the interposers
+        interposers, new_cm = cm.insert_and_stack_interposers()
+        assert len(interposers) == 0
+
+        # The connection map should be unchanged
+        assert new_cm._connections == cm._connections
