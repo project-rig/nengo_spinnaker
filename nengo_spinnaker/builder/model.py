@@ -495,9 +495,9 @@ class ConnectionMap(object):
 
         # While unvisited sources remain inspect the graph.
         while unvisited_sources:
-            visited = set()  # Maintain a set of visited nodes
             sources = set()  # Set of objects which feed the clique
             ptns = set()  # Passthrough nodes contained in the clique
+            sinks = set()  # Set of objects which receive values
 
             # Each node that is visited in the following breadth-first search
             # is treated as EITHER a source or a sink node. If the node is a
@@ -510,44 +510,39 @@ class ConnectionMap(object):
 
             while len(queue) > 0:  # While there remain items in the queue
                 is_source, node = queue.pop()  # Get an item from the queue
+                queue_sources = queue_sinks = False
 
-                if node not in visited:
-                    visited.add(node)
+                if isinstance(node, PassthroughNode) and node not in ptns:
+                    # If the node is a passthrough node then we add it to the
+                    # set of passthrough nodes and then add both objects which
+                    # feed it and those which receive from it to the queue.
+                    ptns.add(node)
+                    queue_sources = queue_sinks = True
+                elif (not isinstance(node, PassthroughNode) and
+                        is_source and node not in sources):
+                    # If the node is a source then we add it to the set of
+                    # sources for the clique and then add all objects which it
+                    # feeds to the queue.
+                    sources.add(node)
+                    queue_sinks = True
+                elif (not isinstance(node, PassthroughNode) and
+                        not is_source and node not in sinks):
+                    # If the node is a sink then we add it to the set of sinks
+                    # for the clique and add all objects which feed it to the
+                    # queue.
+                    sinks.add(node)
+                    queue_sources = True
 
-                    # If the node is not a passthrough node and is marked as a
-                    # source then add it to the set of inputs for the clique,
-                    # otherwise if it's a passthrough node add it to the set of
-                    # passthrough nodes contained within the clique.
-                    if isinstance(node, PassthroughNode):
-                        ptns.add(node)
-                    elif is_source:
-                        sources.add(node)
-
-                    # If the node is either a passthrough node or is a source
-                    # then add all of the unvisited nodes it feeds to queue.
-                    if is_source or isinstance(node, PassthroughNode):
-                        # NOTE: We treat all connected nodes as SINKS
-                        queue.extend((False, n) for n in
-                                     graph[node].outputs.difference(visited))
-
-                    # If the node is either a passthrough node or is NOT a
-                    # source then add all of the unvisited nodes which feed it
-                    # to the queue.
-                    if not is_source or isinstance(node, PassthroughNode):
-                        # NOTE: We treat all connected nodes as SOURCES and
-                        # explicitly care about connected passthrough nodes as
-                        # well.
-                        queue.extend(
-                            (True, n) for n in graph[node].inputs if
-                            n in unvisited_sources or
-                            isinstance(n, PassthroughNode)
-                        )
-
-                        # Remove these new sources from the list of unvisited
-                        # sources.
-                        unvisited_sources.difference_update(graph[node].inputs)
+                # Queue the selected items
+                if queue_sources:
+                    queue.extend((True, obj) for obj in graph[node].inputs if
+                                 obj not in sources and obj not in ptns)
+                if queue_sinks:
+                    queue.extend((False, obj) for obj in graph[node].outputs if
+                                 obj not in sinks and obj not in ptns)
 
             # Once the queue is empty we yield the contents of the clique
+            unvisited_sources.difference_update(sources)
             yield sources, ptns
 
 
