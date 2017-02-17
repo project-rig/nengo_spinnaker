@@ -1,6 +1,25 @@
 import logging
 from collections import defaultdict, deque
+from rig.place_and_route.routing_tree import RoutingTree
 from six import iteritems, iterkeys, itervalues
+
+try:
+    from rig_cpp_key_allocation import (
+        cffi_add_graph_constraint, cffi_add_route_to_graph, cffi_colour_graph,
+        cffi_delete_graph, cffi_new_graph, ffi
+    )
+
+    USE_CFFI = True
+except ImportError:
+    USE_CFFI = False
+
+    import warnings
+
+    warnings.warn(
+        "rig_cpp_key_allocation not installed, falling back to a Python "
+        "implementation. Install rig_cpp_key_allocation to improve build "
+        "performance.", UserWarning
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +31,12 @@ def allocate_signal_keyspaces(signal_routes, signal_id_constraints, keyspaces):
                      signal.keyspace is None}
 
     # Get unique identifiers for each signal
-    signal_ids = assign_mn_net_ids(signal_routes, signal_id_constraints)
+    if not USE_CFFI:
+        signal_ids = assign_mn_net_ids(
+            signal_routes, signal_id_constraints)
+    else:
+        signal_ids = cffi_assign_mn_net_ids(
+            signal_routes, signal_id_constraints)
 
     # Assign keyspaces to the signals
     for signal, i in iteritems(signal_ids):
@@ -27,6 +51,7 @@ def allocate_signal_keyspaces(signal_routes, signal_id_constraints, keyspaces):
                     max(itervalues(signal_ids)) + 1)
 
 
+# TODO: Migrate to Rig
 def assign_mn_net_ids(nets_routes, prior_constraints=None):
     """Assign identifiers to multiple-source multicast nets such that
     equivalent identifiers are never assigned to pairs of multi-source nets
@@ -242,7 +267,7 @@ def build_cluster_graph(signal_routes):
     return cluster_graph
 
 
-def colour_graph(graph):
+def colour_graph(graph):  # TODO: Migrate to Rig
     """Assign colours to each node in a graph such that connected nodes do not
     share a colour.
 
@@ -321,3 +346,55 @@ def colour_graph(graph):
             colouring[vx] = i
 
     return colouring
+
+
+# TODO: Migrate to Rig
+def cffi_assign_mn_net_ids(nets, additional_constraints=dict()):
+    """Same as :py:meth:`~.assign_mn_net_ids` but calls out to
+    :py:mod:`rig_cpp_key_allocation` to reduce memory use and increase
+    performance.
+    """
+    # Give each key a unique ID which will be used when building the graph.
+    net_ids = {net: i for i, net in enumerate(iterkeys(nets))}
+
+    # Create a graph of the appropriate size
+    graph = cffi_new_graph(len(net_ids))
+
+    # Add the prior constraints to the graph
+    for net, other_nets in iteritems(additional_constraints):
+        for other_net in other_nets:
+            net_id = net_ids[net]
+            other_net_id = net_ids[other_net]
+
+            # Add the constraint to the graph
+            cffi_add_graph_constraint(graph, net_id, other_net_id)
+
+    # Add the constraints resulting from the network connectivity to the graph.
+    for net, trees in iteritems(nets):
+        net_id = net_ids[net]  # Get the net index
+
+        # Ensure that routes is iterable
+        if isinstance(trees, RoutingTree):
+            trees = [trees]
+
+        # Loop over the routes, traversing and adding the routes to the graph
+        # as we go.
+        for tree in trees:
+            for _, (x, y), routes in tree.traverse():
+                # Convert the route into an integer representation
+                route = 0x0
+                for r in routes:
+                    route |= (1 << r)
+
+                # Add the route to the graph
+                cffi_add_route_to_graph(graph, net_id, x, y, route)
+
+    # Colour the graph before deleting it (and removing the dangling pointer!)
+    colouring = ffi.new("unsigned int[]", len(net_ids))
+    cffi_colour_graph(graph, colouring)
+    cffi_delete_graph(graph)
+    del graph  # Not required any more
+
+    # Read the colouring out into a dictionary
+    net_colouring = {net: colouring[i] for net, i in iteritems(net_ids)}
+    return net_colouring
