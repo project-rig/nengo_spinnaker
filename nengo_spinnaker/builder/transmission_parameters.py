@@ -206,6 +206,58 @@ class Transform(object):
                          transform=new_transform,
                          size_out=b.size_out, slice_out=slice_out)
 
+    def hstack(self, other):
+        """Create a new transform as the result of stacking this transform with
+        another.
+        """
+        if self.size_out != other.size_out:
+            raise ValueError(
+                "Cannot horizontally stack two transforms with different "
+                "output sizes ({} and {})".format(
+                    self.size_out, other.size_out)
+            )
+
+        # Compute the new input size and the new input slice
+        size_in = self.size_in + other.size_in
+        slice_in = np.hstack((self.slice_in, other.slice_in + self.size_in))
+
+        # Determine which rows must be contained in the output matrix.
+        slice_out = np.union1d(self.slice_out, other.slice_out)
+
+        # Construct the new matrix
+        n_rows = len(slice_out)
+        n_cols = len(slice_in)
+        matrix = np.zeros((n_rows, n_cols))
+
+        # Write in the elements from ourself, and then the elements from the
+        # other matrix.
+        offset = 0  # Used to perform the stacking
+        for t in (self, other):
+            # Select the rows which should be written
+            selected_rows = np.array([i in t.slice_out for i in slice_out])
+            rows = np.arange(n_rows)[selected_rows]
+
+            # Select the columns to be written, note that the offset is used
+            # for stacking.
+            n_cols = len(t.slice_in)
+            cols = np.arange(offset, offset + n_cols)
+            offset += n_cols
+
+            if t.transform.ndim < 2:
+                # If the transform was specified as either a scalar or a
+                # diagonal.
+                matrix[rows, cols] = t.transform
+            elif t.transform.ndim == 2:
+                # If the transform is a matrix
+                rows_transform = np.zeros_like(matrix[rows, :])
+                rows_transform[:, cols] = t.transform
+                matrix[rows] += rows_transform
+            else:  # pragma: no cover
+                raise NotImplementedError
+
+        # Return the new transform
+        return Transform(size_in, self.size_out, matrix, slice_in, slice_out)
+
 
 class TransmissionParameters(object):
     __slots__ = ["_transform"]
@@ -270,6 +322,29 @@ class PassthroughNodeTransmissionParameters(TransmissionParameters):
         else:
             # The transform consisted entirely of zeros so return None.
             return None
+
+    def hstack(self, *others):
+        """Create new connection parameters which are the result of stacking
+        these connection parameters with other connection parameters.
+
+        Parameters
+        ----------
+        *others : PassthroughNodeTransmissionParameters
+            Additional connection parameters to stack against these parameters.
+
+        Returns
+        -------
+        PassthroughNodeTransmissionParameters
+            A new set of transmission parameters resulting from stacking the
+            provided parameters together.
+        """
+        # Horizontally stack the parameters
+        stacked_transform = self._transform
+        for other in others:
+            stacked_transform = stacked_transform.hstack(other._transform)
+
+        # Create and return the new connection
+        return PassthroughNodeTransmissionParameters(stacked_transform)
 
     @property
     def as_global_inhibition_connection(self):

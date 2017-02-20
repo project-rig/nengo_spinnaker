@@ -190,7 +190,7 @@ class TestMakeConnection(object):
 
         # Modify the Model so that we can interpret calls to the connection map
         m.connection_map = mock.Mock(name="ConnectionMap")
-        m.connection_map.insert_interposers = mock.Mock(
+        m.connection_map.insert_and_stack_interposers = mock.Mock(
             return_value=([], m.connection_map)  # NOP
         )
 

@@ -2,12 +2,18 @@
 """
 from copy import copy
 from collections import namedtuple, defaultdict, deque
+from itertools import chain
 from nengo import LinearFilter
 import numpy as np
 from .ports import EnsembleInputPort, InputPort, OutputPort
 from six import iteritems, itervalues, iterkeys
 
+from nengo_spinnaker.builder.transmission_parameters import (
+    PassthroughNodeTransmissionParameters, EnsembleTransmissionParameters,
+    Transform
+)
 from nengo_spinnaker.operators.filter import Filter
+from nengo_spinnaker.operators.lif import EnsembleLIF
 
 
 class ConnectionMap(object):
@@ -154,6 +160,20 @@ class ConnectionMap(object):
                                   sig_pars),
                            transmission_pars)
 
+    def insert_and_stack_interposers(self):
+        """Get a new connection map with the passthrough nodes removed and with
+        interposers inserted into the network at appropriate places, moreover
+        combine compatible interposers to reduce network load at sinks.
+
+        Returns
+        -------
+        ([Interposer, ...], ConnectionMap)
+            A collection of new interposer operators and a new connection map
+            with passthrough nodes removed and interposers introduced.
+        """
+        interposers, cm = self.insert_interposers()
+        return cm.stack_interposers(interposers)
+
     def insert_interposers(self):
         """Get a new connection map with the passthrough nodes removed and with
         interposers inserted into the network at appropriate places.
@@ -172,10 +192,14 @@ class ConnectionMap(object):
         # to replace with interposers and then insert the modified connectivity
         # into the new connection map.
         for sources, nodes in self.get_cliques():
-            # Extract all possible interposers from the clique
+            # Extract all possible interposers from the clique. Interposers can
+            # either replace connections from passthrough nodes or the
+            # "transform" portion of the connection from an ensemble.
             possible_interposers = (
                 (node, port, conn, {s.sink_object for s in sinks})
-                for node in nodes
+                for node in chain(
+                    nodes, (e for e in sources if isinstance(e, EnsembleLIF))
+                )
                 for port, conns in iteritems(
                     self._connections[node])
                 for conn, sinks in iteritems(conns)
@@ -236,8 +260,8 @@ class ConnectionMap(object):
                 clique_interposers[node, port, conn] = Filter(size_in)
 
             # Insert connections into the new connection map inserting
-            # connections to interposers as we go and remembering those which a
-            # connection is added.
+            # connections to interposers as we go and remembering those to
+            # which a connection is added.
             used_interposers = set()  # Interposers who receive non-zero input
             for source in sources:
                 used_interposers.update(
@@ -293,15 +317,46 @@ class ConnectionMap(object):
                 # Extract the signal and transmission parameters
                 signal_parameters, transmission_parameters = conn
 
-                # Copy the connections and mark which interposers are reached.
-                for sink in sinks:
-                    # NOTE: The None indicates that no additional reception
-                    # parameters beyond those in the sink are to be considered.
-                    used_interposers.update(self._copy_connection(
-                        target_map, interposers, source, source_port,
-                        signal_parameters, transmission_parameters,
-                        sink.sink_object, sink.port, sink.reception_parameters
-                    ))
+                if (source, source_port, conn) in interposers:
+                    # If this connection is to be replaced by an interposer
+                    # then we instead add a connection to the interposer, the
+                    # nature of this connection depends on the nature of the
+                    # source.
+                    assert isinstance(source, EnsembleLIF)
+                    interposer = interposers[(source, source_port, conn)]
+
+                    # Create a new connection to the interposer and mark the
+                    # interposer as reached.
+                    new_sps = SignalParameters(
+                        weight=transmission_parameters.size_in
+                    )
+                    new_tps = EnsembleTransmissionParameters(
+                        transmission_parameters.decoders,
+                        Transform(transmission_parameters.size_in,
+                                  transmission_parameters.size_in,
+                                  1)
+                    )
+
+                    target_map.add_connection(
+                        source, source_port, new_sps, new_tps,
+                        interposer, InputPort.standard,
+                        ReceptionParameters(None, new_sps.weight, None)
+                    )
+                    used_interposers.add((source, source_port, conn))
+                else:
+                    # Otherwise we add the connection.
+                    # Copy the connections and mark which interposers are
+                    # reached.
+                    for sink in sinks:
+                        # NOTE: The None indicates that no additional reception
+                        # parameters beyond those in the sink are to be
+                        # considered.
+                        used_interposers.update(self._copy_connection(
+                            target_map, interposers, source, source_port,
+                            signal_parameters, transmission_parameters,
+                            sink.sink_object, sink.port,
+                            sink.reception_parameters
+                        ))
 
         return used_interposers
 
@@ -315,6 +370,13 @@ class ConnectionMap(object):
 
         # Extract parameters
         signal_pars, transmission_pars = conn
+
+        # If the original object was an ensemble then modify the transmission
+        # parameters to remove the decoders.
+        if isinstance(node, EnsembleLIF):
+            transmission_pars = PassthroughNodeTransmissionParameters(
+                transmission_pars._transform
+            )
 
         # Copy the connections to the sinks, note that we specify an empty
         # interposers dictionary so that no connections to further interposers
@@ -544,6 +606,131 @@ class ConnectionMap(object):
             # Once the queue is empty we yield the contents of the clique
             unvisited_sources.difference_update(sources)
             yield sources, ptns
+
+    def stack_interposers(self, interposers):
+        """Return a new list of interposers and a new communication map
+        resulting from combining compatible interposers.
+
+        Returns
+        -------
+        ([Interposer, ...], ConnectionMap)
+            A collection of new interposer operators and a new connection map
+            with compatible interposers stacked.
+        """
+        # Determine which interposers can be stacked and build a map of
+        # {interposer: (StackedInterposer, offset)}. Using this information we
+        # copy signals from the old connection map into the new connection map,
+        # replacing connections to stacked interposers by modifying their
+        # output slice and stacking the connections from interposers in a
+        # similar manner.
+
+        # Create a mapping {{(sig params, sink), ...}: [Interposer, ...], ...}
+        # to determine which interposers can be stacked (as they have a common
+        # output set).
+        compatible_interposers = defaultdict(list)
+        for interposer in interposers:
+            # Build up a set of the outputs for each interposer.
+            outputs = list()
+            for (sig_pars, _), sinks in iteritems(
+                    self._connections[interposer][OutputPort.standard]):
+                outputs.extend((sig_pars, sink) for sink in sinks)
+
+            # Freeze the output set for hashing
+            output_set = frozenset(outputs)
+            compatible_interposers[output_set].append(interposer)
+
+        # For each group of compatible interposers create a new, stacked,
+        # interposer.
+        stacked_interposers = dict()  # {StackedInterposer: [Interposer,...]}
+        stacking = dict()  # {Interposers: (StackedInterposer, offset)}
+        for interposer_group in itervalues(compatible_interposers):
+            # Create the new interposer
+            new_interposer = Filter(sum(i.size_in for i in interposer_group))
+            stacked_interposers[new_interposer] = interposer_group
+
+            # Store a mapping from the original interposers to the new
+            # interposer and their offset into its input space.
+            offset = 0
+            for interposer in interposer_group:
+                stacking[interposer] = (new_interposer, offset)
+                offset += interposer.size_in  # Increase the offset
+
+        # Create a new connection map and copy connections into it.
+        cm = ConnectionMap()
+
+        for source, ports_conns_sinks in iteritems(self._connections):
+            # Ignore sources which are interposers for the moment
+            if source in stacking:
+                continue
+
+            # Add connections to the new connection map, if they target an
+            # interposer then modify the connection by projecting it into the
+            # space of the new interposer.
+            for port, conns_sinks in iteritems(ports_conns_sinks):
+                for conn, sinks in iteritems(conns_sinks):
+                    sps, tps = conn  # Extract parameters
+
+                    for sink in sinks:
+                        if sink.sink_object in stacking:
+                            # If the sink is an interposer then add a modified
+                            # connection to the new interposer.
+                            sink_object, offset = stacking[sink.sink_object]
+
+                            # Create a projection to apply.
+                            slice_out = slice(offset, tps.size_out + offset)
+                            projection = PassthroughNodeTransmissionParameters(
+                                Transform(
+                                    size_in=tps.size_out,
+                                    size_out=sink_object.size_in,
+                                    transform=1.0,
+                                    slice_out=slice_out
+                                )
+                            )
+
+                            # Get the new transmission parameters
+                            new_tps = tps.concat(projection)
+                            assert new_tps is not None
+                            cm.add_connection(
+                                source, port, copy(sps), new_tps, sink_object,
+                                sink.port, sink.reception_parameters
+                            )
+                        else:
+                            # Otherwise just add the signal unchanged
+                            cm.add_connection(
+                                source, port, copy(sps), tps, sink.sink_object,
+                                sink.port, sink.reception_parameters
+                            )
+
+        # For each stacked interposer build up a mapping from sinks, reception
+        # parameters and signal parameters to the transmission parameters that
+        # target it for each unstacked interposer. Subsequently stack these
+        # transmission parameters and add the resulting signal to the network.
+        for new_interposer, components in iteritems(stacked_interposers):
+            # Map from (sink, signal_parameters) to an ordered list of
+            # transmission parameters.
+            connections = defaultdict(list)
+
+            for node in components:
+                for conns_and_sinks in itervalues(self._connections[node]):
+                    for (sps, tps), sinks in iteritems(conns_and_sinks):
+                        for sink in sinks:
+                            connections[(sink, sps)].append(tps)
+
+            # For each unique pair of sink and signal parameters add a new
+            # connection to the network which is the result of stacking
+            # together the transmission parameters.
+            for (sink, sig_params), trans_pars in iteritems(connections):
+                # Construct the combined signal parameters
+                transmission_params = trans_pars[0].hstack(*trans_pars[1:])
+
+                # Add the new connection to the network
+                cm.add_connection(
+                    new_interposer, OutputPort.standard, copy(sig_params),
+                    transmission_params, sink.sink_object, sink.port,
+                    sink.reception_parameters
+                )
+
+        return list(stacked_interposers.keys()), cm
 
 
 class SignalParameters(object):
