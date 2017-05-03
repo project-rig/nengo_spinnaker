@@ -86,6 +86,7 @@ class Simulator(object):
         io_kwargs = getconfig(network.config, Simulator, "node_io_kwargs",
                               dict())
         self.io_controller = io_cls(**io_kwargs)
+        self.io_thread = None
 
         # Calculate the machine timestep, this is measured in microseconds
         # (hence the 1e6 scaling factor).
@@ -404,6 +405,40 @@ class Simulator(object):
 
     def trange(self, dt=None):
         return np.arange(1, self.steps + 1) * (self.dt or dt)
+
+    def async_run_forever(self):
+        if self._closed:
+            raise Exception("Simulator has been closed and can't be used to "
+                            "run further simulations.")
+
+        if self.io_thread is not None:
+            raise Exception("Simulator already running")
+
+        # Prepare the simulation
+        self.netlist.before_simulation(self, 0x7FFFFFFF)
+
+        # Wait for all cores to hit SYNC0 (either by remaining it or entering
+        # it from init)
+        self._wait_for_transition(AppState.init, AppState.sync0,
+                                  self.netlist.n_cores)
+        self.controller.send_signal("sync0")
+
+        # Get a new thread for the IO
+        self.io_thread = self.io_controller.spawn()
+
+        # Wait for all cores to hit SYNC1
+        self._wait_for_transition(AppState.sync0, AppState.sync1,
+                                  self.netlist.n_cores)
+        logger.info("Running simulation...")
+        self.controller.send_signal("sync1")
+
+    def async_update(self):
+        self.io_thread.step()
+        self.host_sim.step()
+
+    def async_halt(self):
+        self.controller.send_signal("stop")
+        self.io_thread = None
 
 
 @atexit.register
