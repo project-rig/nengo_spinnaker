@@ -391,6 +391,7 @@ class Simulator(object):
     def close(self):
         """Clean the SpiNNaker board and prevent further simulation."""
         if not self._closed:
+            self.async_halt()
             # Stop the application
             self._closed = True
             self.io_controller.close()
@@ -437,8 +438,9 @@ class Simulator(object):
         self.host_sim.step()
 
     def async_halt(self):
-        self.controller.send_signal("stop")
-        self.io_thread = None
+        if self.io_thread is not None:
+            self.controller.send_signal("stop")
+            self.io_thread = None
 
 
 @atexit.register
