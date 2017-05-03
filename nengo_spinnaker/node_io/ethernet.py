@@ -100,6 +100,7 @@ class Ethernet(NodeIOController):
                 # Store this transmission parameters to (x, y, p) map
                 self._node_outgoing[node].append((
                     (transmission_params.pre_slice,
+                     transmission_params.slice_in,
                      transmission_params.function,
                      transmission_params.full_transform(slice_out=False)),
                     (x, y, p)))
@@ -117,10 +118,12 @@ class Ethernet(NodeIOController):
         """Transmit the value output by a Node."""
         # Build an SDP packet to transmit for each outgoing connection for the
         # node
-        for (pre_slice, function, transform), (x, y, p) in \
+        for (pre_slice, slice_in, function, transform), (x, y, p) in \
                 self._node_outgoing[node]:
             # Apply the pre-slice, the connection function and the transform.
+
             c_value = value[pre_slice]
+            c_value = value[slice_in]
             if function is not None:
                 c_value = function(c_value)
             c_value = np.dot(transform, c_value)
