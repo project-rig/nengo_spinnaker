@@ -877,6 +877,12 @@ void c_main(void)
 
     // Perform the simulation
     spin1_start(SYNC_WAIT);
+
+
+    spin1_memcpy(region_start(LEARNT_DECODER_REGION, address),
+                 ensemble.decoders + decoder_words,
+                 learnt_decoder_words * sizeof(value_t));
+
   }
   // --------------------------------------------------------------------------
 }
