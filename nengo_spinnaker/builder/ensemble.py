@@ -220,8 +220,8 @@ def build_decoders(model, conn, rng):
             decoders, solver_info = wrapped_solver(
                 conn, gain, bias, x, targets,
                 rng=rng, E=E)
-
         except TypeError:
+            # fallback for older nengo versions
             decoders, solver_info = wrapped_solver(
                 conn.solver, conn.pre_obj.neuron_type, gain, bias, x, targets,
                 rng=rng, E=E)
