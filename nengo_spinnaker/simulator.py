@@ -9,6 +9,7 @@ from rig.place_and_route import Cores
 import rig.place_and_route
 import six
 import time
+import timeit
 
 from .builder import Model
 from .node_io import Ethernet
@@ -436,9 +437,13 @@ class Simulator(object):
         logger.info("Running simulation...")
         self.controller.send_signal("sync1")
 
+        self.sim_restart_time = timeit.default_timer() + n_steps_at_once * self.dt
+
     def async_update(self, n_steps_at_once=1000):
-        count = self.controller.count_cores_in_state(AppState.run)
-        if count == 0:
+        now = timeit.default_timer()
+        if now > self.sim_restart_time:
+            self._wait_for_transition(AppState.run, AppState.sync0,
+                                      self.netlist.n_cores)
             self.async_run_forever(continue_running=True,
                                    n_steps_at_once=n_steps_at_once)
 
