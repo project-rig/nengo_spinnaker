@@ -61,6 +61,10 @@ recording_buffer_t record_spikes, record_voltages;  // Recording buffers
 
 encoder_recording_buffer_t record_encoders;
 
+uint32_t learnt_decoder_counter = 0;
+address_t address;
+ensemble_parameters_t *params;
+
 /*****************************************************************************/
 
 
@@ -248,6 +252,29 @@ void simulate_neurons(
   record_buffer_flush(&record_spikes);
 
   profiler_write_entry(PROFILER_EXIT | PROFILER_NEURON_UPDATE);
+
+  const uint32_t decoder_words = params->n_neurons_total * params->n_decoder_rows;
+  const uint32_t learnt_decoder_words = params->n_neurons_total * params->n_learnt_decoder_rows;
+
+  if (learnt_decoder_words > 0) {
+      //spin1_memcpy(region_start(LEARNT_DECODER_REGION, address),
+      //            ensemble->decoders + decoder_words,
+      //            learnt_decoder_words * sizeof(value_t));
+
+      const uint32_t offset = learnt_decoder_counter;
+
+      spin1_memcpy(region_start(LEARNT_DECODER_REGION, address) + offset,
+                   ensemble->decoders + decoder_words + offset,
+                   4 * sizeof(value_t));
+
+      learnt_decoder_counter += 4;
+
+      if (learnt_decoder_counter >= learnt_decoder_words) {
+          learnt_decoder_counter = 0;
+      }
+
+  }
+
 }
 /*****************************************************************************/
 
@@ -621,16 +648,18 @@ void timer_tick(uint ticks, uint arg1)
 }
 /*****************************************************************************/
 
+
+
 /*****************************************************************************/
 // Initialisation and setup
 void c_main(void)
 {
   // Prepare the system for loading
-  address_t address = system_load_sram();
+  address = system_load_sram();
 
   // --------------------------------------------------------------------------
   // Copy in the ensemble parameters
-  ensemble_parameters_t *params = &ensemble.parameters;
+  params = &ensemble.parameters;
   spin1_memcpy(params, region_start(ENSEMBLE_REGION, address),
                sizeof(ensemble_parameters_t));
 
@@ -877,7 +906,6 @@ void c_main(void)
 
     // Perform the simulation
     spin1_start(SYNC_WAIT);
-
 
     spin1_memcpy(region_start(LEARNT_DECODER_REGION, address),
                  ensemble.decoders + decoder_words,

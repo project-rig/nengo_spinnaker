@@ -20,21 +20,23 @@ with model:
 
     nengo.Connection(error, c.learning_rule)
 
-    p = nengo.Probe(post, synapse=0.03)
-
 sim = nengo_spinnaker.Simulator(model)
 
 
 d_start = nengo_spinnaker.utils.learning.get_learnt_decoders(sim, pre)
 
-sim.run(10)
+sim.async_run_forever()
+import timeit
+import time
+start = timeit.default_timer()
+while timeit.default_timer() - start < 10.0:
+    sim.async_update()
+    time.sleep(0.001)
 
+print d_start
 d_end = nengo_spinnaker.utils.learning.get_learnt_decoders(sim, pre)
-print(d_end)
-print('pre-learning')
-print(sim.data[p][:10])
-print('post-learning')
-print(sim.data[p][-10:])
+print d_end
+
 sim.close()
 
 

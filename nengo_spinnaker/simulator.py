@@ -408,18 +408,17 @@ class Simulator(object):
     def trange(self, dt=None):
         return np.arange(1, self.steps + 1) * (self.dt or dt)
 
-    def async_run_forever(self, continue_running=False, n_steps_at_once=1000):
+    def async_run_forever(self):
 
         if self._closed:
             raise Exception("Simulator has been closed and can't be used to "
                             "run further simulations.")
 
-        if not continue_running:
-            if self.io_thread is not None:
-                raise Exception("Simulator already running")
+        if self.io_thread is not None:
+            raise Exception("Simulator already running")
 
         # Prepare the simulation
-        self.netlist.before_simulation(self, n_steps_at_once)
+        self.netlist.before_simulation(self, 0x7FFFFFFF)
 
         # Wait for all cores to hit SYNC0 (either by remaining it or entering
         # it from init)
@@ -427,9 +426,8 @@ class Simulator(object):
                                   self.netlist.n_cores)
         self.controller.send_signal("sync0")
 
-        if not continue_running:
-            # Get a new thread for the IO
-            self.io_thread = self.io_controller.spawn()
+        # Get a new thread for the IO
+        self.io_thread = self.io_controller.spawn()
 
         # Wait for all cores to hit SYNC1
         self._wait_for_transition(AppState.sync0, AppState.sync1,
@@ -437,16 +435,7 @@ class Simulator(object):
         logger.info("Running simulation...")
         self.controller.send_signal("sync1")
 
-        self.sim_restart_time = timeit.default_timer() + n_steps_at_once * self.dt
-
-    def async_update(self, n_steps_at_once=1000):
-        now = timeit.default_timer()
-        if now > self.sim_restart_time:
-            self._wait_for_transition(AppState.run, AppState.sync0,
-                                      self.netlist.n_cores)
-            self.async_run_forever(continue_running=True,
-                                   n_steps_at_once=n_steps_at_once)
-
+    def async_update(self):
         self.io_thread.step()
         self.host_sim.step()
 
