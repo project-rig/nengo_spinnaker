@@ -216,9 +216,14 @@ def build_decoders(model, conn, rng):
         wrapped_solver = model.decoder_cache.wrap_solver(
             connection_b.solve_for_decoders
         )
-        decoders, solver_info = wrapped_solver(
-            conn.solver, conn.pre_obj.neuron_type, gain, bias, x, targets,
-            rng=rng, E=E)
+        try:
+            decoders, solver_info = wrapped_solver(
+                conn.solver, conn.pre_obj.neuron_type, gain, bias, x, targets,
+                rng=rng, E=E)
+        except TypeError:
+            decoders, solver_info = wrapped_solver(
+                conn, gain, bias, x, targets, rng=rng, E=E)
+
     except BuildError:
         raise BuildError(
             "Building %s: 'activities' matrix is all zero for %s. "
