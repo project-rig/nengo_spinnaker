@@ -18,9 +18,9 @@ def get_learnt_decoders(sim, ens):
             data.append(d)
 
     d = np.hstack(data)
-    d.shape = ens.n_neurons, -1
+    d.shape = -1, ens.n_neurons
 
-    return nengo_spinnaker.utils.type_casts.fix_to_np(d) * sim.dt
+    return nengo_spinnaker.utils.type_casts.fix_to_np(d.T) * sim.dt
 
 
 class FixedSolver(nengo.solvers.Solver):
